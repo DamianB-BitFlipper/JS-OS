@@ -16,8 +16,10 @@ gcc -g -m32 -elf -o timer.o -c timer.c -nostdlib -nostdinc -fno-builtin -fno-sta
 gcc -g -m32 -elf -o keyboard.o -c keyboard.c -nostdlib -nostdinc -fno-builtin -fno-stack-protector
 gcc -g -m32 -elf -o k_shell.o -c k_shell.c -nostdlib -nostdinc -fno-builtin -fno-stack-protector
 gcc -g -m32 -elf -o k_programs.o -c k_programs.c -nostdlib -nostdinc -fno-builtin -fno-stack-protector
+gcc -g -m32 -elf -o graphics.o -c graphics.c -nostdlib -nostdinc -fno-builtin -fno-stack-protector
+gcc -g -m32 -elf -o mouse.o -c mouse.c -nostdlib -nostdinc -fno-builtin -fno-stack-protector
 
 echo 'linker'
-ld -g -T link.ld -o kernel2 boot.o main.o k_stdio.o common.o interrupt.o gdt.o descriptor_tables.o isr.o timer.o k_math.o keyboard.o k_shell.o k_programs.o -melf_i386
+ld -g -T link.ld -o kernel2 boot.o main.o k_stdio.o common.o interrupt.o gdt.o descriptor_tables.o isr.o timer.o k_math.o keyboard.o k_shell.o k_programs.o graphics.o mouse.o -melf_i386
 
 #~ rm *.o

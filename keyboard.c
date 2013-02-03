@@ -164,16 +164,23 @@ void keyboardInput_handler()
     }else if(speciaKeyNumber == 1) //left arrow
     {
       //~ k_printf("<--");
-      shiftCursor(-1);
+      //~ shiftCursor(-1);
+      arrowKeyFunction("call", "left", &shiftCursor);
+      //~ arrowKeyFunction("call", "left", &notmalCursor);
     }else if(speciaKeyNumber == 2) //right arrow
     {
-      shiftCursor(1);
+      arrowKeyFunction("call", "right", &shiftCursor);
+      //~ arrowKeyFunction("call", "right", &notmalCursor);
     }else if(speciaKeyNumber == 3) //up arrow
     {
-      printInputBuffer(1); //print command sent previous
+      //~ printInputBuffer(1);
+      arrowKeyFunction("call", "up", &printInputBuffer);
+      //~ arrowKeyFunction("call", "up", &notmalCursor);
     }else if(speciaKeyNumber == 4) //down arrow
     {
-      printInputBuffer(-1); //print command sent next
+      //~ printInputBuffer(-1);
+      arrowKeyFunction("call", "down", &printInputBuffer);
+      //~ arrowKeyFunction("call", "down", &notmalCursor);
     }
     //~ k_printf("\nKeyPress");
   }
@@ -182,5 +189,11 @@ void keyboardInput_handler()
 /* Installs the keyboard handler into IRQ1 */
 void init_keyboard()
 {
-    register_interrupt_handler(IRQ1, &keyboardInput_handler);
+  register_interrupt_handler(IRQ1, &keyboardInput_handler);
+
+  arrowKeyFunction("write", "left", &shiftCursor); //initialized left and right arrows to shiftCursor()
+  arrowKeyFunction("write", "up", &printInputBuffer); //initialized up and down arrows to shiftCursor()
+  //~ arrowKeyFunction("write", "left", &notmalCursor); //initialized left and right arrows to shiftCursor()
+  //~ arrowKeyFunction("write", "up", &normalVCursor); //initialized up and down arrows to shiftCursor()
+  
 }

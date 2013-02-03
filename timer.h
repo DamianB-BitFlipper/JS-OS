@@ -6,6 +6,14 @@
 
 #include "common.h"
 
+/*initialize the timer*/
 void init_timer(u32int frequency);
+
+/*sleep function in seconds*/
+void sleep(int seconds);
+
+/*sleep function in milliseconds*/
+//~ void mSleep(long long int milliseconds);
+void mSleep(int milliseconds);
 
 #endif

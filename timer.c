@@ -9,15 +9,72 @@
 
 u32int tick = 0, globalFreq;
 int tickTockSwitcher = 0;
-int secondsPassed = 0;
+int pass = 0, systemTimePassed = 0;
+long long int secondsPassed = 0;
 
-static void timer_callback(registers_t regs)
+//~ int millisecondTime, run = TRUE;
+
+void sleep(int seconds)
+{
+  int onOrOff = pass;
+  int timePassed = 0;
+  
+  while(timePassed != seconds)
+  {
+    if(onOrOff != pass)
+    {
+      timePassed++;
+      onOrOff = pass;
+    }
+  }
+}
+
+//~ void mSleep(long long int milliseconds)
+void mSleep(int milliseconds)
+{
+  ////~ long long int time = systemTimePassed;
+  //if(run == TRUE)
+  //{
+    //millisecondTime = milliseconds + systemTimePassed;
+    //run = FALSE;
+  //}
+  ////~ milliseconds = milliseconds + systemTimePassed;
+
+  ////~ while(systemTimePassed != milliseconds)
+  //if(systemTimePassed != millisecondTime)
+  //{
+    //mSleep(0);
+  //}
+
+  //if(millisecondTime == systemTimePassed)
+  //{
+    //run = TRUE;
+  //}
+
+  unsigned long eticks;
+
+  eticks = systemTimePassed + milliseconds;
+  while(systemTimePassed < eticks);
+  
+}
+
+long long int getSystemUpTime()
+{
+  return systemTimePassed;
+}
+
+void timer_callback(registers_t regs)
 {
   tick = (tick + 1) % (globalFreq + 1);
-
-  if(tick == globalFreq)
+  systemTimePassed++;
+  
+  if(tick == globalFreq) //one second passed
   {
     secondsPassed++;
+
+    //~ k_setprintf(15, 0, ""
+    
+    pass = (pass + 1) % 2;
 
     //~ if(tickTockSwitcher == 0)
     //~ {

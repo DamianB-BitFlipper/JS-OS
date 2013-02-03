@@ -24,4 +24,14 @@ void saveInputToBuffer(char *input);
 /*prints the input buffer in an array for shell to access previous inputs*/
 void printInputBuffer(int direction); //value of 1 meaning up and -1 meaning down the array
 
+/*function that turns on or off if addShellIndent() should print the indent or not*/
+void turnShellIndentOnOff(int onOrOff);
+
+/*function that turns on or off if input should be taken when typing*/
+void turnShellInputOnOff(int onOrOff);
+
+/*sets the functions to a pointer for when the arrow keys are pressed*/
+void arrowKeyFunction(char *callOrWrite, char *keys, void (*func)(int));
+
+
 #endif

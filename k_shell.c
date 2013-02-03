@@ -5,66 +5,96 @@
 #include "k_programs.h"
 
 int bufferCount = 0, index = 0, localIndex = 1;
+int shellIndentOn = ON, shellInput = ON;
+
+void turnShellIndentOnOff(int onOrOff)
+{
+  if(onOrOff == 1) //switch value of shellIndentOn
+  {
+    shellIndentOn = ON;
+  }else if(onOrOff == 0)
+  {
+    shellIndentOn = OFF;
+  }
+}
+
+void turnShellInputOnOff(int onOrOff)
+{
+  if(onOrOff == 1) //switch value of shellIndentOn
+  {
+    shellInput = ON;
+  }else if(onOrOff == 0)
+  {
+    shellInput = OFF;
+  }
+}
 
 void addShellIndent()
 {
-  int cursor_xValue = getCursorXValue();
-
-  if(cursor_xValue == 0) //if starting cursor is at 0, new line is already there
+  
+  if(shellIndentOn == ON) //if shell indent should be printed or not
   {
-    k_printf("->");
-  }else{ //if starting cursor is not at 0, new line is not present
-    k_printf("\n->");
+    int cursor_xValue = getCursorXValue();
+
+    deleteLine(-1); //deletes any chrachter on the line cursor_y, since parameter is negative, function defaults
+
+    if(cursor_xValue == 0) //if starting cursor is at 0, new line is already there
+    {
+      k_printf("->");
+    }else{ //if starting cursor is not at 0, new line is not present
+      k_printf("\n->");
+    }
+
+    startingCursorY(); //sets the starting cursor_y position to a veriable
+
+    resetCharCount(); //sets char count back to zero
   }
-
-  startingCursorY(); //sets the starting cursor_y position to a veriable
-
-  resetCharCount(); //sets char count back to zero
-
 }
 
 void getTypedText(int charCount, int startingYPos, int cursor_y, char *c)
 {
-
-  //~ int spacesRemoved = removeTrailingSpaces(c); //removes trailing space
-
-  //~ char c[charCount];
-  int x, maxCursor_x = charCount + 2; //the max value the cursor was at, +2 because "->" is 2 characters
-
-  //~ k_printf("\n%d\n", lineCount);
-  
-  u16int *video_memory = (u16int *)0xB8000;
-  
-  // The background colour is black (0), the foreground is white (15).
-  u8int backColour = 0;
-  u8int foreColour = 15;
-
-  // The attribute byte is made up of two nibbles - the lower being the 
-  // foreground colour, and the upper the background colour.
-  u8int  attributeByte = (backColour << 4) | (foreColour & 0x0F);
-  // The attribute byte is the top 8 bits of the word we have to send to the
-  // VGA board.
-  u16int attribute = attributeByte << 8;
-  u16int *location;
-
-  //~ k_printf("\n");
-
-  c = c + charCount;
-
-  //~ for(x = charCount; x > 0; x--)
-  for(x = 0; x < charCount + 1; x++)
+  if(shellInput == ON)
   {
-    location = video_memory + (startingYPos*80 + maxCursor_x - x);
-    //~ location = video_memory + (cursor_y*80 + charCount - x);
-    *c = *location | attribute;
+    //~ int spacesRemoved = removeTrailingSpaces(c); //removes trailing space
 
-    //~ k_putChar(*c);
+    //~ char c[charCount];
+    int x, maxCursor_x = charCount + 2; //the max value the cursor was at, +2 because "->" is 2 characters
 
-    c--;
+    //~ k_printf("\n%d\n", lineCount);
+    
+    u16int *video_memory = (u16int *)0xB8000;
+    
+    // The background colour is black (0), the foreground is white (15).
+    u8int backColour = 0;
+    u8int foreColour = 15;
+
+    // The attribute byte is made up of two nibbles - the lower being the 
+    // foreground colour, and the upper the background colour.
+    u8int  attributeByte = (backColour << 4) | (foreColour & 0x0F);
+    // The attribute byte is the top 8 bits of the word we have to send to the
+    // VGA board.
+    u16int attribute = attributeByte << 8;
+    u16int *location;
+
+    //~ k_printf("\n");
+
+    c = c + charCount;
+
+    //~ for(x = charCount; x > 0; x--)
+    for(x = 0; x < charCount + 1; x++)
+    {
+      location = video_memory + (startingYPos*80 + maxCursor_x - x);
+      //~ location = video_memory + (cursor_y*80 + charCount - x);
+      *c = *location | attribute;
+
+      //~ k_putChar(*c);
+
+      c--;
+    }
+
+    //~ k_printf("\nstartingY=%d\n", startingYPos);
   }
-
-  //~ k_printf("\nstartingY=%d\n", startingYPos);
-
+  
 }
 
 /*char array filled with names of programs*/
@@ -72,36 +102,40 @@ char *programsList[]=
 {
   /*program names go here*/
   "ascii",
-  "echo"
+  "echo",
+  "tinytext",
+  "pong"
 };
 
 void executeInput(char *input, char *arguements)
 {
-
-  //~ int spacesRemoved = removeTrailingSpaces(input); //removes trailing space
-  
-  //~ int items = 2; //number of programs in programsList
-  int items = k_elemInCharArray(*programsList); //number of programs in programsList
-  int x, hasProgramRun = 0;
-  
-  for(x = 0; x < items; x++)
+  if(shellInput == ON)
   {
-    if(k_strcmp(input, programsList[x]) == 0)
+    //~ int spacesRemoved = removeTrailingSpaces(input); //removes trailing space
+    
+    //~ int items = 2; //number of programs in programsList
+    int items = k_elemInCharArray(*programsList); //number of programs in programsList
+    int x, hasProgramRun = 0;
+    
+    for(x = 0; x < items; x++)
     {
-      runShellFunction(x, arguements);
-      //~ k_printf("\nelement 2: %s\n", programsList[2]);
-      hasProgramRun = 1;
+      if(k_strcmp(input, programsList[x]) == 0)
+      {
+        runShellFunction(x, arguements);
+        //~ k_printf("\nelement 2: %s\n", programsList[2]);
+        hasProgramRun = 1;
+      }
     }
-  }
 
-  if(hasProgramRun == 0) //if function did not enter runShell if statement
-  {
-    int length = k_strlen(input);
-
-    if(length != 0)
+    if(hasProgramRun == 0) //if function did not enter runShell if statement
     {
-      /*error command not found*/
-      k_printf("%s: command not found\n", input);
+      int length = k_strlen(input);
+
+      if(length != 0)
+      {
+        /*error command not found*/
+        k_printf("%s: command not found\n", input);
+      }
     }
   }
   
@@ -315,7 +349,7 @@ void printInputBuffer(int direction) //value of 1 meaning up and -1 meaning down
   //~ if(k_strcmp(output, "") == 1 || localIndex == 5)
   if(localIndex <= 5)
   {
-    k_printf("%s", output);
+    k_printf(output);
     //~ if(k_strcmp(output, " ") == 0)
     //~ {
       //~ localIndex--;
@@ -331,4 +365,43 @@ void printInputBuffer(int direction) //value of 1 meaning up and -1 meaning down
 
   //~ k_printf("printed");
   
+}
+
+void arrowKeyFunction(char *callOrWrite, char *keys, void (*func)())
+{
+static void (*leftRight)(int);
+static void (*upDown)(int);
+  
+  if((k_strcmp(keys, "left") == 0 || k_strcmp(keys, "right") == 0 ) && k_strcmp(callOrWrite, "write") == 0)
+  {
+    leftRight = func;
+
+  }
+  
+  if((k_strcmp(keys, "up") == 0 || k_strcmp(keys, "down") == 0 ) && k_strcmp(callOrWrite, "write") == 0)
+  {
+    upDown = func;
+
+  }
+
+  if(k_strcmp(keys, "left") == 0 && k_strcmp(callOrWrite, "call") == 0)
+  {
+    (*leftRight)(-1);
+  }
+
+  if(k_strcmp(keys, "right") == 0 && k_strcmp(callOrWrite, "call") == 0)
+  {
+    (*leftRight)(1);
+  }
+
+  if(k_strcmp(keys, "up") == 0 && k_strcmp(callOrWrite, "call") == 0)
+  {
+    (*upDown)(1);
+  }
+
+  if(k_strcmp(keys, "down") == 0 && k_strcmp(callOrWrite, "call") == 0)
+  {
+    (*upDown)(-1);
+  }
+
 }

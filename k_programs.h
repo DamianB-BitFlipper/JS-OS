@@ -10,6 +10,9 @@ void program_ascii(char *arguements); //0 index
 
 void program_echo(char *arguements); //1 index
 
+void program_tinytext(char *arguements); //2 index
+
+void program_GUI_pong(char *arguements); //3 index
 
 #endif
 

@@ -27,6 +27,7 @@ void isr_handler(registers_t regs)
         isr_t handler = interrupt_handlers[regs.int_no];
         handler(regs);
     }
+ 
 }
 
 // This gets called from our ASM interrupt handler stub.
