@@ -99,4 +99,17 @@ int math_intLength(int intNumber)
   {			    //and will return a number length of 0, so here i will brute return a length of 1
     return 1;
   }
+
+}
+
+int math_pow(int base, int exponent)
+{
+  int x, output = 1;
+
+  for(x = 0; x < exponent; x++)
+  {
+    output = output * base;
+  }
+
+  return output;
 }

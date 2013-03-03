@@ -29,6 +29,7 @@ mboot:
     dd  code                    ; Start of kernel '.text' (code) section.
     dd  bss                     ; End of kernel '.data' section.
     dd  end                     ; End of kernel.
+        
     dd  start                   ; Kernel entry point (initial EIP).
 
 [GLOBAL start]                  ; Kernel entry point.
@@ -36,11 +37,18 @@ mboot:
 
 start:
     ; Load multiboot information:
-    push    ebx
+    push esp
+    push ebx
 
+    ;~ mov ax, 4f02h
+    ;~ mov bx, 118h
+    ;~ int 10h
+    
     ; Execute the kernel:
     cli                         ; Disable interrupts.
+            
     call main                   ; call our main() function.
+
     jmp $                       ; Enter an infinite loop, to stop the processor
                                 ; executing whatever rubbish is in the memory
                                 ; after our kernel!

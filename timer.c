@@ -50,11 +50,13 @@ void mSleep(int milliseconds)
   //{
     //run = TRUE;
   //}
+  if(milliseconds > 0)
+  {
+    unsigned long eticks;
 
-  unsigned long eticks;
-
-  eticks = systemTimePassed + milliseconds;
-  while(systemTimePassed < eticks);
+    eticks = systemTimePassed + milliseconds;
+    while(systemTimePassed < eticks);
+  }
   
 }
 
@@ -63,7 +65,8 @@ long long int getSystemUpTime()
   return systemTimePassed;
 }
 
-void timer_callback(registers_t regs)
+//~ void timer_callback(registers_t regs)
+void timer_callback()
 {
   tick = (tick + 1) % (globalFreq + 1);
   systemTimePassed++;

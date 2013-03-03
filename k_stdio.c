@@ -128,12 +128,10 @@ void k_putChar(char c)
     charCount = charCount + 5;
     charPosition = charPosition + 5;
 
-  }
-
-  // Handle carriage return "Enter Key"
-  else if (c == '\r')
+  }else if (c == '\r')  // Handle carriage return "Enter Key"
   {
-    char *input, *split;
+    //~ char *input, *split;
+    char input[250], split[250]; //allocates maximum size for input, being 10 lines of 25 chars each
 
     //~ getTypedText(charCount, cursor_x, cursor_y, input);
     getTypedText(charCount, startingYPos, cursor_y, input); //gets the stuff typed when enter is pressed
@@ -148,18 +146,30 @@ void k_putChar(char c)
     //~ k_printf(input);
     //~ k_printf("\n");
 
+    int run;
+    for(run = charCount; run < 250; run++) //this loop replaces all of the junk after the inputed text with \000
+    {
+      input[run] = 0;
+    }
+
     formatInput(input, split); //assigns command to "input" and args to "split"
+
+    //~ removeTrailingSpaces(split);
+    
     executeInput(input, split); //executes program "input" with args "split"
 
-    charCount = 0;
+    //~ k_printf("\n\n%s%s%s\n", split, split, split);
+
+    charCount = 0; //resets the char counter and charUnderlinePosition
     charPosition = 0;
 
-    location = video_memory + (cursor_y*80 + cursor_x);
+    location = video_memory + (cursor_y * 80 + cursor_x);
     *location = ' ' | attribute;
 
     addShellIndent(); //adds the shell "->" indent
 
-    destroyCharPointer(input); //destroys pointer to no interfere with others
+    destroyCharPointer(input); //destroys char array to no interfere with others
+    destroyCharPointer(split); //destroys char array to no interfere with others
 
     lineCount = 0;
   }
@@ -175,7 +185,7 @@ void k_putChar(char c)
   // Handle any other printable character.
   else if(c >= ' ')
   {
-    location = video_memory + (cursor_y*80 + cursor_x);
+    location = video_memory + (cursor_y * 80 + cursor_x);
     *location = c | attribute;
     cursor_x++;
     if(charPosition == charCount)
@@ -333,14 +343,67 @@ void k_printf(char *c, ...)
         i = i + 3;
         //~ k_printf("\n%d\n", i);
 
+      }else if(c[i+1] == 'h') //user wants to print a hex number
+      {
+
+        u32int hexArg = va_arg(arguments, u32int);
+
+        s32int tmp;
+
+        k_printf("0x");
+
+        char noZeroes = 1;
+
+        int hexCount;
+        for (hexCount = 28; hexCount > 0; hexCount -= 4)
+        {
+          tmp = (hexArg >> hexCount) & 0xF;
+          if (tmp == 0 && noZeroes != 0)
+          {
+            continue;
+          }
+      
+          if (tmp >= 0xA)
+          {
+            noZeroes = 0;
+            k_putChar(tmp-0xA+'a');
+          }
+          else
+          {
+            noZeroes = 0;
+            k_putChar(tmp+'0');
+            
+          }
+        }
+      
+        tmp = hexArg & 0xF;
+        if (tmp >= 0xA)
+        {
+          k_putChar(tmp-0xA+'a');
+          
+        }
+        else
+        {
+          k_putChar(tmp+'0');
+          
+        }
+
+        i = i + 2;
       }
     }
 
     if(i < stringLength + 1 && c[i] != '%')
     {
-      k_putChar(c[i]);
-      i++;
+      if(c[i] == 0) //if i is at the terminating 0 '\000' of a string, break from loop
+      {
+        break;
+      }else{
+        k_putChar(c[i]);
+        i++;
+      }
     }
+
+
 
   }
 
@@ -576,6 +639,34 @@ void startingCursorY()
 int getCursorXValue()
 {
   return cursor_x;
+}
+
+void k_sortArray(int *array, int count)
+{
+
+  int one, two;
+
+  int a, b;
+
+  if(count > 1)
+  {
+    for(b = 0; b < count - 1; b++)
+    {    
+      for(a = 0; a < count - 1; a++)
+      {
+        one = array[a];
+        two = array[a + 1];
+  
+        if(one > two)
+        {
+          array[a] = two;
+          array[a + 1] = one;
+        }
+      }
+    }
+    
+  }
+  
 }
 
 void k_strchop(char *stringIn, char *stringOut, int start, int end)

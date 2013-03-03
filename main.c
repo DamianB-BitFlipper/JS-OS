@@ -1,67 +1,78 @@
-// main.c -- Defines the C-code kernel entry point, calls initialisation routines.
-//           Made for JamesM's tutorials <www.jamesmolloy.co.uk>
+/*
+ * main.c
+ * 
+ * Copyright 2013 JS <js@duck-squirell>
+ * 
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ * MA 02110-1301, USA.
+ * 
+ * 
+ */
 
+
+//~ #include "monitor.h"
+#include "paging.h"
+#include "task.h"
+#include "syscall.h"
+
+//Basics
 #include "k_stdio.h"
 #include "descriptor_tables.h"
 #include "timer.h"
+
+//IO
 #include "keyboard.h"
 #include "mouse.h"
+#include "sound.h"
 
+//Filesystem
+#include "fs.h"
+#include "initrd.h"
+//~ #include "isr.h"
+#include "multiboot.h"
+
+//User interface
 #include "k_shell.h"
 #include "graphics.h"
 
+//Other
 #include "k_programs.h"
 
-struct multiboot *mboot_ptr;
 
- //Play sound using built in speaker
- static void play_sound(u32int nFrequence) {
- 	u32int Div;
- 	u8int tmp;
- 
-        //Set the PIT to the desired frequency
- 	Div = 1193180 / nFrequence;
- 	outb(0x43, 0xb6);
- 	outb(0x42, (u8int) (Div) );
- 	outb(0x42, (u8int) (Div >> 8));
- 
-        //And play the sound using the PC speaker
- 	tmp = inb(0x61);
-    if (tmp != (tmp | 3)) {
-      outb(0x61, tmp | 3);
-    }
-}
- 
- //make it shutup
-static void nosound() {
- 	u8int tmp = (inb(0x61) & 0xFC);
- 
- 	outb(0x61, tmp);
-}
- 
- //Make a beep
-void beep() {
-  play_sound(1000);
- 	mSleep(500);
- 	nosound();
-  //set_PIT_2(old_frequency);
-}
+#include "vesa.h"
 
-int main()
-{
+
+//~ #include "vga_modes.h"
+
+extern u32int placement_address;
+u32int initial_esp;
+
+int main(struct multiboot *mboot_ptr, u32int initial_stack)
+{  
   int clockFreq = 1000; //initialized clock to 1000 ticks per second
-
-  
+    
+  initial_esp = initial_stack;
   // Initialise all the ISRs and segmentation
   init_descriptor_tables();
-  
   // Initialise the screen (by clearing it)
   k_clear();
-  // Write out a sample string
-  //~ monitor_write("Hello, world----!");
-  //~ k_printf("Heeeeello, wor%dld %d ----333", 5000, 360);
-  //~ k_printf(
 
+  //~ asm volatile("sti");  
+  //~ asm volatile("int $0x3");
+
+  /**ADDED**/
   setScreenYMinMax(1, 25); //reserve 1 row at the top for OS name
 
   k_setprintf(0, 0, "%Cw%cbk  JS-OS 0.0.1                                                                    %Cbk%cw ");
@@ -69,13 +80,17 @@ int main()
   k_printf("Hello World");
   k_printf("\nWelcome to JS-OS, Kernel booted. Running OS.\tAnd thus i poop\n");
 
-  asm volatile("int $0x3");
-  asm volatile("int $0x4");
+  //~ asm volatile("int $0x3");
+  //~ asm volatile("int $0x4");
+
+  // Initialise the PIT to clockFreq-Hz
+  asm volatile("sti");
+  init_timer(clockFreq);
 
   asm volatile("sti");
   init_timer(clockFreq); // Initialise timer to clockFreq-Hz
 
-  k_printf("\n\nClock initialized: %dHz\n", clockFreq);
+  k_printf("\nClock initialized: %dHz\n", clockFreq);
   
   asm volatile("sti");
   init_keyboard(); // Initialise keyboard
@@ -83,39 +98,115 @@ int main()
   asm volatile("sti");
   init_mouse(); // Initialise mouse
 
-  k_printf("\nInitialized Keyboard\n\n");
+  k_printf("\nInitialized Keyboard and Mouse\n\n");
 
-  //~ char *eraseMe;
-  //~ k_strcpy("My dad is a winner", eraseMe);
-  //~ k_printf("\n%s\n", eraseMe);
+  // Find the location of our initial ramdisk.
+  ASSERT(mboot_ptr->mods_count > 0);
+  u32int initrd_location = *((u32int*)mboot_ptr->mods_addr);
+  u32int initrd_end = *(u32int*)(mboot_ptr->mods_addr+4);
+  // Don't trample our module with placement accesses, please!
+  placement_address = initrd_end;
 
-  addShellIndent();
-  beep();
+
+  u32int memorySize = ((mboot_ptr->mem_lower + mboot_ptr->mem_upper) * 1024); //Bytes
+
+  k_printf("size of memory: %d, %h", memorySize, memorySize);
+  
+  // Start paging.
+  initialise_paging(memorySize);
+  //~ initialise_paging(0x1000000);
+
+  // Start multitasking.
+  initialise_tasking();
+
+  k_printf("\nThis hex number is: %h", 0x12345);
+
+  k_printf("\nPOOP");
+
+  // Initialise the initial ramdisk, and set it as the filesystem root.
+  fs_root = initialise_initrd(initrd_location);
+
+  k_printf("\n");
+  //~ k_printf_hex(initrd_location);
+  k_printf("\n");
+
+  /**Also part of the multi-task**/
+
+  // Create a new process in a new address space which is a clone of this.
+  //~ int ret = fork();
+//~ 
+  //~ k_printf("\nPOOP2");
+//~ 
+  //~ k_printf("fork() returned ");
+  //~ k_printf("%h", ret);
+  //~ k_printf(", and getpid() returned ");
+  //~ k_printf("%h", getpid());
+  //~ k_printf("\n============================================================================\n");
+//~ 
+  //~ //// The next section of code is not reentrant so make sure we aren't interrupted during.
+  //~ asm volatile("cli");
+  //// list the contents of /
+  /**Also part of the multi-task**/
+  
+  int i = 0;
+  struct dirent *node = 0;
+  while ( (node = readdir_fs(fs_root, i)) != 0)
+  {
+    k_printf("Found file ");
+    k_printf(node->name);
+    fs_node_t *fsnode = finddir_fs(fs_root, node->name);
+
+    if ((fsnode->flags&0x7) == FS_DIRECTORY)
+    {
+      k_printf("\n\t(directory)\n");
+    }
+    else
+    {
+      k_printf("\n\t contents: \"");
+      char buf[256];
+      u32int sz = read_fs(fsnode, 0, 256, buf);
+      int j;
+      for (j = 0; j < sz; j++)
+      {
+        k_putChar(buf[j]);
+      }
+      
+      k_printf("\"\n");
+    }
+    i++;
+  }
 
   //~ asm volatile("sti");
-  //~ asm volatile("mov  %ah, 0x00");
-  //~ asm volatile("mov  %al, 0x13");
-  //~ asm volatile("int $0x10");
-  //~ while(1)
-  //~ {
+
+  addShellIndent();
+
+  //~ setVesa(0x118);
+
+  //~ kmalloc(1024*768*4);
+
+  //~ set_vga_mode(VESA_MODE_824);
+  //~ set_vga_mode(VGA_MODE_13h);
+
+  /**Also part of the multi-task**/
+  //k_printf("\n");
+  //asm volatile("sti");
+  /**Also part of the multi-task**/
+
+  //~ initialise_syscalls();
 //~ 
-  //~ }
+  //~ switch_to_user_mode();
+//~ 
+  //~ syscall_user_printf("Hello, user world! PPOOOOPP\n");
+  //~ syscall_user_putChar('G');
+
+  //~ asm volatile("sti");
+  //~ init_timer(clockFreq); // Initialise timer to clockFreq-Hz
+
   //~ while(1)
   //~ {
-    //~ mSleep(100);
-    //~ int number = getSystemUpTime();
-    //~ k_printf("\n%d\n", number);
+    //~ syscall_user_putChar('G');
+    //~ mSleep(500);
   //~ }
 
-  /*Set video mode*/
-  //~ VGA_init(320, 200, 256);
-
-  //~ putPixel(100, 100, 4);
-  //~ putRect(100, 100, 100, 100, 2);
-  //~ putLine(60, 60, 120, 10, 6);
-
-  /*go back to text mode*/
-  //~ set_text_mode(0);
-  
-  return 0; //success!
+  return 0;
 }

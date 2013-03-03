@@ -6,6 +6,24 @@
 
 #include "common.h"
 
+// A few defines to make life a little easier
+#define BLACK          0
+#define DARK_BLUE      1
+#define DARK_GREEN     2
+#define DARK_CYAN      3
+#define DARK_RED       4
+#define DARK_MAGENTA   5
+#define BROWN          6
+#define LIGHT_GREY     7
+#define DARK_GREY      8
+#define LIGHT_BLUE     9
+#define LIGHT_GREEN    10
+#define LIGHT_CYAN     11
+#define LIGHT_RED      12
+#define LIGHT_MAGENTA  13
+#define YELLOW         14
+#define WHITE          15
+
 /*String Manipulation*/
 
 #define TRUE    1  //define a few variable
@@ -49,6 +67,8 @@ void k_strchop(char *stringIn, char *stringOut, int start, int end);
 /*copies one char array to another char array*/
 void k_strcpy(char *input, char *output);
 
+/*sorts an integer array fpr lowest to highest*/
+void k_sortArray(int *array, int count);
 
 
 /*Other functions*/

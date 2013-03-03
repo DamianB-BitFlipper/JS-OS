@@ -5,6 +5,9 @@
 #include "k_stdio.h"
 #include "k_shell.h"
 
+//~ #include "task.h"
+#include "syscall.h"
+
 extern int cursor_x;
 
 static void keyboard_callback(registers_t regs)
@@ -121,6 +124,7 @@ unsigned char upperCaseKbdus[128] =
 /* Handles the keyboard interrupt */
 void keyboardInput_handler()
 {
+    
   unsigned char scancode;
   int speciaKeyNumber;
 
@@ -130,6 +134,7 @@ void keyboardInput_handler()
   /*Tools used to identify scancode of non character keys, like arrows*/
   //~ k_printf("\n");
   //~ k_putChar(scancode);
+  //~ k_putChar(inb(0x60));
    
   /* If the top bit of the byte we read from the keyboard is
   *  set, that means that a key has just been released */
@@ -161,6 +166,7 @@ void keyboardInput_handler()
     if(speciaKeyNumber == 0) //not a special Key
     {
       k_putChar(lowerCaseKbdus[scancode]);
+      //~ syscall_user_putChar(lowerCaseKbdus[scancode]);
     }else if(speciaKeyNumber == 1) //left arrow
     {
       //~ k_printf("<--");
@@ -189,6 +195,7 @@ void keyboardInput_handler()
 /* Installs the keyboard handler into IRQ1 */
 void init_keyboard()
 {
+    
   register_interrupt_handler(IRQ1, &keyboardInput_handler);
 
   arrowKeyFunction("write", "left", &shiftCursor); //initialized left and right arrows to shiftCursor()

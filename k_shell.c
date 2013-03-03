@@ -98,13 +98,18 @@ void getTypedText(int charCount, int startingYPos, int cursor_y, char *c)
 }
 
 /*char array filled with names of programs*/
-char *programsList[]=
+int items = 7;
+
+char *programsList[7]=
 {
   /*program names go here*/
   "ascii",
   "echo",
   "tinytext",
-  "pong"
+  "pong",
+  "song",
+  "viewer",
+  "start"
 };
 
 void executeInput(char *input, char *arguements)
@@ -114,7 +119,9 @@ void executeInput(char *input, char *arguements)
     //~ int spacesRemoved = removeTrailingSpaces(input); //removes trailing space
     
     //~ int items = 2; //number of programs in programsList
-    int items = k_elemInCharArray(*programsList); //number of programs in programsList
+    //~ int items = k_elemInCharArray(*programsList); //number of programs in programsList
+    //~ k_printf("\n%d", items);
+    
     int x, hasProgramRun = 0;
     
     for(x = 0; x < items; x++)
@@ -122,9 +129,13 @@ void executeInput(char *input, char *arguements)
       if(k_strcmp(input, programsList[x]) == 0)
       {
         runShellFunction(x, arguements);
-        //~ k_printf("\nelement 2: %s\n", programsList[2]);
+        
+        //~ k_printf("\nelement 2: %d\n", x);
+
         hasProgramRun = 1;
       }
+
+      //~ k_printf("\n%s\t%s", input, programsList[x]);
     }
 
     if(hasProgramRun == 0) //if function did not enter runShell if statement
@@ -146,7 +157,7 @@ void formatInput(char *input, char *arguements)
   int spacesRemoved = removeTrailingSpaces(input); //removes trailing space
   int length = k_strlen(input), x;
 
-  for(x = 0; x < length; x++)
+  for(x = 0; x < length; x++) //finds the x value of the first space in the input string
   {
     if(*input == ' ')
     {
@@ -157,7 +168,7 @@ void formatInput(char *input, char *arguements)
     input++;
   }
 
-  input = input - x;
+  input = input - x; //goes back to the begining of the input string
   //~ k_printf("\nx is=%d\n", x);
 
   if(x != length) //if x is equal to the length, there is no need to substring
@@ -175,6 +186,7 @@ int removeTrailingSpaces(char *string)
   int spacesRemoved = 0;
 
   string = string + length - 1;
+  //~ string = string + length;
 
   while(*string == ' ')
   {
@@ -319,7 +331,7 @@ void saveInputToBuffer(char *input)
 void printInputBuffer(int direction) //value of 1 meaning up and -1 meaning down the array
 {
   int oldCursor_x = 1, newCursor_x = 2;
-  char *output;
+  char output[250]; //allocates the max size of the output to be printed, 10 rows of 25 chars each
 
   while(oldCursor_x != newCursor_x) //deletes everything after shell indent
   {
@@ -367,39 +379,31 @@ void printInputBuffer(int direction) //value of 1 meaning up and -1 meaning down
   
 }
 
-void arrowKeyFunction(char *callOrWrite, char *keys, void (*func)())
+void arrowKeyFunction(char *callOrWrite, char *keys, void (*func)() )
 {
 static void (*leftRight)(int);
 static void (*upDown)(int);
   
-  if((k_strcmp(keys, "left") == 0 || k_strcmp(keys, "right") == 0 ) && k_strcmp(callOrWrite, "write") == 0)
+  if((k_strcmp(keys, "left") == 0 || k_strcmp(keys, "right") == 0 ) && k_strcmp(callOrWrite, "write") == 0) //set input function for left/right keys
   {
     leftRight = func;
 
-  }
-  
-  if((k_strcmp(keys, "up") == 0 || k_strcmp(keys, "down") == 0 ) && k_strcmp(callOrWrite, "write") == 0)
+  }else if((k_strcmp(keys, "up") == 0 || k_strcmp(keys, "down") == 0 ) && k_strcmp(callOrWrite, "write") == 0) //set input function for up/down keys
   {
     upDown = func;
 
   }
 
-  if(k_strcmp(keys, "left") == 0 && k_strcmp(callOrWrite, "call") == 0)
+  if(k_strcmp(keys, "left") == 0 && k_strcmp(callOrWrite, "call") == 0) //calls left key press
   {
     (*leftRight)(-1);
-  }
-
-  if(k_strcmp(keys, "right") == 0 && k_strcmp(callOrWrite, "call") == 0)
+  }else if(k_strcmp(keys, "right") == 0 && k_strcmp(callOrWrite, "call") == 0) //calls right key press
   {
     (*leftRight)(1);
-  }
-
-  if(k_strcmp(keys, "up") == 0 && k_strcmp(callOrWrite, "call") == 0)
+  }else if(k_strcmp(keys, "up") == 0 && k_strcmp(callOrWrite, "call") == 0) //calls up key press
   {
     (*upDown)(1);
-  }
-
-  if(k_strcmp(keys, "down") == 0 && k_strcmp(callOrWrite, "call") == 0)
+  }else if(k_strcmp(keys, "down") == 0 && k_strcmp(callOrWrite, "call") == 0) //calls down key press
   {
     (*upDown)(-1);
   }

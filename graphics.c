@@ -2,19 +2,112 @@
 #include "graphics.h"
 #include "k_stdio.h"
 #include "k_math.h"
+#include "common.h"
+
+#include "isr.h"
+#include "paging.h"
 
 unsigned char *vram = (unsigned char *)0xA0000;
+
+extern unsigned char *vga_mem; //pointer to VESA Linear Frame Buffer
+extern unsigned char *double_buffer; //double buffer for VESA video
+extern int widthVESA, heightVESA, depthVESA; //size of VESA Screen attributes
+
 //the vga identifiers
 unsigned int VGA_width;
 unsigned int VGA_height;
 unsigned int VGA_bpp;
 
-void putPixel(int x, int y, int color)
+int isVESAon;
+
+void (*putPixel)(int, int, int);
+void (*clearScreen)(void); //function pointer for clearing the screen
+//~ void (*refreshScreen)(void); //function pointer for clearing the screen
+
+/**Credits to http://files.osdev.org/mirrors/geezer/osd/graphics/modes.c
+ * This is not mine, but it works. :)*/
+#define	peekb(S,O)		*(unsigned char *)(16uL * (S) + (O))
+#define	pokeb(S,O,V)		*(unsigned char *)(16uL * (S) + (O)) = (V)
+#define	pokew(S,O,V)		*(unsigned short *)(16uL * (S) + (O)) = (V)
+#define	_vmemwr(DS,DO,S,N)	memcpy((char *)((DS) * 16 + (DO)), S, N)
+
+static unsigned get_fb_seg(void);
+
+
+void putPixel_simpleStd(int x, int y, int color)
 {
 
   int offset = x + VGA_width * y;
-  
+
+  /**Code for non-pallete color by changing DAC**/
+  //~ outb(0x03c8, 15);
+  //~ outb(0x03c9, (color>>16) & 0xff);
+  //~ outb(0x03c9, (color>>8) & 0xff);
+  //~ outb(0x03c9, color & 0xff);  
+  /**Code for non-pallete color by changing DAC**/
+
   vram[offset] = color;
+}
+
+void putPixel_vga4Plane(int x, int y, int color)
+{
+
+
+  /**ADDED**/
+  unsigned int tmpX = 0;
+  
+  int offset;
+
+  unsigned int wd_in_bytes, off, mask, p, pmask;
+  
+  //~ for(y = 0; y < VGA_height; y++)
+  //~ {
+    //~ for(x = 0; x < VGA_width; x++)
+    //~ {
+      //~ offset = x + (VGA_width) * y;
+     //~ 
+      //~ vram[offset] = 15;
+      offset = x / 8 + (VGA_width / 8) * y;
+
+      tmpX = (x & 7) * 1;
+      mask = 0x80 >> tmpX;
+      pmask = 1;
+      
+      for(p = 0; p < 4; p++)
+      {
+	set_plane(p);
+	//~ set_plane(3);
+	if(pmask & color)
+	{
+	  //~ vpokeb(offset, vpeekb(offset) | mask);
+	  vram[offset] = vpeekb(offset) | mask;	  
+	}else{
+	  //~ vpokeb(offset, vpeekb(offset) & ~mask);
+	  vram[offset] = vpeekb(offset) & ~mask;	  	  
+	}
+	pmask <<= 1;
+      }
+  /**ADDED**/
+     
+      //vram[offset] = 15;
+
+    //~ }
+  //~ }
+  //~ cTemp[0] = color & 0xff;
+  //~ cTemp[1] = (color>>8) & 0xff;
+  //~ cTemp[2] = (color>>16) & 0xff;  
+
+}
+
+void putPixel_VESA(int x, int y, int RGB)
+{
+
+  /*calculates the offset for a specific point on screen*/
+  int offset = x * (depthVESA / 8) + y * (widthVESA * (depthVESA / 8));
+
+  vga_mem[offset + 0] = RGB & 0xff;           //BLUE
+  vga_mem[offset + 1] = (RGB >> 8) & 0xff;    //GREEN
+  vga_mem[offset + 2] = (RGB >> 16) & 0xff;   //RED
 
 }
 
@@ -28,11 +121,51 @@ void putRect(int x, int y, int width, int height, int fill)
     {
       //~ *pixel = 4;
       //~ pixel++;
-      offset = x + VGA_width * y;
-  
-      vram[offset] = fill;
+      //~ offset = x + VGA_width * y;
+  //~ 
+      //~ vram[offset] = fill;
+
+      putPixel(x, y, fill);
       
     }
+  }
+  
+}
+
+void putPixbufRect(int x, int y, int width, int height, int *pixbuf)
+{
+  int offset, tmpX = x, tmpY = y, color;
+  int posX = 0, posY = 0;
+  
+  for(y = tmpY; y < height + tmpY; y++)
+  {
+    for(x = tmpX; x < width + tmpX; x++)
+    {
+      //~ *pixel = 4;
+      //~ pixel++;
+
+      color = *(pixbuf + posX + width * posY);
+
+      if(color != ALPHA)
+      {
+	//~ if(isVESAon == OFF)
+	//~ {
+	  //~ offset = x + VGA_width * y;
+	  
+	  //~ vram[offset] = color;
+	//~ }else if(isVESAon == ON)
+	//~ {
+	  //~ offset = x * (depthVESA / 8) + y * (widthVESA * (depthVESA / 8));
+	  
+	  putPixel(x, y, color);
+	//~ }
+      }
+
+      posX++;
+    }
+
+    posX = 0;
+    posY++;
   }
   
 }
@@ -58,23 +191,375 @@ void putLine(int x1, int y1, int x2, int y2, int fill)
   float runningUp;
 
   //~ if((y2 - y1) 
-  //int x, y, offset;
-  //for(y = 0; y < slopeNum + 1; y++)
-  //{
-    //for(x = 0; x < slopeDenom + 1; x++)
-    //{
-      ////~ *pixel = 4;
-      ////~ pixel++;
-      //offset = tmpX + 320 * tmpY;
+  int x, y, offset;
+  for(y = 0; y < slopeNum + 1; y++)
+  {
+    for(x = 0; x < slopeDenom + 1; x++)
+    {
+      //~ *pixel = 4;
+      //~ pixel++;
+      offset = tmpX + 320 * tmpY;
   
-      //vram[offset] = fill;
-      //tmpX++;
+      vram[offset] = fill;
+      tmpX++;
       
-    //}
-    //tmpX = originalX;
-    //tmpY++;
-  //}
+    }
+    tmpX = originalX;
+    tmpY++;
+  }
   
+}
+
+void putHVLine(int x, int y, int length, int color, char *HorV)
+{
+  int a, offset;
+
+  if(*(HorV) == 'H') //draws a horizontal line
+  {
+    for(a = 0; a < length; a++)
+    {
+      offset = x + VGA_width * y;
+
+      vram[offset] = color;
+
+      x++;
+    }
+    
+  }else if(*(HorV) == 'V') //draws a verticle line
+  {
+    for(a = 0; a < length; a++)
+    {
+      offset = x + VGA_width * y;
+
+      vram[offset] = color;
+
+      y++;
+    }
+
+  }
+  
+}
+
+void putBorderOnObject(objects *object, int index)
+{
+
+  putRect(object[index].x, object[index].y, object[index].width, object[index].borderSize, object[index].borderColor);
+  putRect(object[index].x, object[index].y + object[index].height - object[index].borderSize, object[index].width, object[index].borderSize, object[index].borderColor);
+  
+  putRect(object[index].x, object[index].y, object[index].borderSize, object[index].height, object[index].borderColor);
+  putRect(object[index].x + object[index].width - object[index].borderSize, object[index].y, object[index].borderSize, object[index].height, object[index].borderColor);
+}
+//~ int encodeHexFont(int bit8, int bit7, int bit6, int bit5, int bit4, int bit3, int bit2, int bit1)
+//~ {
+  //~ return 128 * bit8 + 64 * bit7 + 32 * bit6 + 16 * bit5 + 8 * bit4 + 4 * bit3 + 2 * bit2 + 1 * bit1;
+//~ }
+
+int font1[26][8] = //26 sets to represent the 26 letters, 8 binary numbers
+{
+  //~ { 0b00011000, //A
+    //~ 0b00111100,
+    //~ 0b01100110,
+    //~ 0b01111110,
+    //~ 0b01100110,
+    //~ 0b01100110,
+    //~ 0b00000000,
+    //~ 0b00000000
+  //~ { 0b00010000, //A
+    //~ 0b00101000,
+    //~ 0b01000100,
+    //~ 0b10000010,
+    //~ 0b10000010,
+    //~ 0b11111110,
+    //~ 0b10000010,
+    //~ 0b00000000
+  //~ },
+  { 0b00011000, //A
+    0b00100100,
+    0b01000010,
+    0b01111110,
+    0b01000010,
+    0b01000010,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01111100, //B
+    0b01000010,
+    0b01111100,
+    0b01000010,
+    0b01000010,
+    0b01111100,
+    0b00000000,
+    0b00000000
+  },
+  { 0b00111100, //C
+    0b01000010,
+    0b01000000,
+    0b01000000,
+    0b01000010,
+    0b00111100,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01111100, //D
+    0b01000010,
+    0b01000010,
+    0b01000010,
+    0b01000010,
+    0b01111100,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01111110, //E
+    0b01000000,
+    0b01111100,
+    0b01000000,
+    0b01000000,
+    0b01111110,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01111110, //F
+    0b01000000,
+    0b01111100,
+    0b01000000,
+    0b01000000,
+    0b01000000,
+    0b00000000,
+    0b00000000
+  },
+  { 0b00111100, //G
+    0b01000010,
+    0b01000000,
+    0b01001110,
+    0b01000010,
+    0b00111110,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01000010, //H
+    0b01000010,
+    0b01000010,
+    0b01111110,
+    0b01000010,
+    0b01000010,
+    0b00000000,
+    0b00000000
+  },
+  { 0b00010000, //I
+    0b00010000,
+    0b00010000,
+    0b00010000,
+    0b00010000,
+    0b00010000,
+    0b00000000,
+    0b00000000
+  },
+  { 0b00000010, //J
+    0b00000010,
+    0b00000010,
+    0b00000010,
+    0b01000010,
+    0b00111100,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01000010, //K
+    0b01000100,
+    0b01001000,
+    0b01111000,
+    0b01000100,
+    0b01000010,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01000000, //L
+    0b01000000,
+    0b01000000,
+    0b01000000,
+    0b01000000,
+    0b01111110,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01000010, //M
+    0b01100110,
+    0b01011010,
+    0b01000010,
+    0b01000010,
+    0b01000010,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01000010, //N
+    0b01100010,
+    0b01010010,
+    0b01001010,
+    0b01000110,
+    0b01000010,
+    0b00000000,
+    0b00000000
+  },
+  { 0b00111100, //O
+    0b01000010,
+    0b01000010,
+    0b01000010,
+    0b01000010,
+    0b00111100,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01111100, //P
+    0b01000010,
+    0b01000010,
+    0b01111100,
+    0b01000000,
+    0b01000000,
+    0b00000000,
+    0b00000000
+  },
+  { 0b00111100, //Q
+    0b01000010,
+    0b01000010,
+    0b01000010,
+    0b01001010,
+    0b00111100,
+    0b00000010,
+    0b00000000
+  },
+  { 0b01111100, //R
+    0b01000010,
+    0b01000010,
+    0b01111100,
+    0b01000100,
+    0b01000010,
+    0b00000000,
+    0b00000000
+  },
+  { 0b00111100, //S
+    0b01000010,
+    0b00110000,
+    0b00001100,
+    0b01000010,
+    0b00111100,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01111110, //T
+    0b00010000,
+    0b00010000,
+    0b00010000,
+    0b00010000,
+    0b00010000,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01000010, //U
+    0b01000010,
+    0b01000010,
+    0b01000010,
+    0b01000010,
+    0b00111100,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01000010, //V
+    0b01000010,
+    0b00100100,
+    0b00100100,
+    0b00011000,
+    0b00011000,
+    0b00000000,
+    0b00000000
+  },
+  { 0b10000001, //W
+    0b10000001,
+    0b10011001,
+    0b10011001,
+    0b01100110,
+    0b01000010,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01000010, //X
+    0b00100100,
+    0b00011000,
+    0b00011000,
+    0b00100100,
+    0b01000010,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01000010, //Y
+    0b01000010,
+    0b00111100,
+    0b00010000,
+    0b00010000,
+    0b00010000,
+    0b00000000,
+    0b00000000
+  },
+  { 0b01111110, //Z
+    0b00000100,
+    0b00001000,
+    0b00010000,
+    0b00100000,
+    0b01111110,
+    0b00000000,
+    0b00000000
+  }
+
+};
+
+void putGraphicChar(char *letter, int x, int y, int color, int fontSize)
+{
+  //~ int offset = x + VGA_width * y;
+  int offset, index, encodedLine, modNumber;
+
+  int asciiCharToPrint = *(letter) - 65; //gest the index of the char to print
+
+  int tmpX = x, tmpY = y;
+
+  for(y = tmpY; y < tmpY + fontSize; y++)
+  {
+    encodedLine = font1[asciiCharToPrint][y - tmpY];
+
+    if(encodedLine != 0) //if there is atleast one pixel on that line
+    {
+      
+      for(x = tmpX; x < tmpX + fontSize; x++)
+      {
+        offset = x + VGA_width * y; //place to draw
+
+        index = fontSize - (x - tmpX) - 1; //finds the index of the number, if x == tmpX, ie: wants to draw 0 pixel if the array is 0b01111111, then it goes to 1 in -> direction
+
+        modNumber = math_pow(2, index); //finds the max number that the encoded line for the next step is an optimization
+
+        if(encodedLine - modNumber >= 0) //if the max number is greater than the encoded line, then there must be no pixel on the index so skip drawing
+        {
+          putPixel(x, y, color);
+          encodedLine = encodedLine - modNumber;
+        }
+        
+      }
+    }
+      
+  }
+  
+  //~ vram[offset] = color;
+}
+
+void putGraphicString(char *string, int x, int y, int color, int fontSize)
+{
+  int length = k_strlen(string), moveX = (int)(fontSize * (9 / 8));
+
+  int a;
+  for(a = 0; a < length; a++)
+  {
+    putGraphicChar(string, x, y, color, fontSize);
+
+    x = x + moveX;
+    string++;
+  }
 }
 
 int getPixelColor(int x, int y)
@@ -89,13 +574,32 @@ int isObjectAbovePoint(int x, int y, objects *object, int index)
   if(object[index].x > x || object[index].y > y)
   {
     return FALSE; //object is not over point (x,y)
-  }else if(object[index].x <= x && object[index].y <= y && (object[index].x + object[index].width) >= x && (object[index].y + object[index].height) >= y)
+  //~ }else if(object[index].x <= x && object[index].y <= y && (object[index].x + object[index].width) >= x && (object[index].y + object[index].height) >= y)
+  }else if(object[index].x <= x && object[index].y <= y && (object[index].x + object[index].width) > x && (object[index].y + object[index].height) > y)
   {
     return TRUE; //object is over point (x,y)
   }else{
     return FALSE; //object is not over point (x,y)
   }
 
+}
+
+int indexOfHighestObjectAbovePoint(int x, int y, objects *object, int numberOfObjects)
+{
+
+  int a, highestPriority = 0, currentPriority, highestObject = 0;
+  
+  for(a = 0; a < numberOfObjects; a++)
+  {
+    currentPriority = object[a].priority;
+
+    if(currentPriority >= highestPriority && isObjectAbovePoint(x, y, &object[0], a) == TRUE) //if this object "a" has a higher priority than the one before it and is above the input point
+    {
+      highestObject = a;
+    }
+  }
+
+  return highestObject;
 }
 
 int isAttributeAbovePoint(int pointX, int pointY, int x, int y, int width, int height)
@@ -179,7 +683,56 @@ int objectsCollision(objects *object, int firstIndex, int secondIndex, int xBuff
   
 }
 
-void refreshObjects(objects *number, int numberOfObjects, int indexToRefresh, int xBuffer, int yBuffer)
+//TODO add getPixbufWidth functionality
+int getPixbufWidth(int *pixbuf)
+{
+
+}
+
+//TODO add getPixbufHeight functionality
+int getPixbufHeight(int *pixbuf)
+{
+
+}
+
+int indexOfObjectBelow(objects *number, int numberOfObjects, int indexOfObjectToLookUnder, int x, int y)
+{
+  int a, indexPriority = number[indexOfObjectToLookUnder].priority;
+  int lastPriority = 0, objectUnder = 0;
+  
+  for(a = 0; a < numberOfObjects; a++)
+  {
+    if(number[a].priority > lastPriority && number[a].priority < indexPriority && //if this testing priority > than the previous one and is < the one inputed
+     a != indexOfObjectToLookUnder && isObjectAbovePoint(x, y, &number[0], a) == TRUE && //if the testing priority != to the inputed on and if the object being tested if under is under the inputed object
+     number[a].shouldHide == FALSE) //the object below should not be hidden
+    {
+      lastPriority = number[a].priority;
+      objectUnder = a;
+    }
+  }
+
+  return objectUnder;
+  //~ return 2;
+
+}
+
+int numberOfHiddenObjects(objects *object, int numberOfObjects)
+{
+
+  int a, hidden = 0;
+
+  for(a = 0; a < numberOfObjects; a++)
+  {
+    if(object[a].shouldHide == TRUE)
+    {
+      hidden++;
+    }
+  }
+
+  return hidden;
+}
+
+void refreshObjects(objects *number, int numberOfObjects, int indexToRefresh, int xBuffer, int yBuffer, int *pixbuf)
 {
   //~ k_printf("\n%d\n", isObjectAbove(0, 0, &number[0], 1));
   
@@ -187,7 +740,9 @@ void refreshObjects(objects *number, int numberOfObjects, int indexToRefresh, in
   int height = number[indexToRefresh].height;
   
   int x, y;
-  int xPos = number[indexToRefresh].x, yPos = number[indexToRefresh].y, n, highestColor = 0, currentPriority = 0, color;
+  int xPos = number[indexToRefresh].x, yPos = number[indexToRefresh].y, n, color;
+
+  float highestPriority = 0, currentPriority = 0;
 
   int a = xPos - xBuffer, b = yPos - yBuffer;
 
@@ -207,39 +762,130 @@ void refreshObjects(objects *number, int numberOfObjects, int indexToRefresh, in
     b = VGA_height;
   }
 
-  
-  for(x = a; x < xPos + width + xBuffer; x++)
+  int xLoopNumber = xPos + width + xBuffer;
+
+  if(xLoopNumber > VGA_width) //should not refresh anything if it exceeds the VGA_width
   {
-    for(y = b; y < yPos + height + yBuffer; y++)
+    xLoopNumber = VGA_width;
+  }
+
+  int shouldPutPixel = TRUE, objectRightBelow = 0;
+
+  for(y = b; y < yPos + height + yBuffer; y++)
+  {  
+    for(x = a; x < xLoopNumber; x++)
     {
+
       for(n = 0; n < numberOfObjects; n++)
       {
-        if(isObjectAbovePoint(x, y, &number[0], n) == 1)
+        if(isObjectAbovePoint(x, y, &number[0], n) == TRUE && number[n].shouldHide == FALSE) //if the object at point (x,y) is over that point and is not set to hidden (hidden meaning invisible)
         {
           currentPriority = number[n].priority;
           
-          if(currentPriority >= highestColor)
+          if(currentPriority >= highestPriority) //if this object has a higher priority than the one before it
           {
-            highestColor = currentPriority;
-            color = number[n].color;
+            highestPriority = currentPriority;
+            
+            if(number[n].color == -1) //-1 signalizes that the color is a pixbuf
+            {
+              color = *(pixbuf + (x - xPos) + width * (y - yPos));
+              if(color == ALPHA) //if the color in the pixbuf is listed as an ALPHA
+              {
+                //~ shouldPutPixel = FALSE;
+                objectRightBelow = indexOfObjectBelow(&number[0], numberOfObjects, n, x, y);
+
+                if(number[objectRightBelow].borderSize != 0) //checks if objects has a border
+                {
+                  if(number[objectRightBelow].x <= x && number[objectRightBelow].x +
+                      number[objectRightBelow].borderSize > x) //checks if refreshing point is on left border
+                  {
+                    color = number[objectRightBelow].borderColor;
+
+                  }else if(number[objectRightBelow].x + number[objectRightBelow].width -
+                      number[objectRightBelow].borderSize - 1 < x) //checks if refreshing point is on left border
+                  {
+                    color = number[objectRightBelow].borderColor;
+
+
+                  }else if(number[objectRightBelow].y <= y && number[objectRightBelow].y +
+                      number[objectRightBelow].borderSize > y) //checks if refreshing point is on top border
+                  {
+                    color = number[objectRightBelow].borderColor;
+                    
+                  }else if(number[objectRightBelow].y + number[objectRightBelow].height - number[objectRightBelow].borderSize - 1 < y) //&& number[objectRightBelow].y +
+                      //~ number[objectRightBelow].borderSize > y) //checks if refreshing point is on bottom border
+                  {
+                    color = number[objectRightBelow].borderColor;
+                    
+                  }else{
+                    color = number[objectRightBelow].color;
+                  }
+                  
+                }else{
+                  color = number[objectRightBelow].color;
+                }
+                //~ color = number[objectRightBelow].color;
+              }
+            }else{
+
+              if(number[n].borderSize != 0)//checks if objects has a border
+              {
+                if(number[n].x <= x && number[n].x + number[n].borderSize > x) //checks if refreshing point is on left border
+                {
+                  color = number[n].borderColor;
+
+                }else if(number[n].x + number[n].width - number[n].borderSize - 1 < x) // && number[n].x + number[n].width == x)
+                {
+                  color = number[n].borderColor;
+
+                }else if(number[n].y <= y && number[n].y + number[n].borderSize > y)
+                {
+                  color = number[n].borderColor;
+                  
+                //~ }else if(number[n].y + number[n].height >= y && number[n].y <= y + number[n].borderSize)
+                //~ {
+                  //~ color = number[n].borderColor;
+
+                }else if(number[n].y + number[n].height - number[n].borderSize - 1 < y)
+                {
+                  color = number[n].borderColor;
+
+                }else{
+                  color = number[n].color;
+                }
+              }else{
+                color = number[n].color;
+              }              
+              //~ shouldPutPixel = TRUE;
+              
+            }
+
+            //~ objectRightBelow = indexOfObjectBelow(&number[0], numberOfObjects, n, x, y);
             
           }
         }
 
       }
+
+      //~ if(shouldPutPixel == TRUE)
+      //~ {
+        putPixel(x, y, color);
+        highestPriority = 0; //resets the highest priority since we are moving to a new pixel
+      //~ }else{
+        //~ shouldPutPixel = TRUE;
+      //~ }
       
-      putPixel(x, y, color);
-      highestColor = 0;      
     }
   }
   
 }
 
-void refreshScreen(objects *number, int numberOfObjects)
+void refreshScreen_std(objects *number, int numberOfObjects)
 {
   //~ k_printf("\n%d\n", isObjectAbovePoint(0, 0, &number[0], 1));
   
-  int x, y, n, highestColor = 0, currentPriority = 0, color;
+  int x, y, n, color;
+  float highestColor = 0, currentPriority = 0;
   
   for(x = 0; x < VGA_width; x++)
   {
@@ -265,6 +911,233 @@ void refreshScreen(objects *number, int numberOfObjects)
       highestColor = 0;      
     }
   }
+  
+}
+
+void refreshScreen_VESA()
+{
+  vsync();
+  //~ memset(double_buffer, 0, (widthVESA * heightVESA * (depthVESA / 8)));
+  g_flip(double_buffer, (widthVESA * heightVESA * (depthVESA / 8)));
+  //~ g_flip(double_buffer, (widthVESA * heightVESA));
+  
+}
+
+void refreshArea_VESA(int x, int y, int width, int height)
+{
+  vsync();
+
+  int a, offset;
+
+  offset = x * (depthVESA / 8) + y * widthVESA * (depthVESA / 8);
+
+  for(a = 0; a < height; a++)
+  {
+    offset = offset + widthVESA * (depthVESA / 8);
+    memcpy(vga_mem + offset, double_buffer + offset, width * (depthVESA / 8));
+    //~ y++;
+  }
+
+
+  //~ g_flip(double_buffer, (widthVESA * heightVESA * (depthVESA / 8)));
+  
+}
+
+void writePixelToDoubleBuffer(unsigned x, unsigned y, unsigned RGB)
+{
+  //~ double_buffer[widthVESA * y + x] = RGB;
+  //~ double_buffer[widthVESA * y + x] = 0xffffff;
+
+
+
+  /*calculates the offset for a specific point on screen*/
+  int offset = x * (depthVESA / 8) + y * (widthVESA * (depthVESA / 8));
+
+
+  if(RGB != ALPHA)
+  {
+    double_buffer[offset + 0] = RGB & 0xff;           //BLUE
+    double_buffer[offset + 1] = (RGB >> 8) & 0xff;    //GREEN
+    double_buffer[offset + 2] = (RGB >> 16) & 0xff;   //RED
+  }
+  //~ vga_mem[offset + 0] = RGB & 0xff;           //BLUE
+  //~ vga_mem[offset + 1] = (RGB >> 8) & 0xff;    //GREEN
+  //~ vga_mem[offset + 2] = (RGB >> 16) & 0xff;   //RED
+
+}
+
+void write_buffer(unsigned x, unsigned y, unsigned width, unsigned height, u32int *buffer)
+{
+  int j, h;
+  
+  for(j = y; j < y + height; j++)
+  {
+    for(h = x; h < x + width; h++)
+    {
+      writePixelToDoubleBuffer(h, j, buffer[((j - y) * width) + (h - x)]);
+      //~ writePixelToDoubleBuffer(h, j, buffer[((j) * width) + (h)]);
+      //~ writePixelToDoubleBuffer(h, j, buffer[0]);
+    }
+  }
+}
+
+void plot_BufPixel(int x, int y, int RGB, int width, u32int *buffer)
+{
+
+  /*calculates the offset for a specific point on screen*/  
+  int offset = x + y * width;
+
+  if(RGB != PLOT_ALPHA) //if the pixel is not an alpha pixel
+  {
+    buffer[offset] = RGB;           //COLOR
+  }
+
+  //~ buffer[offset + 0] = RGB & 0xff;           //BLUE
+  //~ buffer[offset + 1] = (RGB >> 8) & 0xff;    //GREEN
+  //~ buffer[offset + 2] = (RGB >> 16) & 0xff;   //RED
+}
+
+void plot_BufRect(int x, int y, int width, int height, int isPixbuf, long *pixbuf, int fill, int widthOfWholeWindow, u32int *buffer)
+{
+
+  int tmpX = x, tmpY = y;
+
+
+  //TODO add plot_BufRect with a pixbuf
+  if(isPixbuf == TRUE)
+  {
+    int a, b, offset, color;
+    
+    for(a = tmpX; a < tmpX + width; a++)
+    {
+      for(b = tmpY; b < tmpY + height; b++)
+      {
+	offset = (a - tmpX) + (b - tmpY) * width;
+	color = pixbuf[offset];
+
+	//~ if(color != ALPHA)
+	//~ {
+	  //~ plot_BufPixel(a - tmpX + x, b - tmpY + y, color, widthOfWholeWindow, buffer);
+	  plot_BufPixel(a, b, color, widthOfWholeWindow, buffer);
+	//~ }
+      }
+    }
+  }else if(isPixbuf == FALSE)
+  {
+    int a, b;
+    
+    for(a = tmpX; a < tmpX + width; a++)
+    {
+      for(b = tmpY; b < tmpY + height; b++)
+      {
+	plot_BufPixel(a - tmpX + x, b - tmpY + y, fill, widthOfWholeWindow, buffer);
+      }
+    }
+  }
+
+
+}
+
+void plot_BufChar(char *letter, int x, int y, int color, int fontSize, int widthOfWindow, u32int *buffer)
+{
+  //~ int offset = x + VGA_width * y;
+  int offset, index, encodedLine, modNumber;
+
+  int asciiCharToPrint = *(letter) - 65; //gest the index of the char to print
+
+  int tmpX = x, tmpY = y;
+
+  for(y = tmpY; y < tmpY + fontSize; y++)
+  {
+    encodedLine = font1[asciiCharToPrint][y - tmpY];
+
+    if(encodedLine != 0) //if there is atleast one pixel on that line
+    {
+      
+      for(x = tmpX; x < tmpX + fontSize; x++)
+      {
+        //~ offset = x + VGA_width * y; //place to draw
+
+        index = fontSize - (x - tmpX) - 1; //finds the index of the number, if x == tmpX, ie: wants to draw 0 pixel if the array is 0b01111111, then it goes to 1 in -> direction
+
+        modNumber = math_pow(2, index); //finds the max number that the encoded line for the next step is an optimization
+
+        if(encodedLine - modNumber >= 0) //if the max number is greater than the encoded line, then there must be no pixel on the index so skip drawing
+        {
+          plot_BufPixel(x, y, color, widthOfWindow, buffer);
+          encodedLine = encodedLine - modNumber;
+        }
+        
+      }
+    }
+      
+  }
+  
+  //~ vram[offset] = color;
+}
+
+void plot_BufString(int x, int y, char *string, int color, int widthOfWholeWindow, u32int *buffer)
+{
+
+  int length = k_strlen(string);
+
+  int a;
+  
+  for(a = 0; a < length; a++)
+  {
+
+    plot_BufChar(string, x, y, color, 8, widthOfWholeWindow, buffer);
+
+    string++;
+    x = x + 8;
+    
+    //~ plot_BufPixel(a - tmpX + x, b - tmpY + y, fill, widthOfWholeWindow, buffer);
+
+  }
+
+}
+
+void refreshArea(objects *number, int numberOfObjects, int topLeftX, int topLeftY, int width, int height)
+{
+
+  //~ int tmpX = topLeftX, tmpY = topLeftY;
+
+  int a, b, n, color;
+
+  float highestColor = 0, currentPriority = 0;
+
+  int xLoopNumber = topLeftX + width;
+
+  if(xLoopNumber > VGA_width)
+  {
+    xLoopNumber = VGA_width;
+  }
+  
+  for(a = topLeftX; a < xLoopNumber; a++)
+  {
+    for(b = topLeftY; b < topLeftY + height; b++)
+    {
+      for(n = 0; n < numberOfObjects; n++)
+      {
+        if(isObjectAbovePoint(a, b, &number[0], n) == 1)
+        {
+          currentPriority = number[n].priority;
+          
+          if(currentPriority >= highestColor)
+          {
+            highestColor = currentPriority;
+            color = number[n].color;
+            
+          }
+        }
+
+      }
+      
+      putPixel(a, b, color);
+      highestColor = 0;      
+    }
+  }
+
   
 }
 //~ void refreshObjects(objects *number, int numberOfObjects, int numberOfTypes)
@@ -304,22 +1177,62 @@ void refreshScreen(objects *number, int numberOfObjects)
 #define   VGA_AC_WRITE             0x3C0
 #define   VGA_AC_READ              0x3C1
 #define   VGA_MISC_WRITE           0x3C2
-#define VGA_SEQ_INDEX              0x3C4
-#define VGA_SEQ_DATA               0x3C5
+#define   VGA_SEQ_INDEX            0x3C4
+#define   VGA_SEQ_DATA             0x3C5
 #define   VGA_DAC_READ_INDEX       0x3C7
 #define   VGA_DAC_WRITE_INDEX      0x3C8
 #define   VGA_DAC_DATA             0x3C9
 #define   VGA_MISC_READ            0x3CC
-#define VGA_GC_INDEX               0x3CE
-#define VGA_GC_DATA                0x3CF
-#define VGA_CRTC_INDEX             0x3D4      /* 0x3B4 */
-#define VGA_CRTC_DATA              0x3D5      /* 0x3B5 */
+#define   VGA_GC_INDEX             0x3CE
+#define   VGA_GC_DATA              0x3CF
+#define   VGA_CRTC_INDEX           0x3D4      /* 0x3B4 */
+#define   VGA_CRTC_DATA            0x3D5      /* 0x3B5 */
 #define   VGA_INSTAT_READ          0x3DA
 #define   VGA_NUM_SEQ_REGS         5
 #define   VGA_NUM_CRTC_REGS        25
 #define   VGA_NUM_GC_REGS          9
 #define   VGA_NUM_AC_REGS          21
 #define   VGA_NUM_REGS      (1+VGA_NUM_SEQ_REGS+VGA_NUM_CRTC_REGS+VGA_NUM_GC_REGS+VGA_NUM_AC_REGS)
+
+unsigned char g_640x480x16[] =
+{
+/* MISC */
+	0xE3,
+/* SEQ */
+	0x03, 0x01, 0x08, 0x00, 0x06,
+/* CRTC */
+	0x5F, 0x4F, 0x50, 0x82, 0x54, 0x80, 0x0B, 0x3E,
+	0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0xEA, 0x0C, 0xDF, 0x28, 0x00, 0xE7, 0x04, 0xE3,
+	0xFF,
+/* GC */
+	0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x05, 0x0F,
+	0xFF,
+/* AC */
+	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x14, 0x07,
+	0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F,
+	0x01, 0x00, 0x0F, 0x00, 0x00
+};
+
+unsigned char g_720x480x16[] =
+{
+/* MISC */
+	0xE7,
+/* SEQ */
+	0x03, 0x01, 0x08, 0x00, 0x06,
+/* CRTC */
+	0x6B, 0x59, 0x5A, 0x82, 0x60, 0x8D, 0x0B, 0x3E,
+	0x00, 0x40, 0x06, 0x07, 0x00, 0x00, 0x00, 0x00,
+	0xEA, 0x0C, 0xDF, 0x2D, 0x08, 0xE8, 0x05, 0xE3,
+	0xFF,
+/* GC */
+	0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x05, 0x0F,
+	0xFF,
+/* AC */
+	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+	0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+	0x01, 0x00, 0x0F, 0x00, 0x00,
+};
 
 /**
 * CREATE THE REGISTER ARRAY TAKEN FROM http://wiki.osdev.org/VGA_Hardware
@@ -455,35 +1368,147 @@ void write_registers(unsigned char *regs)
    
 }
 
+static void vsync()
+{
+  /*wait until any previous retrace has ended*/
+  do {
+  } while (inb(0x3DA) & 8);
+  
+  /*wait until a new retrace has just begun*/
+  do {
+  } while (!(inb(0x3DA) & 8));
+}
+
+static void g_flip(unsigned char *source, u32int count)
+{
+  memcpy(vga_mem, source, count);
+}
+
+/*****************************************************************************
+*****************************************************************************/
+static void set_plane(unsigned p)
+{
+  unsigned char pmask;
+
+  p &= 3;
+  pmask = 1 << p;
+/* set read plane */
+  outb(VGA_GC_INDEX, 4);
+  outb(VGA_GC_DATA, p);
+/* set write plane */
+  outb(VGA_SEQ_INDEX, 2);
+  outb(VGA_SEQ_DATA, pmask);
+
+  //~ outb(VGA_SEQ_INDEX, p);
+  
+}
+
+static void vpokeb(unsigned int off, unsigned int val)
+{
+  pokeb(get_fb_seg(), off, val);
+}
+
+static unsigned vpeekb(unsigned off)
+{
+  return peekb(get_fb_seg(), off);
+}
+
+/**ADDED**/
+/* bitmap "class" */
+typedef struct
+{
+  unsigned int wd, ht;
+  unsigned char *raster;
+  unsigned int fore_color, back_color;
+/* "member functions" */
+  const struct _driver *ops;
+}bmp_t;
+
+void vmemset(unsigned char *s, unsigned c, unsigned n)
+{
+  for(; n != 0; n--)
+  {
+    *s = c;
+    s++;
+  }
+}
+
+void fill_plane(char *bmp, int x, int y, int wd, int ht, unsigned c)
+{
+  unsigned int w, wd_in_bytes, off;
+  unsigned char lmask, rmask;
+  int x2, y2;
+
+  x2 = x + wd - 1;
+  w = (x2 >> 3) - (x >> 3) + 1;
+  lmask = 0x00FF >> (x & 7); /* FF 7F 3F 1F 0F 07 03 01 */
+  rmask = 0xFF80 >> (x2 & 7);/* 80 C0 E0 F0 F8 FC FE FF */
+  if(w == 1)
+  {
+    lmask &= rmask;
+  }
+  wd_in_bytes = VGA_width;
+  off = wd_in_bytes * y + x / 8;
+  if(c)
+/* for each row... */
+  for(y2 = y; y2 < y + ht; y2++)
+  {
+/* do partial byte on left */
+    bmp[off] |= lmask;
+/* do solid bytes in middle */
+    if(w > 2)
+      vmemset(bmp + off + 1, 0xFF, w - 2);
+/* do partial byte on right */
+    if(w > 1)
+      bmp[off + w - 1] |= rmask;
+/* next row */
+    off += wd_in_bytes;
+  }else{
+    lmask = ~lmask;
+    rmask = ~rmask;
+    for(y2 = y; y2 < y + ht; y2++)
+    {
+      bmp[off] &= lmask;
+      if(w > 2)
+	vmemset(bmp + off + 1, 0, w - 2);
+      if(w > 1)
+	bmp[off + w - 1] &= rmask;
+      off += wd_in_bytes;
+    }
+  }
+}
+
+/**ADDED**/
+
+
 /**
 * Clears the VGA screen
 */
 void VGA_clear_screen()
 {
-   unsigned int x=0;
-   unsigned int y=0;
+  unsigned int x = 0;
+  unsigned int y = 0;
+  
+  //~ unsigned int tmpX = 0;
 
 
-
-   //~ for(y = 0; y < VGA_height; y++){
-      //~ for(x = 0; x < VGA_width; x++){
-         //~ VGA_address[VGA_width*y+x]=0x0f;
-      //~ }
-   //~ }
-  int offset;
-   
+  //~ int offset;
+  
   for(y = 0; y < VGA_height; y++)
   {
     for(x = 0; x < VGA_width; x++)
     {
-      offset = x + 320 * y;
-     
-      vram[offset] = 15;
+      if(isVESAon == ON) //if VESA is on, use 0xffffff as white since there is no pallete
+      {
+	putPixel(x, y, 0xffffff);
+	//~ memset(vga_mem, 0xff, (widthVESA * heightVESA));
+      }else if(isVESAon == OFF) //if VESA is off, use 15 as white since there is a standard pallete
+      {
+	putPixel(x, y, 15);
+      }
     }
   }
 
-
-     
 }
 
 /**
@@ -493,30 +1518,82 @@ void VGA_clear_screen()
 void VGA_init(int width, int height, int bpp)
 {
   k_save();
-   //setup the vga struct
+  //setup the vga struct
 
   outb(0x3c8,0x0f);
   outb(0x3c9,0x3f);
   outb(0x3c9,0x3f);
   outb(0x3c9,0x3f);
    
-   VGA_width=(unsigned int)width;
-   VGA_height=(unsigned int)height;
-   VGA_bpp=bpp;
-   //~ VGA_address = (unsigned char *)0xA0000;
+  VGA_width = (unsigned int)width;
+  VGA_height = (unsigned int)height;
+  VGA_bpp = bpp;
+  //~ VGA_address = (unsigned char *)0xA0000;
 
-   //enables the mode 13 state
-   write_registers(mode_320_200_256);
+  //enables the mode 13 state
+  if(width == 320 && height == 200 && bpp == 256)
+  {
+    isVESAon = OFF;    
+    write_registers(mode_320_200_256);
+    putPixel = putPixel_simpleStd;
+    //~ refreshScreen = refreshScreen_std;
 
-   //clears the screen
-   VGA_clear_screen();
+    //clears the screen
+    VGA_clear_screen();    
+  }else if(width == 720 && height == 480 && bpp == 16)
+  {
+    isVESAon = OFF;
+    write_registers(g_720x480x16);
+    putPixel = putPixel_vga4Plane;
+
+    //clears the screen
+    VGA_clear_screen();    
+  }else if(width == 640 && height == 480 && bpp == 16)
+  {
+    isVESAon = OFF;
+    write_registers(g_640x480x16);
+    putPixel = putPixel_vga4Plane;
+    
+    //clears the screen
+    VGA_clear_screen();    
+  }else if(width == 1024 && height == 768 && bpp == 24)
+  {
+    //~ double_buffer = (unsigned char*)kmalloc((width * height) * (bpp / 8));
+
+    k_printf("\ndouble buffer: %h", double_buffer);
+    
+    memset(double_buffer, 0xff, width * height * (bpp / 8));
+
+    //~ double_buffer[0] = 0;
+    //~ double_buffer[1] = 0;
+    //~ double_buffer[2] = 0;
+    //~ double_buffer[3] = 0;
+    //~ double_buffer[4] = 0;
+    //~ double_buffer[5] = 0;
+
+    k_printf("\ndouble buffer content: %h %h %h %h %h %h %h", double_buffer[0], double_buffer[1], double_buffer[2], double_buffer[3], double_buffer[4], double_buffer[5]);
+    k_printf("\nDouble buffer addresses: %h %h %h %h %h %h %h %h", &double_buffer[0], &double_buffer[1], &double_buffer[2], &double_buffer[3], &double_buffer[4], &double_buffer[5], &double_buffer[6]);
+
+    //~ while(1);
+
+    isVESAon = ON;
+    setVesa(0x118); //1024x768x24
+    putPixel = putPixel_VESA;
+
+    //~ double_buffer = (u32int*)kmalloc((widthVESA * heightVESA) * (depthVESA / 8));
+//~ 
+    //~ k_printf("\ndouble buffer %h", double_buffer);
+    //~ 
+    //~ memset(double_buffer, 0, widthVESA * heightVESA * (depthVESA / 8));
+
+    //~ while(1);
+
+
+    //clears the screen
+    //~ VGA_clear_screen();        
+  }
+  
 }
-
-/**Credits to http://files.osdev.org/mirrors/geezer/osd/graphics/modes.c
- * This is not mine, but it works. :)*/
-#define	pokeb(S,O,V)		*(unsigned char *)(16uL * (S) + (O)) = (V)
-#define	pokew(S,O,V)		*(unsigned short *)(16uL * (S) + (O)) = (V)
-#define	_vmemwr(DS,DO,S,N)	memcpy((char *)((DS) * 16 + (DO)), S, N)
 
 static unsigned get_fb_seg(void)
 {
@@ -547,19 +1624,6 @@ static void vmemwr(unsigned dst_off, unsigned char *src, unsigned count)
 	_vmemwr(get_fb_seg(), dst_off, src, count);
 }
 
-static void set_plane(unsigned p)
-{
-	unsigned char pmask;
-
-	p &= 3;
-	pmask = 1 << p;
-/* set read plane */
-	outb(VGA_GC_INDEX, 4);
-	outb(VGA_GC_DATA, p);
-/* set write plane */
-	outb(VGA_SEQ_INDEX, 2);
-	outb(VGA_SEQ_DATA, pmask);
-}
 
 static unsigned char g_8x16_font[4096] =
 {
