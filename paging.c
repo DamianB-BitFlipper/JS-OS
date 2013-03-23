@@ -310,7 +310,7 @@ void page_fault(registers_t *regs)
   }
 
   /*Plays a note to indicate the pagefault just in case user is in graphical mode and can not see the error messages*/
-  playNote("C5", 500);
+  //~ playNote("C5", 500);
     
   PANIC("Page fault");
 }

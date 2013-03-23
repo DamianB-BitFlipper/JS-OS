@@ -24,10 +24,12 @@
 
 #include <stdio.h>
 
+#define NUMBER_OF_HEADERS	     64
+
 struct initrd_header
 {
 	unsigned char magic;
-	char name[64];
+	char name[128];
 	unsigned int offset;
 	unsigned int length;
 };
@@ -36,9 +38,11 @@ int main(char argc, char **argv)
 {
 	
 	int nheaders = (argc-1)/2;
-	struct initrd_header headers[64];
+	struct initrd_header headers[NUMBER_OF_HEADERS];
 	printf("size of header: %d\n", sizeof(struct initrd_header));
-	unsigned int off = sizeof(struct initrd_header) * 64 + sizeof(int);
+	
+	//offset = NUMBER_OF_HEADERS structs of the initrd_header + the one integer that tells the number of headers
+	unsigned int off = sizeof(struct initrd_header) * NUMBER_OF_HEADERS + sizeof(int);
 
 	int i;
 	for(i = 0; i < nheaders; i++)
@@ -53,8 +57,11 @@ int main(char argc, char **argv)
 			printf("Error: file not found: %s\n", argv[i*2+1]);
 			return 1;
 		}
+		//finds the length of the file and saves it//
 		fseek(stream, 0, SEEK_END);
 		headers[i].length = ftell(stream);
+		//finds the length of the file and saves it//
+		
 		off += headers[i].length;
 		fclose(stream);
 		headers[i].magic = 0xBF;
@@ -63,7 +70,7 @@ int main(char argc, char **argv)
 	FILE *wstream = fopen("./initrd.img", "w");
 	unsigned char *data = (unsigned char *)malloc(off);
 	fwrite(&nheaders, sizeof(int), 1, wstream);
-	fwrite(headers, sizeof(struct initrd_header), 64, wstream);
+	fwrite(headers, sizeof(struct initrd_header), NUMBER_OF_HEADERS, wstream);
 	
 	for(i = 0; i < nheaders; i++)
 	{

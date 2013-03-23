@@ -4,8 +4,13 @@
 #include "k_stdio.h"
 #include "k_programs.h"
 
+#include "fs.h"
+#include "initrd.h"
+
 int bufferCount = 0, index = 0, localIndex = 1;
 int shellIndentOn = ON, shellInput = ON;
+
+extern char *path; //out string for the path from root to the current directory
 
 void turnShellIndentOnOff(int onOrOff)
 {
@@ -40,9 +45,9 @@ void addShellIndent()
 
     if(cursor_xValue == 0) //if starting cursor is at 0, new line is already there
     {
-      k_printf("->");
+      k_printf("[%cg%s]%cw\n->", path);
     }else{ //if starting cursor is not at 0, new line is not present
-      k_printf("\n->");
+      k_printf("\n[%cg%s]%cw\n->", path);
     }
 
     startingCursorY(); //sets the starting cursor_y position to a veriable
@@ -97,10 +102,104 @@ void getTypedText(int charCount, int startingYPos, int cursor_y, char *c)
   
 }
 
-/*char array filled with names of programs*/
-int items = 7;
+void dirFilePathCount(char *args, int *dirCount, int *fileCount)
+{
+  int a, length = strlen(args), count = -1;
 
-char *programsList[7]=
+  //goes from the back, when it breaks, a == the position of the very last "/"
+  for(a = 0; a < length; a++)
+  {
+    if(*(args + a) == '/')
+    {
+
+      count = a;
+    }
+  }
+
+  if(count != -1) //if count remained unchanged (in char *args, there is only text, no "/")
+  {
+    *dirCount = count + 1;
+    *fileCount = length - (count + 1);
+
+    return;
+  }else{
+    fs_node_t *testDir;
+
+    testDir = finddir_fs(&root_nodes[currentDir_inode], args);
+
+    if(testDir != 0 && testDir->flags == FS_DIRECTORY) //if testDir is a directory
+    {
+      *dirCount = length;
+      *fileCount = -1;
+    }else{
+      *dirCount = -1;
+      *fileCount = length;
+    }
+
+    return;
+  }
+}
+
+int cdFormatArgs(char *args, char *dirPath, char *filePath)
+{
+  int i = 0, length = strlen(args), count = -1;
+
+  for(i; i < length; i++)
+  {
+    /* using the following, after it is done executing, the integer
+     * count will be equeal to the number of character before and
+     * including the last "/" in the destination string of input */
+    if(*(args + i) == '/') //for every "/" in the dest of input, increment count to i
+    {
+      count = i;
+    }
+  }
+
+  if(count == -1)
+  {
+    count = i - 1;
+
+    fs_node_t *isDir;
+    isDir = finddir_fs(&root_nodes[currentDir_inode], args);
+
+    if(isDir == 0) //no such entry exists
+    {
+      //failure!
+      return 1;
+    }else if(isDir != 0 && isDir->flags == FS_FILE) //the input is a file, cannot be cd'ed to
+    {
+      *(dirPath) = 0; //set dirPath to null
+      strcpy(filePath, isDir->name);
+      *(filePath + strlen(isDir->name)) = 0; //add \000 to the end
+
+      return 0;
+    }else if(isDir != 0 && isDir->flags == FS_DIRECTORY) //the input is just a directory
+    {
+      int w = program_cd(args);
+      return w;
+    }
+  }
+
+  //~ char *dir, *file;
+  //~ 
+  //~ dir = (char*)kmalloc(count + 2); //the extra +1 is for the \000 and the other one is because i, and thus count start from 0 on the first element
+  memcpy(dirPath, args, count + 1);
+  *(dirPath + count + 1) = 0; //add \000 to the end
+
+  //~ file = (char*)kmalloc(length - count);
+  memcpy(filePath, args + count + 1, length - count - 1);
+  *(filePath + length - count - 1) = 0; //add the \000 to the end
+
+  int work = program_cd(dirPath);
+
+  return work;
+
+}
+
+/*char array filled with names of programs*/
+#define PROGRAM_LIST_NUMBER    17
+
+char *programsList[PROGRAM_LIST_NUMBER]=
 {
   /*program names go here*/
   "ascii",
@@ -109,7 +208,17 @@ char *programsList[7]=
   "pong",
   "song",
   "viewer",
-  "start"
+  "start",
+  "ls",
+  "cd",
+  "now",
+  "mkdir",
+  "cp",
+  "cat",
+  "rm",
+  "pwd",
+  "help",
+  "mv"
 };
 
 void executeInput(char *input, char *arguements)
@@ -124,7 +233,7 @@ void executeInput(char *input, char *arguements)
     
     int x, hasProgramRun = 0;
     
-    for(x = 0; x < items; x++)
+    for(x = 0; x < PROGRAM_LIST_NUMBER; x++)
     {
       if(k_strcmp(input, programsList[x]) == 0)
       {
@@ -408,4 +517,64 @@ static void (*upDown)(int);
     (*upDown)(-1);
   }
 
+}
+
+int countArgs(char *args)
+{
+  removeTrailingSpaces(args);
+
+  int length = strlen(args);
+  int i;
+  int nArgs = 0;
+
+  /*counts the number of args*/
+  for(i = 0; i < length + 1; i++) 
+  {
+    /* If we have a space or we are at the end, to get the last arg,
+     * there is no space at the end */
+    if(*(args + i) == ' ' || i == length)
+    {
+      nArgs++;
+    }
+  }
+
+  return nArgs;
+}
+
+int getArgs(char *args, char **output)
+{
+  removeTrailingSpaces(args);
+
+  int length = strlen(args);
+  int i;
+  //~ int nArgs = 1;
+//~ 
+  //~ /*counts the number of args*/
+  //~ for(i = 0; i < length; i++)
+  //~ {
+    //~ if(*(args + i) == ' ')
+    //~ {
+      //~ nArgs++;
+    //~ }
+  //~ }
+
+  //~ char *arguments[nArgs]; //creates a 2d array of pointers for chars
+
+  int oldI = 0, curArg = 0;
+  for(i = 0; i < length + 1; i++)
+  {
+    if(*(args + i) == ' ' || i == length) //if we have a space or we are at the end, to get the last arg, there is no space at the end
+    {
+      output[curArg] = (char*)kmalloc(i - oldI + 1); //allocates space for the arg names, +1 being \000
+      //~ output[curArg] = (char*)(output + oldI);
+
+      memcpy(output[curArg], args + oldI, i - oldI);
+      *(output[curArg] + i - oldI) = 0; //adds \000 to the end
+      
+      curArg++; //increments the curArg
+      oldI = i + 1; //oldI is set to i and then +1 so we jump over that space
+    }
+  }
+
+  return curArg;
 }

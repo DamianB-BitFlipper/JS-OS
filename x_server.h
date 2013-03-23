@@ -1,7 +1,7 @@
 #ifndef XSERVER
 #define XSERVER
 
-#define MOUSE_INDEX     4
+#define MAX_PRIORITY     255
 
 
 /*function that initializes the X server*/

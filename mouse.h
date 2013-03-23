@@ -11,4 +11,10 @@ void init_mouse();
 /*sets/calls functions for left/middle/right click*/
 void mouseClickFunctions(char *callOrWrite, char *buttonClick, void (*func)() );
 
+/*disables the mouse*/
+void disableMousePackets();
+
+/*enables the mouse*/
+void enableMousePackets();
+
 #endif

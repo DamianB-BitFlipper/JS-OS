@@ -37,8 +37,9 @@ gcc -g -m32 -elf -o task.o -c task.c -nostdlib -nostdinc -fno-builtin -fno-stack
 #~ gcc -g -m32 -elf -o vbochsvbe.o -c vbochsvbe.c -nostdlib -nostdinc -fno-builtin -fno-stack-protector
 #~ gcc -g -m32 -elf -o vga.o -c vga.c -nostdlib -nostdinc -fno-builtin -fno-stack-protector
 gcc -g -m32 -elf -o vesa.o -c vesa.c -nostdlib -nostdinc -fno-builtin -fno-stack-protector
+gcc -g -m32 -elf -o cpu.o -c cpu.c -nostdlib -nostdinc -fno-builtin -fno-stack-protector
 
 echo 'linker'
-ld -g -T link.ld -o kernel boot.o main.o k_stdio.o k_shell.o k_programs.o k_math.o keyboard.o sound.o x_server.o mouse.o graphics.o common.o interrupt.o gdt.o descriptor_tables.o isr.o timer.o process.o fs.o initrd.o kheap.o ordered_array.o paging.o syscall.o task.o v86.o vesa.o -melf_i386
+ld -g -T link.ld -o kernel boot.o main.o k_stdio.o k_shell.o k_programs.o k_math.o keyboard.o sound.o x_server.o mouse.o graphics.o common.o interrupt.o gdt.o descriptor_tables.o isr.o timer.o process.o fs.o initrd.o kheap.o ordered_array.o paging.o syscall.o task.o v86.o vesa.o cpu.o -melf_i386
 
 #~ rm *.o

@@ -28,6 +28,11 @@ extern volatile window_t *window_list;
 #define numberOfObjects  5
 objects arrayOfObjects[numberOfObjects]; //make array of the 5 attributes of the 4 objects
 
+//~ int mouseID;
+
+///*WIDGETS*/
+window_t mouse, js_panel, desktop;
+///*WIDGETS*/
 
 long int mousePixbuf[400] = //defines the mouse pixbuf
 {
@@ -130,8 +135,7 @@ void moveMouse(int x, int y)
   
     int xMovement = math_abs(x) + math_abs(runningX), yMovement = math_abs(y) + math_abs(runningY);
   
-    translateObject(MOUSE_INDEX, x + runningX, y + runningY);
-    //~ translateObject(MOUSE_INDEX, x, y);
+    translateObject(mouse.id, x + runningX, y + runningY);
 
     runningX = 0;
     runningY = 0;
@@ -142,14 +146,16 @@ void moveMouse(int x, int y)
   }
 }
 
-void xLeftClick()
+void xLeftClick() //mouse left click call back
 {
   static long long int timePassed, secondTime, timeSwitcher = 0;
 
+  //~ disableMousePackets(); //disables the mouse from sending packets of information to not interfere
+
   timeSwitcher = (timeSwitcher + 1) % 2;
 
-  int index = highestWindowAbovePoint(window_list[MOUSE_INDEX].x, window_list[MOUSE_INDEX].y); //finds the top window just below the mouse
-  int buttonIndex = buttonOnWindow(window_list[MOUSE_INDEX].x, window_list[MOUSE_INDEX].y, index);
+  int index = highestWindowAbovePoint(window_list[mouse.id].x, window_list[mouse.id].y, mouse.id); //finds the top window just below the mouse
+  int buttonIndex = buttonOnWindow(window_list[mouse.id].x, window_list[mouse.id].y, index);
   
   asm volatile("sti");
   init_timer(globalFreq); // Initialise timer to globalFreq-Hz
@@ -161,16 +167,18 @@ void xLeftClick()
   {
     secondTime = getSystemUpTime();
   }
+    //~ playNote("C5", 250);
 
 
   if(buttonIndex != -1 && *window_list[index].buttons[buttonIndex].onMouseLeftClick != 0 && math_abs(secondTime - timePassed) >= 75) //if function is not NULL and the time between clicks is > 100 milliseconds to prevent any acidental double clicks
   {
-    window_list[index].buttons[buttonIndex].onMouseLeftClick(index);
-    //~ playNote("C5", 250);
+    window_list[index].buttons[buttonIndex].onMouseLeftClick(window_list[index]);
   }
+
+  //~ enableMousePackets();
 }
 
-void xMiddleClick()
+void xMiddleClick() //mouse middle click call back
 {
   int index = indexOfHighestObjectAbovePoint(arrayOfObjects[1].x, arrayOfObjects[1].y, &arrayOfObjects[0], numberOfObjects);
   
@@ -180,7 +188,7 @@ void xMiddleClick()
   }
 }
 
-void xRightClick()
+void xRightClick() //mouse right click call back
 {
   int index = indexOfHighestObjectAbovePoint(arrayOfObjects[1].x, arrayOfObjects[1].y, &arrayOfObjects[0], numberOfObjects);
   
@@ -190,48 +198,31 @@ void xRightClick()
   }
 }
 
+void jsViewer()
+{
+  window_t jsViewerWindow;
+
+  jsViewerWindow = createWindow("JSVIEWER", 0, 0, 0, 350, 450, desktop);
+
+  currentWindow(jsViewerWindow);
+}
+
 void jsStartMenu()
 {
   //~ putRect(0, 0, 100, 100, 5);
   static int repeat = 0;
+  static window_t js_panelStartMenu;
 
   repeat = (repeat + 1) % 2;
 
-  if(repeat == 1)
+  if(repeat == ON)
   {
-    
-    arrayOfObjects[4].name = "start menu popup"; //The Start Menu
-    arrayOfObjects[4].x = 0; //The Start Menu
-    arrayOfObjects[4].y = hVESA - hVESA * (1.0 / 20) - hVESA * (7.0 / 32);
-    arrayOfObjects[4].width = wVESA * (1.0 / 5);
-    arrayOfObjects[4].height = hVESA * (7.0 / 32);
-    arrayOfObjects[4].color = 0xaaaaaa;
-    
-    arrayOfObjects[4].borderColor = 0x000000;
-    arrayOfObjects[4].borderSize = 2;
-    arrayOfObjects[4].priority = 1.0101; //first subobject of the subobject start menu
-    arrayOfObjects[4].belongsToIndex = 3; //subobject belongs to index 3
-    arrayOfObjects[4].shouldHide = FALSE; //sets the object to not be hidden
-
-    putBorderOnObject(&arrayOfObjects[0], 4);
-
-    //~ putHVLine(arrayOfObjects[4].x, arrayOfObjects[4].y, arrayOfObjects[4].width - arrayOfObjects[4].borderSize, arrayOfObjects[4].borderColor, "H");
-    //~ putHVLine(arrayOfObjects[4].x, arrayOfObjects[4].y + 1, arrayOfObjects[4].width - arrayOfObjects[4].borderSize, arrayOfObjects[4].borderColor, "H");
-    //~ 
-    //~ putHVLine(arrayOfObjects[4].x, arrayOfObjects[4].y + arrayOfObjects[4].height - arrayOfObjects[4].borderSize, arrayOfObjects[4].width, arrayOfObjects[4].borderColor, "H");
-    //~ putHVLine(arrayOfObjects[4].x, arrayOfObjects[4].y + arrayOfObjects[4].height - arrayOfObjects[4].borderSize + 1, arrayOfObjects[4].width, arrayOfObjects[4].borderColor, "H");
-    //~ 
-    //~ putHVLine(arrayOfObjects[4].x, arrayOfObjects[4].y, arrayOfObjects[4].height, arrayOfObjects[4].borderColor, "V");
-    //~ putHVLine(arrayOfObjects[4].x+1, arrayOfObjects[4].y, arrayOfObjects[4].height, arrayOfObjects[4].borderColor, "V");
-    //~ 
-    //~ putHVLine(arrayOfObjects[4].x + arrayOfObjects[4].width - arrayOfObjects[4].borderSize, arrayOfObjects[4].y, arrayOfObjects[4].height, arrayOfObjects[4].borderColor, "V");
-    //~ putHVLine(arrayOfObjects[4].x+1 + arrayOfObjects[4].width - arrayOfObjects[4].borderSize, arrayOfObjects[4].y, arrayOfObjects[4].height, arrayOfObjects[4].borderColor, "V");
-    
-    putRect(arrayOfObjects[4].x + arrayOfObjects[4].borderSize, arrayOfObjects[4].y + arrayOfObjects[4].borderSize, arrayOfObjects[4].width - 2 * arrayOfObjects[4].borderSize, arrayOfObjects[4].height - 2 * arrayOfObjects[4].borderSize, arrayOfObjects[4].color);
-  }else if(repeat == 0)
+    js_panelStartMenu = createObject("START_Menu", 0, hVESA - 20 - 75, 1, 75, 75, 0xD5D5D5, js_panel);
+    addButtonToObject(0, 0, 20, 20, startMenuPixbuf, &jsViewer, js_panelStartMenu);
+  
+  }else if(repeat == OFF)
   {
-    arrayOfObjects[4].shouldHide = TRUE; //sets the object to not be hidden
-    refreshObjects(&arrayOfObjects[0], numberOfObjects, 4, 0, 0, 0);
+    destroyWindow(js_panelStartMenu);
   }
 }
 
@@ -266,26 +257,40 @@ void xServer()
   asm volatile("sti");
   init_timer(globalFreq); // Initialise timer to globalFreq-Hz
 
+  window_t firstWindow, secondWindow, thirdWindow;
+
+
+
   VGA_init(1024, 768, 24);
   init_window_manager();
 
+  asm volatile("cli"); //disables intterpts so mouse does not do anything funky while drawing starting windows
+
   //~ createWindow("POOP", 0, 0, 1, 1024, 768, 0);
-  createWindow("TEST", 20, 20, 1, 200, 200, 0);
-  createObject("JSPANEL", 0, hVESA - 20, 2, wVESA, 20, 0xFFC100, 0);
-  addButtonToObject(0, 0, 20, 20, startMenuPixbuf, &destroyWindow, 2);
+  firstWindow = createWindow("TEST", 20, 20, 1, 200, 200, desktop);
+  js_panel = createObject("JSPANEL", 0, hVESA - 20, 2, wVESA, 20, 0xFFC100, desktop);
+  addButtonToObject(0, 0, 20, 20, startMenuPixbuf, &jsStartMenu, js_panel);
 
-  createWindow("JSPANEL", 200, 200, 3, 500, 500, 0xFFC100, 0);
+  secondWindow = createWindow("TEST", 200, 200, 3, 500, 500, desktop);
+
   
-  createPixbufObject("MOUSE", mousePixbuf, 400, 400, MOUSE_INDEX, 20, 20, 0);
+  mouse = createPixbufObject("MOUSE", mousePixbuf, wVESA / 2, hVESA / 2, MAX_PRIORITY, 20, 20, desktop);
+  //~ mouseID = window_list[wid].id;
 
-  mouseClickFunctions("write", "left", &xLeftClick);
+  thirdWindow = createWindow("TEST", 300, 100, 4, 500, 500, desktop);
+
+  currentWindow(secondWindow);
+  
+  mouseClickFunctions("write", "left", &xLeftClick); //sets call backs for mouse
   mouseClickFunctions("write", "middle", &xMiddleClick);
   mouseClickFunctions("write", "right", &xRightClick);
   
   //~ int a;
   //~ for
-
   refresh_BufScreen();
+
+  asm volatile("sti"); //reenables those interupts
+
 
   //int count = fpsTEST(), f;
 
