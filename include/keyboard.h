@@ -1,5 +1,5 @@
 /*
- * link.ld
+ * keyboard.h
  * 
  * Copyright 2013 JS <js@duck-squirell>
  * 
@@ -21,39 +21,15 @@
  * 
  */
 
+#ifndef KEYBOARD_H
+#define KEYBOARD_H
 
-/* Link.ld -- Linker script for the kernel - ensure everything goes in the */
-/*            Correct place.  */
-/*            Based on code from Bran's Kernel Development */
-/*            tutorials: http://www.osdever.net/bkerndev/index.php. */
-/*            Based on code from JamesM's kernel development tutorials. */
+#include <system.h>
 
+/*Initialize the keyboard*/
+void init_keyboard();
 
-ENTRY(start)
-SECTIONS
-{
+/*function that checks for special keys, up, down, left, right, etc*/
+int isSpecialKey(unsigned char keyPressChar);
 
-    .text 0x100000 :
-    {
-        code = .; _code = .; __code = .;
-        *(.text)
-        . = ALIGN(4096);
-    }
-
-    .data :
-    {
-        data = .; _data = .; __data = .;
-        *(.data)
-        *(.rodata)
-        . = ALIGN(4096);
-    }
-
-    .bss :
-    {
-        bss = .; _bss = .; __bss = .;
-        *(.bss)
-        . = ALIGN(4096);
-    }
-
-    end = .; _end = .; __end = .;
-}
+#endif

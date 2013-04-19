@@ -1,5 +1,5 @@
 /*
- * link.ld
+ * sound.h
  * 
  * Copyright 2013 JS <js@duck-squirell>
  * 
@@ -21,39 +21,19 @@
  * 
  */
 
+#ifndef SOUND
+#define SOUND
 
-/* Link.ld -- Linker script for the kernel - ensure everything goes in the */
-/*            Correct place.  */
-/*            Based on code from Bran's Kernel Development */
-/*            tutorials: http://www.osdever.net/bkerndev/index.php. */
-/*            Based on code from JamesM's kernel development tutorials. */
+#include <system.h>
 
+/*make the audio beep at frequency for milliseconds time*/
+void beep(int frequency, int milliseconds);
 
-ENTRY(start)
-SECTIONS
-{
+/*Plays a note using a char array to type note*/
+void playNote(char *note, int milliseconds);
 
-    .text 0x100000 :
-    {
-        code = .; _code = .; __code = .;
-        *(.text)
-        . = ALIGN(4096);
-    }
+/*Songs and tunes*/
+//~ void song_pacman(int tempo);
+void song_pacman(); //pacman tune
 
-    .data :
-    {
-        data = .; _data = .; __data = .;
-        *(.data)
-        *(.rodata)
-        . = ALIGN(4096);
-    }
-
-    .bss :
-    {
-        bss = .; _bss = .; __bss = .;
-        *(.bss)
-        . = ALIGN(4096);
-    }
-
-    end = .; _end = .; __end = .;
-}
+#endif

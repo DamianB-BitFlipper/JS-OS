@@ -1,5 +1,5 @@
 /*
- * link.ld
+ * cpu.c
  * 
  * Copyright 2013 JS <js@duck-squirell>
  * 
@@ -21,39 +21,27 @@
  * 
  */
 
+#include <system.h>
 
-/* Link.ld -- Linker script for the kernel - ensure everything goes in the */
-/*            Correct place.  */
-/*            Based on code from Bran's Kernel Development */
-/*            tutorials: http://www.osdever.net/bkerndev/index.php. */
-/*            Based on code from JamesM's kernel development tutorials. */
-
-
-ENTRY(start)
-SECTIONS
+unsigned char readCMOS(unsigned char addr)
 {
+  unsigned char ret;
+  outb(0x70,addr);
+  asm volatile("jmp 1f; 1: jmp 1f;1:");
+  ret = inb(0x71);
+  asm volatile("jmp 1f; 1: jmp 1f;1:");
+  return ret;
+}
 
-    .text 0x100000 :
-    {
-        code = .; _code = .; __code = .;
-        *(.text)
-        . = ALIGN(4096);
-    }
+void writeCMOS(unsigned char addr, unsigned int value)
+{
+  outb(0x70, addr);
+  asm volatile("jmp 1f; 1: jmp 1f;1:");
+  outb(0x71, value);
+  asm volatile("jmp 1f; 1: jmp 1f;1:");
+}
 
-    .data :
-    {
-        data = .; _data = .; __data = .;
-        *(.data)
-        *(.rodata)
-        . = ALIGN(4096);
-    }
-
-    .bss :
-    {
-        bss = .; _bss = .; __bss = .;
-        *(.bss)
-        . = ALIGN(4096);
-    }
-
-    end = .; _end = .; __end = .;
+void reboot()
+{
+  outb(0x64, 0xFE); /* send reboot command */
 }

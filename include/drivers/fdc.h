@@ -1,5 +1,5 @@
 /*
- * link.ld
+ * fdc.h
  * 
  * Copyright 2013 JS <js@duck-squirell>
  * 
@@ -22,38 +22,10 @@
  */
 
 
-/* Link.ld -- Linker script for the kernel - ensure everything goes in the */
-/*            Correct place.  */
-/*            Based on code from Bran's Kernel Development */
-/*            tutorials: http://www.osdever.net/bkerndev/index.php. */
-/*            Based on code from JamesM's kernel development tutorials. */
+#ifndef FDC_H
+#define FDC_H
 
+/*initialize the floppy disk*/
+u32int init_floopy();
 
-ENTRY(start)
-SECTIONS
-{
-
-    .text 0x100000 :
-    {
-        code = .; _code = .; __code = .;
-        *(.text)
-        . = ALIGN(4096);
-    }
-
-    .data :
-    {
-        data = .; _data = .; __data = .;
-        *(.data)
-        *(.rodata)
-        . = ALIGN(4096);
-    }
-
-    .bss :
-    {
-        bss = .; _bss = .; __bss = .;
-        *(.bss)
-        . = ALIGN(4096);
-    }
-
-    end = .; _end = .; __end = .;
-}
+#endif //FDC_H

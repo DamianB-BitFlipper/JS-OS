@@ -1,5 +1,5 @@
 /*
- * link.ld
+ * k_math.h
  * 
  * Copyright 2013 JS <js@duck-squirell>
  * 
@@ -21,39 +21,25 @@
  * 
  */
 
+#ifndef K_MATH
+#define K_MATH
 
-/* Link.ld -- Linker script for the kernel - ensure everything goes in the */
-/*            Correct place.  */
-/*            Based on code from Bran's Kernel Development */
-/*            tutorials: http://www.osdever.net/bkerndev/index.php. */
-/*            Based on code from JamesM's kernel development tutorials. */
+/*floors a number*/
+float math_floor(float floorNumber);
 
+/*ceils a number*/
+float math_ceil(float ceilNumber);
 
-ENTRY(start)
-SECTIONS
-{
+/*gets the absolute value of a number*/
+float math_abs(float absNumber);
 
-    .text 0x100000 :
-    {
-        code = .; _code = .; __code = .;
-        *(.text)
-        . = ALIGN(4096);
-    }
+//Make this log10 work
+float math_log10 (float logNumber);
 
-    .data :
-    {
-        data = .; _data = .; __data = .;
-        *(.data)
-        *(.rodata)
-        . = ALIGN(4096);
-    }
+/*finds the length of an integer, ex: if input == 10, output would == 2, if input == 12345, output == 5*/
+int math_intLength(int intNumber);
 
-    .bss :
-    {
-        bss = .; _bss = .; __bss = .;
-        *(.bss)
-        . = ALIGN(4096);
-    }
+/*takes the power of a number, only works with positive exponent, as of NOW*/
+int math_pow(int base, int exponent);
 
-    end = .; _end = .; __end = .;
-}
+#endif

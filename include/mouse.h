@@ -1,5 +1,5 @@
 /*
- * link.ld
+ * mouse.h
  * 
  * Copyright 2013 JS <js@duck-squirell>
  * 
@@ -21,39 +21,23 @@
  * 
  */
 
+#ifndef MOUSE
+#define MOUSE
 
-/* Link.ld -- Linker script for the kernel - ensure everything goes in the */
-/*            Correct place.  */
-/*            Based on code from Bran's Kernel Development */
-/*            tutorials: http://www.osdever.net/bkerndev/index.php. */
-/*            Based on code from JamesM's kernel development tutorials. */
+/*Handles the mouse interrupt */
+void mouseInput_handler();
 
+/*Installs the mouse handler into IRQ12 */
+void init_mouse();
+//~ void mouse_install();
 
-ENTRY(start)
-SECTIONS
-{
+/*sets/calls functions for left/middle/right click*/
+void mouseClickFunctions(char *callOrWrite, char *buttonClick, void (*func)() );
 
-    .text 0x100000 :
-    {
-        code = .; _code = .; __code = .;
-        *(.text)
-        . = ALIGN(4096);
-    }
+/*disables the mouse*/
+void disableMousePackets();
 
-    .data :
-    {
-        data = .; _data = .; __data = .;
-        *(.data)
-        *(.rodata)
-        . = ALIGN(4096);
-    }
+/*enables the mouse*/
+void enableMousePackets();
 
-    .bss :
-    {
-        bss = .; _bss = .; __bss = .;
-        *(.bss)
-        . = ALIGN(4096);
-    }
-
-    end = .; _end = .; __end = .;
-}
+#endif

@@ -1,5 +1,5 @@
 /*
- * link.ld
+ * timer.h
  * 
  * Copyright 2013 JS <js@duck-squirell>
  * 
@@ -21,39 +21,30 @@
  * 
  */
 
+#ifndef TIMER_H
+#define TIMER_H
 
-/* Link.ld -- Linker script for the kernel - ensure everything goes in the */
-/*            Correct place.  */
-/*            Based on code from Bran's Kernel Development */
-/*            tutorials: http://www.osdever.net/bkerndev/index.php. */
-/*            Based on code from JamesM's kernel development tutorials. */
+#include <system.h>
 
+typedef struct{
+  u8int sec;
+  u8int min;
+  u8int hour;
+  u8int day;
+  u8int month;
+  u8int year;
+}datetime_t;
 
-ENTRY(start)
-SECTIONS
-{
+/*initialize the timer*/
+void init_timer(u32int frequency);
 
-    .text 0x100000 :
-    {
-        code = .; _code = .; __code = .;
-        *(.text)
-        . = ALIGN(4096);
-    }
+/*sleep function in seconds*/
+void sleep(int seconds);
 
-    .data :
-    {
-        data = .; _data = .; __data = .;
-        *(.data)
-        *(.rodata)
-        . = ALIGN(4096);
-    }
+/*sleep function in milliseconds*/
+void mSleep(int milliseconds);
 
-    .bss :
-    {
-        bss = .; _bss = .; __bss = .;
-        *(.bss)
-        . = ALIGN(4096);
-    }
+/*gets the RTC clock time*/
+datetime_t getDatetime();
 
-    end = .; _end = .; __end = .;
-}
+#endif //TIMER_H

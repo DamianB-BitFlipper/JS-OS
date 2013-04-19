@@ -1,5 +1,5 @@
 /*
- * link.ld
+ * schedule.h
  * 
  * Copyright 2013 JS <js@duck-squirell>
  * 
@@ -21,39 +21,30 @@
  * 
  */
 
+#ifndef SCHEDULE
+#define SCHEDULE
 
-/* Link.ld -- Linker script for the kernel - ensure everything goes in the */
-/*            Correct place.  */
-/*            Based on code from Bran's Kernel Development */
-/*            tutorials: http://www.osdever.net/bkerndev/index.php. */
-/*            Based on code from JamesM's kernel development tutorials. */
+#include <system.h>
 
+/*a pointer to a function that rearranges the tasks in some order*/
+void (*rearrange_schedule)(void);
 
-ENTRY(start)
-SECTIONS
-{
+/*our scheduling algorithm*/
+void schedule();
 
-    .text 0x100000 :
-    {
-        code = .; _code = .; __code = .;
-        *(.text)
-        . = ALIGN(4096);
-    }
+/*****************************
+ * algorthms table contents  *
+ * 0-prioritized round robin *
+ * 1-prioritized SJF         *
+/*****************************/
+void set_scheduling_algorithm(u32int algorithm_number);
 
-    .data :
-    {
-        data = .; _data = .; __data = .;
-        *(.data)
-        *(.rodata)
-        . = ALIGN(4096);
-    }
+///scheduling algorithms///
 
-    .bss :
-    {
-        bss = .; _bss = .; __bss = .;
-        *(.bss)
-        . = ALIGN(4096);
-    }
+/*arranges the tasks in the order of a prioritzed SJF (shorstest job first)*/
+void sjf_arrange();
 
-    end = .; _end = .; __end = .;
-}
+/*puts a task in its propper location in the list when initilalizing the task*/
+void preempt_task(task_t *task_to_preempt);
+
+#endif
