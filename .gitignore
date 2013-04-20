@@ -1,5 +1,1 @@
-# Object files
-*.o
-
-#Ignore test files
-test.out
+#nothing as of now
