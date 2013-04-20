@@ -6,8 +6,8 @@ JS-OS is an operating system that is streaming to become a unix clone, but with 
 
 Compilation dependencies:
   - gcc (C compiler; built on version 4.6.3)
-	- nasm (assembler; built on version 2.09.10)
-	- ld (linker; built on version 2.22)
+  - nasm (assembler; built on version 2.09.10)
+  - ld (linker; built on version 2.22)
 
 
 Released under the GPL license, see LICENSE for more information.
