@@ -59,14 +59,14 @@ typedef struct
   u8int is_hole;   // 1 if this is a hole. 0 if this is a block.
   u32int size;    // size of the block, including the end footer.
   
-} header_t;
+}header_t;
 
 typedef struct
 {
   u32int magic;     // Magic number, same as in header_t.
   header_t *header; // Pointer to the block header.
   
-} footer_t;
+}footer_t;
 
 typedef struct
 {
@@ -77,7 +77,7 @@ typedef struct
   u8int supervisor;     // Should extra pages requested by us be mapped as supervisor-only?
   u8int readonly;       // Should extra pages requested by us be mapped as read-only?
   
-} heap_t;
+}heap_t;
 
 
 /**

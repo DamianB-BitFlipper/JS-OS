@@ -257,6 +257,7 @@ void k_printf(char *c, ...)
 
   i = 0; //set i to zero for next while loop
 
+  //get the args after char *c
   va_start(arguments, *c);
 
   while (c[i])
@@ -909,15 +910,17 @@ void normalVCursor(int movement) //up and down cursor movement
   scroll();
 }
 
-void k_setprintf(int x, int y, char *text)
+//TODO, make this function take variable number of arguments
+void k_setprintf(int x, int y, char *text, void *arg1, void *arg2, void *arg3)
 {
+  
   int tmpX = cursor_x;
   int tmpY = cursor_y;
 
   cursor_x = x;
   cursor_y = y;
 
-  k_printf(text);
+  k_printf(text, arg1, arg2, arg3);
 
   cursor_x = tmpX;
   cursor_y = tmpY;

@@ -33,4 +33,7 @@ void writeCMOS(unsigned char addr, unsigned int value);
 /*command to reboot the system*/
 void reboot();
 
+/*print the cpu registers*/
+void print_regs();
+
 #endif //CPU_H

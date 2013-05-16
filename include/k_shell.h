@@ -74,9 +74,9 @@ int getArgs(char *args, char **output);
 int cdFormatArgs(char *args, char *dirPath, char *filePath);
 
 /*gets the size of the directory names and file names
- * in a path char *args, dirCount, and fileCount should
- * be unused integers, blank*/
-void dirFilePathCount(char *args, int *dirCount, int *fileCount);
+ * in a path char *args
+ * dirCount, and fileCount should be unused [constant] integers*/
+void dirFilePathCount(char *args, u32int *dirCount, u32int *fileCount);
 
 /*compares two file name, smarter than strcmp since it supports "*"
  * to represent any character */

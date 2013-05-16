@@ -1,0 +1,8 @@
+To compile and build JS-OS on a unix-like operating system, follow the following steps
+(This is done through command-line)
+
+	-cd to <your_directory_path>/JS-OS/
+	-run the following commands
+	-./update
+	-type super user password when prompted
+	-./run  (if qemu (qemu-system-x86_64) is installed)

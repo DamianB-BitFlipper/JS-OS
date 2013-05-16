@@ -49,7 +49,7 @@ u32int read_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
 u32int write_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
 {
   // Has the node got a write callback?
-  if (node->write)
+  if(node->write)
     return node->write(node, offset, size, buffer);
   else
     return 0;
@@ -58,21 +58,21 @@ u32int write_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
 void open_fs(fs_node_t *node, u8int read, u8int write)
 {
   // Has the node got an open callback?
-  if (node->open)
+  if(node->open)
     return node->open(node);
 }
 
 void close_fs(fs_node_t *node)
 {
   // Has the node got a close callback?
-  if (node->close)
+  if(node->close)
     return node->close(node);
 }
 
 struct dirent *readdir_fs(fs_node_t *node, u32int index)
 {
   // Is the node a directory, and does it have a callback?
-  if ( (node->flags&0x7) == FS_DIRECTORY && node->readdir != 0 )
+  if((node->flags & 0x7) == FS_DIRECTORY && node->readdir != 0)
     return node->readdir(node, index);
   else
     return 0;
@@ -81,7 +81,7 @@ struct dirent *readdir_fs(fs_node_t *node, u32int index)
 fs_node_t *finddir_fs(fs_node_t *node, char *name)
 {
   // Is the node a directory, and does it have a callback?
-  if ( (node->flags&0x7) == FS_DIRECTORY && node->finddir != 0 )
+  if((node->flags & 0x7) == FS_DIRECTORY && node->finddir != 0)
     return node->finddir(node, name);
   else
     return 0;
@@ -510,15 +510,22 @@ int setCurrentDir(fs_node_t *directory)
   fs_node_t *node = directory;
   fs_node_t *copy;
 
-  int count = 0, totalCharLen = 0;
+  u32int count = 0, totalCharLen = 0;
 
+  /*starts from the current directory, goes backwards by getting the node
+   * of the parent (looking up the data in ".." dir), adding its namelen
+   * to the u32int totalCharLen and getting its parent, etc.
+   *
+   *once the parent is the same as the child, that only occurs with the
+   * root directory, so we should exit */
   do
   {
     copy = node;
 
     if(copy != 0)
     {
-      totalCharLen = totalCharLen + strlen(copy->name) + 1; //+1 being the preceding "/" to every dir that will be added later
+      //+1 being the preceding "/" to every dir that will be added later
+      totalCharLen = totalCharLen + strlen(copy->name) + 1; 
       count++;
     }
 
@@ -528,7 +535,7 @@ int setCurrentDir(fs_node_t *directory)
 
   if(count > 1) //if we are in a directory other than root
   {
-    /* We have the root dir
+    /*we have the root dir
      * that does not need a preceding "/" because we will get "//"
      * which is ugly and not right. Also the "/" before the very first
      * directory should not be there because it will look ugly with
@@ -539,16 +546,18 @@ int setCurrentDir(fs_node_t *directory)
     path = (char*)kmalloc(totalCharLen + 1); //+1 is for the \000 NULL terminating 0
     //~ strcpy(path, "/");
 
+    //reset the copy back to the top (current directory)
     copy = directory;
 
-    int i, charsWritten = 0, nameLen;
+    u32int i, charsWritten = 0, nameLen;
     for(i = 0; i < count; i++)
     {
       nameLen = strlen(copy->name);
 
       /* i < count - 2 is a protection from drawing the preceding "/"
        * on the first two dirs in the path (root and one more). The first two dirs will
-       * allways be drawn the last two times, thus if i is less
+       * allways be drawn the last two times (we write the dir names to path from
+       * current dir (top) to root (bottom)), thus if i is less
        * than the count - 2, that means we are not yet at the last
        * two drawing and it is ok to have a precedding "/" */
       if(copy != fs_root && i < count - 2)
@@ -563,18 +572,23 @@ int setCurrentDir(fs_node_t *directory)
 
       }
 
+      //find the parent of copy
       node = finddir_fs(copy, "..");
       copy = node;
     }
 
-    *(path + totalCharLen) = 0; //added \000 to the end
+    *(path + totalCharLen) = 0; //added \000 to the end of path
 
   }else{
+    //keep it simple, if root is the only directory, copy its name manually
     path = (char*)kmalloc(2); //2 chars beign "/" for root and \000
-    strcpy(path, "/");
+
+    *(path) = '/';
     *(path + 1) = 0; //added \000 to the end
   }
 
   //~ k_printf("\n\nPATH is: %s\n", path);
+  
+  //sucess!
   return 0;
 }

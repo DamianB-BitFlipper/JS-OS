@@ -22,7 +22,8 @@
 #!/bin/bash
 
 #~ harddisk_image="harddisk.img"
-harddisk_image="floppy.img"
+floppy_image="floppy.img"
+storage_image="storage.img"
 
 printf "\n--------------------------GDB------[in new terminal window]----"
 printf "\ntarget remote localhost:1234"
@@ -32,6 +33,6 @@ printf "\nUse 'continue' instead of 'run' in gdb\n\n"
 
 objcopy --only-keep-debug kernel kernel.sym
 
-qemu-system-x86_64 -vga std -soundhw pcspk -s -S -fda "$harddisk_image"
+qemu-system-x86_64 -vga std -soundhw pcspk -s -S -fda "$floppy_image" -fdb "$storage_image"
 
 

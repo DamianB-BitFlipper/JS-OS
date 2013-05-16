@@ -1,3 +1,6 @@
+Copyright (c) 2012-2013 JS-OS.  All rights reserved.
+
+
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or
@@ -13,10 +16,16 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 MA 02110-1301, USA.
  
-Any use of this code must comply to the GPL license and the JS-OS must be credited.
+Any use of this code or any file that came with this distribution, must comply to the GPL license and JS-OS must be credited.
 
-Redistributions of source code must retain the above copyright notice and the following disclaimer.
+Redistributions of source code or any other file that came with this distribution, must retain the above copyright notice and abide by the following disclaimer.
 
-Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+Redistributions in binary form must reproduce the above copyright notice, abide by the following disclaimer and/or other notice provided with the distribution.
 
-Neither the name of the JS-OS nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission. 
+Disclaimer:
+Neither the name of the JS-OS nor the names of its contributors may be used to endorse 
+or promote unauthorized products derived from this software without specific prior written permission. Any file/disclaimer in any version release of JS-OS will confide to the LICENCE found in the newest released version of JS-OS, unless otherwise specifically specified.
+
+THERE IS NO WARRANTY FOR THE PROGRAM, TO THE EXTENT PERMITTED BY APPLICABLE LAW. EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM “AS IS” WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM IS WITH YOU. SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+JS-OS nor any of its contributors/developers own the rights to any of the files in JS-OS/docs/ unless otherwise specified.

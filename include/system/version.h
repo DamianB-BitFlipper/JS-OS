@@ -24,8 +24,18 @@
 #ifndef VERSION_H
 #define VERSION_H
 
-#define JS_OS_VERSION "0.01"
-#define JS_OS_BUILD_DATE __DATE__
-#define JS_OS_BUILD_TIME __TIME__
+//OS information
+#define OS_VERSION "0.0.2a"
+#define OS_NAME "JS-OS"
+#define OS_BUILD_DATE __DATE__
+#define OS_BUILD_TIME __TIME__
+
+//Developer information
+#define OS_MAIN_DEV "John Smith"
+#define OS_CONTACT "jsmithcontact@tormail.org"
+#define OS_DONATE "1D5pnma7E1CP6cquHujycVy79EyXJ3eYEs"
+
+//License information
+#define OS_LICENCE_FILE "LICENSE"
 
 #endif

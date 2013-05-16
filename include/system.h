@@ -38,8 +38,8 @@
 #include "arch/cpu.h"
 #include "arch/descriptor_tables.h"
 #include "elf.h"
+#include "ext2_fs.h"
 #include "drivers/fdc.h"
-#include "fs.h"
 #include "gui/graphics.h"
 #include "initrd.h"
 #include "arch/isr.h"
@@ -60,6 +60,7 @@
 #include "arch/timer.h"
 #include "system/version.h"
 #include "drivers/vesa.h"
+#include "vfs.h"
 #include "gui/x_server.h"
 
 

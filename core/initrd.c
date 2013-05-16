@@ -295,8 +295,8 @@ fs_node_t *initialise_initrd(u32int location)
   initrd_root->ptr = 0;
   initrd_root->impl = 0;
 
-  //allocate space for the root nodes
-  root_nodes = (fs_node_t*)kmalloc(sizeof(fs_node_t) * (MAX_NUMBER_OF_DIRECTORIES * MAX_NUMBER_OF_FILES));
+  //allocate space for the root nodes, 0x20000 is presumably 128 dirs with 256 files in each at max
+  root_nodes = (fs_node_t*)kmalloc(sizeof(fs_node_t) * (0x8000));
   nroot_nodes = initrd_header->nfiles;
 
   // For every file...

@@ -25,7 +25,7 @@
 
 #include <system.h>
 
-unsigned char *vram = (unsigned char *)0xA0000;
+u8int *vram = (unsigned char *)0xA0000;
 
 extern u8int *vga_mem; //pointer to VESA Linear Frame Buffer
 extern u8int *double_buffer; //double buffer for VESA video
@@ -37,6 +37,8 @@ u32int VGA_height;
 u32int VGA_bpp;
 
 s32int isVESAon;
+u8int *double_buffer; //double buffer for VESA video
+
 
 void (*putPixel)(int, int, int);
 void (*clearScreen)(void); //function pointer for clearing the screen
@@ -1536,6 +1538,7 @@ void VGA_init(int width, int height, int bpp)
   k_save();
   //setup the vga struct
 
+  //set the colors for the VGA graphics modes
   outb(0x3c8,0x0f);
   outb(0x3c9,0x3f);
   outb(0x3c9,0x3f);
@@ -1574,9 +1577,9 @@ void VGA_init(int width, int height, int bpp)
     VGA_clear_screen();    
   }else if(width == 1024 && height == 768 && bpp == 24)
   {
-    //~ double_buffer = (unsigned char*)kmalloc((width * height) * (bpp / 8));
+    double_buffer = (u8int*)kmalloc((width * height) * (bpp / 8));
 
-    k_printf("\ndouble buffer: %h", double_buffer);
+    k_printf("\ndouble buffer: %h\n", double_buffer);
     
     memset(double_buffer, 0xff, width * height * (bpp / 8));
 
@@ -1587,26 +1590,15 @@ void VGA_init(int width, int height, int bpp)
     //~ double_buffer[4] = 0;
     //~ double_buffer[5] = 0;
 
-    k_printf("\ndouble buffer content: %h %h %h %h %h %h %h", double_buffer[0], double_buffer[1], double_buffer[2], double_buffer[3], double_buffer[4], double_buffer[5]);
-    k_printf("\nDouble buffer addresses: %h %h %h %h %h %h %h %h", &double_buffer[0], &double_buffer[1], &double_buffer[2], &double_buffer[3], &double_buffer[4], &double_buffer[5], &double_buffer[6]);
+    k_printf("double buffer content: %h %h %h %h %h %h %h\n", double_buffer[0], double_buffer[1], double_buffer[2], double_buffer[3], double_buffer[4], double_buffer[5]);
+    k_printf("Double buffer addresses: %h %h %h %h %h %h %h %h\n", &double_buffer[0], &double_buffer[1], &double_buffer[2], &double_buffer[3], &double_buffer[4], &double_buffer[5], &double_buffer[6]);
 
     //~ while(1);
 
     isVESAon = ON;
     setVesa(0x118); //1024x768x24
     putPixel = putPixel_VESA;
-
-    //~ double_buffer = (u32int*)kmalloc((widthVESA * heightVESA) * (depthVESA / 8));
-//~ 
-    //~ k_printf("\ndouble buffer %h", double_buffer);
-    //~ 
-    //~ memset(double_buffer, 0, widthVESA * heightVESA * (depthVESA / 8));
-
-    //~ while(1);
-
-
-    //clears the screen
-    //~ VGA_clear_screen();        
+  
   }
   
 }

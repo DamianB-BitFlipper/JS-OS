@@ -1,0 +1,16 @@
+To boot floppy.img on a physical machine, a blank usb drive that is formated in FAT32 is required.
+
+Follow the following steps...
+(This is done through command-line on a unix based system)
+
+	-cd to <your_directory_path>/JS-OS/
+	-run the following commands in shell
+	**************WARNING**************
+	This will erase and replace any content found in the /boot/ directory along with the 
+            directory itself (presented it exists) of that drive, JS-OS nor its contributers and
+	developers are NOT responsible for any data loss. THIS SOFTWARE COMES WITH
+            NO WARRENTY WHATSOEVER. USE AT OWN RISK.
+	**************WARNING**************
+	-./usb_make.sh -d (drive location, e.g., /media/<USB_LABEL>)
+
+*Run ./usb_make.sh -h for help and more options

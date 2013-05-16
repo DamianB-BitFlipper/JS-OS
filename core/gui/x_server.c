@@ -23,7 +23,7 @@
 
 #include <system.h>
 
-extern int VGA_width, VGA_height, globalFreq;
+extern int VGA_width, VGA_height;
 extern int widthVESA, heightVESA, depthVESA; //size of VESA Screen attributes
 
 extern unsigned char *double_buffer;

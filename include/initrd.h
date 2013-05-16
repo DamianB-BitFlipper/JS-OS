@@ -26,11 +26,9 @@
 
 #include <system.h>
 
-#define MAX_NUMBER_OF_DIRECTORIES     128
-#define DIRECTORY_SIZE                1024 //the size of the directory (bytes)
-#define MAX_NUMBER_OF_FILES           128
-#define FS_SIZE                       sizeof(fs_node_t) * 16384
-#define BLOCK_SIZE                    1024
+#define FS_SIZE                       sizeof(fs_node_t) * 0x4000
+#define BLOCK_SIZE                    1024  //must be the same as SECTOR_SIZE in fdc.h
+#define DIRECTORY_SIZE                BLOCK_SIZE //the size of the directory (bytes)
 
 extern fs_node_t *root_nodes;              // List of file nodes.
 extern u32int currentDir_inode; //the inode of the current directory

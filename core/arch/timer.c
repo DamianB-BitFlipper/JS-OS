@@ -24,14 +24,13 @@
 #include <system.h>
 
 u32int tick = 0, globalFreq;
-int tickTockSwitcher = 0;
-int pass = 0, systemTimePassed = 0;
-long long int secondsPassed = 0;
+u32int pass = 0, systemTimePassed = 0;
+unsigned long long int secondsPassed = 0;
 
-void sleep(int seconds)
+void sleep(u32int seconds)
 {
-  int onOrOff = pass;
-  int timePassed = 0;
+  u32int onOrOff = pass;
+  u32int timePassed = 0;
   
   while(timePassed != seconds)
   {
@@ -44,26 +43,9 @@ void sleep(int seconds)
 }
 
 //~ void mSleep(long long int milliseconds)
-void mSleep(int milliseconds)
+void mSleep(u32int milliseconds)
 {
-  ////~ long long int time = systemTimePassed;
-  //if(run == TRUE)
-  //{
-    //millisecondTime = milliseconds + systemTimePassed;
-    //run = FALSE;
-  //}
-  ////~ milliseconds = milliseconds + systemTimePassed;
 
-  ////~ while(systemTimePassed != milliseconds)
-  //if(systemTimePassed != millisecondTime)
-  //{
-    //mSleep(0);
-  //}
-
-  //if(millisecondTime == systemTimePassed)
-  //{
-    //run = TRUE;
-  //}
   if(milliseconds > 0)
   {
     unsigned long eticks;
@@ -74,7 +56,7 @@ void mSleep(int milliseconds)
   
 }
 
-long long int getSystemUpTime()
+unsigned long long int getSystemUpTime()
 {
   return systemTimePassed;
 }
@@ -83,12 +65,12 @@ void timer_callback()
 {
   tick = (tick + 1) % (globalFreq + 1);
   systemTimePassed++;
-  
+ 
   if(tick == globalFreq) //one second passed
   {
     secondsPassed++;
 
-    pass = (pass + 1) % 2;
+    pass = (pass + 1) % 2;                    
 
   }
 
@@ -98,7 +80,7 @@ void timer_callback()
     current_task->time_to_run--;
     current_task->time_running++;
   }else{
-    schedule(); //No time left
+    schedule(); //No time left, reschedule tasks
   }
   
 }

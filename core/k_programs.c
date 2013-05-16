@@ -1,24 +1,24 @@
 /*
  * k_programs.c
- * 
+ *
  * Copyright 2013 JS <js@duck-squirell>
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  * MA 02110-1301, USA.
- * 
- * 
+ *
+ *
  */
 
 #include <system.h>
@@ -26,7 +26,7 @@
 //The currently running task.
 extern volatile task_t *current_task;
 
-extern cursor_x, cursor_y, globalFreq;
+extern cursor_x, cursor_y;
 
 /*screen attributes*/
 extern VGA_width, VGA_height;
@@ -40,7 +40,7 @@ extern u32int nroot_nodes;
  * add initial run function of that program into k_programs.h
  * make the function that will be run in the case stement below, nomenclature-> program_<command name> **/
 
-void runShellFunction(int runFunction, char *arguements, u32int priority, u32int burst_time)
+void runShellFunction(u32int runFunction, char *arguements, u32int priority, u32int burst_time)
 {
 
   switch(runFunction)
@@ -50,12 +50,9 @@ void runShellFunction(int runFunction, char *arguements, u32int priority, u32int
       program_ascii(arguements);
       break;
     case 1:
-      //~ start_task(priority, burst_time, program_echo, arguements, "echo");
 
-      //turn the shell indent off so it does not print an indent before echo prints
-      //~ turnShellIndentOnOff(OFF);
-      start_task(priority, burst_time, program_echo, arguements, "echo");
-      //~ program_echo(arguements);
+      //~ start_task(priority, burst_time, program_echo, arguements, "echo");
+      program_echo(arguements);
       break;
     case 2:
       program_tinytext(arguements);
@@ -71,10 +68,12 @@ void runShellFunction(int runFunction, char *arguements, u32int priority, u32int
       program_JS_viewer(arguements);
       break;
     case 6:
+    {
       program_start(arguements);
       //~ start_task(priority, burst_time, program_start, arguements, "start");
-      
+
       break;
+    }
     case 7:
       program_ls(arguements);
       break;
@@ -106,7 +105,11 @@ void runShellFunction(int runFunction, char *arguements, u32int priority, u32int
       program_mv(arguements);
       break;
     case 17:
+      find_set_current_dir();
       program_find(arguements);
+      break;
+    case 18:
+      program_about(arguements);
       break;
   }
 
@@ -178,7 +181,7 @@ void program_ascii(char *arguements)
   }else if(!k_strcmp(arguements, "-little_skverl"))
   {
     /*The little_skverl*/
-   
+
     k_printf("\t  .  _ |  |  _\n");
     k_printf("\t  )\\|';| @| //\n");
     k_printf("\t / (/ \\=  |//\n");
@@ -194,19 +197,25 @@ void program_ascii(char *arguements)
 
 void program_echo(char *arguements)
 {
+  //asm volatile("sti");
+  //init_timer(globalFreq); // Initialise timer to globalFreq-Hz
 
-  //if there is an arg tied to the current_task, set it to arguements
-  asm volatile("cli");
-  if(current_task->thread_flags)
-  {
-    arguements = (char*)current_task->thread_flags;
-  }
-  asm volatile("sti");
+  ////if there is an arg tied to the current_task, set it to arguements
+  //asm volatile("cli");
+  //if(current_task->thread_flags)
+  //{
+    //arguements = (char*)current_task->thread_flags;
+  //}
+  //asm volatile("sti");
 
-  k_printf("%s\n", arguements);
+  //u32int i;
+  //for(i = 0; i < 6000; i++)
+  //{
+    k_printf("%s\n", arguements);
+  //}
 
   //delete the process from the multitasking
-  //~ exit();  
+  //exit();
 }
 
 void program_tinytext(char *arguements)
@@ -221,7 +230,7 @@ void program_tinytext(char *arguements)
   //cursor_y = 0; //set y position to top so message can be printed there
   //~ k_printf("%Cw%cbk  JS - tinytext 0.0.1%Cbk%cw");
   //~ k_printf("%Cw%cbk  JS - tinytext 0.0.1                New Buffer                                 %Cbk%cw ");
-  k_setprintf(0, 0, "%Cw%cbk  JS - tinytext 0.0.1                New Buffer                                 %Cbk%cw ");
+  k_setprintf(0, 0, "%Cw%cbk  JS - tinytext 0.0.1                New Buffer                                 %Cbk%cw ", 0, 0, 0);
   //~ k_printf("  JS - tinytext 0.0.1                New Buffer                                 ");
   //~ k_printf("POOP");
   //cursor_y = yHolder; //restore cursor_y position
@@ -249,7 +258,7 @@ void program_song(char *arguements)
     arguements = (char*)current_task->thread_flags;
   }
   asm volatile("sti");
-  
+
   if(k_strcmp(arguements, "-pacman") == 0)
   {
     song_pacman();
@@ -323,14 +332,14 @@ void ls_extra_print(u32int inode)
 
 void ls_print_permissions(u32int inode)
 {
-  int p, binPer = 0b100000000;
-  
+  u32int p, binPer = 0b100000000;
+
   for(p = 0; p < 9; p++) //loop 9 times to do rwx for user, group, and other
   {
     switch(p % 3) //case for every three, itterate between r, w, and, x
     {
       case 0:
-        if((root_nodes[inode].mask & binPer) != 0) //there is a 1 (TRUE) for the specific location
+        if(root_nodes[inode].mask & binPer) //there is a 1 (TRUE) for the specific location
         {
           k_printf("r");
         }else{
@@ -338,15 +347,15 @@ void ls_print_permissions(u32int inode)
         }
         break;
       case 1:
-        if((root_nodes[inode].mask & binPer) != 0) //there is a 1 (TRUE) for the specific location
+        if(root_nodes[inode].mask & binPer) //there is a 1 (TRUE) for the specific location
         {
           k_printf("w");
         }else{
           k_printf("-"); //if the location is 0 (FALSE), just have a slash
         }
-        break;        
+        break;
       case 2:
-        if((root_nodes[inode].mask & binPer) != 0) //there is a 1 (TRUE) for the specific location
+        if(root_nodes[inode].mask & binPer) //there is a 1 (TRUE) for the specific location
         {
           k_printf("x");
         }else{
@@ -355,7 +364,9 @@ void ls_print_permissions(u32int inode)
         break;
     }
 
-    binPer /= 2;
+    //decrement out mask, move the 1 bit that is on to the right one
+    binPer = binPer >> 1;
+    //~ binPer /= 2;
   }
 
   k_printf(" ");
@@ -406,11 +417,11 @@ void ls_sort_files()
 
 void ls_print_one_per_line()
 {
-  int i;
+  u32int i;
   for(i = 0; i < ls_files_indexed; i++)
   {
-
-    if ((root_nodes[ls_files[i].inode].flags & 0b111) == FS_DIRECTORY)
+    //if the entry is a directory, the directory flags are set
+    if((root_nodes[ls_files[i].inode].flags & 0b111) == FS_DIRECTORY)
     {
       ls_extra_print(ls_files[i].inode);
       k_printf(LS_DIR_COLOR); //set the k_printf color to the LS_DIR_COLOR
@@ -419,7 +430,7 @@ void ls_print_one_per_line()
       k_printf(LS_DEFAULT_COLOR); //revert the k_printf color back to default
 
     }else{
-      ls_extra_print(ls_files[i].inode);      
+      ls_extra_print(ls_files[i].inode);
       k_printf(ls_files[i].name);
       k_printf("\n");
     }
@@ -437,14 +448,14 @@ void ls_print_with_commas()
 
     if ((root_nodes[ls_files[i].inode].flags & 0b111) == FS_DIRECTORY)
     {
-      ls_extra_print(ls_files[i].inode);      
+      ls_extra_print(ls_files[i].inode);
       k_printf(LS_DIR_COLOR); //set the k_printf color to the LS_DIR_COLOR
       k_printf(ls_files[i].name);
       k_printf(" (dir), ");
       k_printf(LS_DEFAULT_COLOR); //revert the k_printf color back to default
 
     }else{
-      ls_extra_print(ls_files[i].inode);      
+      ls_extra_print(ls_files[i].inode);
       k_printf(ls_files[i].name);
       k_printf(", ");
     }
@@ -455,7 +466,7 @@ void ls_print_with_commas()
   if ((root_nodes[ls_files[i].inode].flags & 0b111) == FS_DIRECTORY)
   {
     ls_extra_print(ls_files[i].inode);
-        
+
     k_printf(LS_DIR_COLOR); //set the k_printf color to the LS_DIR_COLOR
     //print the last without a comma and space
     k_printf(ls_files[i].name);
@@ -463,8 +474,8 @@ void ls_print_with_commas()
     k_printf(LS_DEFAULT_COLOR); //revert the k_printf color back to default
 
   }else{
-    ls_extra_print(ls_files[i].inode);      
-    
+    ls_extra_print(ls_files[i].inode);
+
     //print the last without a comma and space
     k_printf(ls_files[i].name);
   }
@@ -485,7 +496,7 @@ void ls_long_format()
       k_printf("d"); //print "d" to indicate in permisions that it is a directory
 
       ls_print_permissions(ls_files[i].inode);
-      
+
       k_printf(LS_DIR_COLOR); //set the k_printf color to the LS_DIR_COLOR
       k_printf(ls_files[i].name);
       k_printf(" (dir)\n");
@@ -497,7 +508,7 @@ void ls_long_format()
       k_printf("-"); //print "-" to indicate in permisions that it is not a directory
 
       ls_print_permissions(ls_files[i].inode);
-          
+
       k_printf(ls_files[i].name);
       k_printf("\n");
     }
@@ -534,7 +545,7 @@ void ls_gobble_file(struct dirent *entry)
     ls_nfiles *= 2;
 
     //TODO: use realloc instead of this makeshift reallocation
-    int newLoc = kmalloc(ls_nfiles * sizeof(struct ls_file_header));
+    u32int newLoc = kmalloc(ls_nfiles * sizeof(struct ls_file_header));
 
     memcpy(newLoc, ls_files, ls_files_indexed * sizeof(struct ls_file_header));
 
@@ -558,7 +569,7 @@ static int ls_decode_flags(int nArgs, char **args)
 {
   ///* PROCESS THE ARGUMENT FLAGS *///
 
-  int flagRep = 0, i;
+  s32int flagRep = 0, i;
   while((i = getopt(flagRep, nArgs, args, "ailmAU")) != -1)
   {
     switch(i)
@@ -608,23 +619,24 @@ void program_ls(char *arguements)
   format = one_per_line;
   sort_type = sort_name;
 
-  //set up block information that stores the names of the files in the directroy to ls
+  //set up block information that stores the names of the files in the directroy to list
   ls_nfiles = 100; //default size
   ls_files_indexed = 0; //currently there are 0 files to print, we have not parced anything yet
   ls_files = (struct ls_file_header*)kmalloc(ls_nfiles * sizeof(struct ls_file_header));
 
   //get the current dir Inode before we cd into a different directory
-  int currentIno = currentDir_inode;
+  u32int currentIno = currentDir_inode;
 
   //gets the number of args in the char *arguements
-  int nArgs = countArgs(arguements);
+  u32int nArgs = countArgs(arguements);
 
   //assigns values from the char *arguements to char *arguements[nArgs]
   char *args[nArgs];
   getArgs(arguements, args);
 
-  //gets the arg number in char *arguements[nArgs] that points to the path to ls to
-  int dirPathArg;
+  /*gets the arg number in char *args[nArgs] that points to the path to ls to
+   * after exiting, the args[dirPathArg] is the argument that is the dir path to ls */
+  u32int dirPathArg;
   for(dirPathArg = 0; dirPathArg < nArgs; dirPathArg++)
   {
     /*if the first char in the arg is not a slash (not a flag but the dirPath itself)
@@ -635,59 +647,104 @@ void program_ls(char *arguements)
     }
   }
 
-  int work;
+  u32int work;
 
-  if(dirPathArg == nArgs) //if there was no arg that had no "-" in front of it
+  //used to store the names of the dir and file part of the arg input
+  char *dirPath = 0, *filePath = 0;
+
+  if(dirPathArg == nArgs) //if there was no arg that was a directory path
   {
     //we do not need to cd and that stuff (there was no directory path input), so keep it simple
 
     //set work to pass since there was no cd'ing, we assume ls to current dir
     work = 0;
+
+    //kmalloc 1 byte for both dirPath and filePath, assign value 0 to that byte
+    dirPath = (char*)kmalloc(1);
+    filePath = (char*)kmalloc(1);
+
+    *(dirPath) = 0;
+    *(filePath) = 0;
   }else{
-    //Gets the dirPath and filePath in the args and cd's to that directory
-    int dirCount, fileCount;
+    u32int dirCount = 0, fileCount = 0;
 
+    //Gets the dirPath and filePath name sizes in the args and cd's to that directory
     dirFilePathCount(args[dirPathArg], &dirCount, &fileCount);
-
-    char *dirPath, *filePath;
 
     dirPath = (char*)kmalloc(dirCount + 1);
     filePath = (char*)kmalloc(fileCount + 1);
 
+    /*put zeros as first character since if there is no filePath in the arg,
+     * then cdFormatArgs will do nothing to, if it contains random junk, the
+     * ls function will think there is a filePath, where there really is not*/
+    *(dirPath) = 0;
+    *(filePath) = 0;
+
     //Gets the dirPath and filePath in the args and cd's to that directory
     work = cdFormatArgs(args[dirPathArg], dirPath, filePath);
 
-    //free these two paths as we have no use for them
-    kfree(dirPath);
-    kfree(filePath);
   }
 
   ///*PROCESS THE ARGUMENT FLAGS*///
   ls_decode_flags(nArgs, args);
 
   //there was no error in the cd'ing process
-  if(work == 0)
+  if(!work)
   {
     fs_node_t *fsnode;
 
     fsnode = &root_nodes[currentDir_inode];
     struct dirent *entry = 0;
-    int i = 0;
+    u32int i = 0;
 
-    while ( (entry = readdir_fs(fsnode, i)) != 0)
+    //used only if there is contents in filePath
+    //~ u32int gobbled_something = FALSE;
+
+    while(entry = readdir_fs(fsnode, i))
     {
-      //see if the file name is of any interest
-      if(ls_file_interesting(entry) == TRUE)
+      /*if there is a filePath in the args, then only the files with that
+       * name will be printed, regardless of the flags, if the first
+       * char value of filePath is 0, then user wants to print the files
+       * in the dirPath directory with the specific flags
+       *
+       *if dirPathArg == nArgs, then there was no path to list specified
+       * so ignore this stuff and go to the regular print files in current dir*/
+      if(*filePath && dirPathArg != nArgs)
       {
-        ls_gobble_file(entry);
+        if(!strcmp(entry->name, filePath))
+        {
+          /*gobble the entry regardless of the flags
+           * add the file name to the list of files to print at the end */
+          ls_gobble_file(entry);
+
+          //~ gobbled_something = TRUE;
+        }
+      }else{
+        //see if the file name is of any interest, regarding which flags are passed
+        if(ls_file_interesting(entry) == TRUE)
+        {
+          //add the file name to the list of files to print at the end
+          ls_gobble_file(entry);
+        }
       }
 
       i++;
     }
 
-    /***Print the files***/
-    ls_print_format();
-    /***Print the files***/
+    ///*if there are contents in filePath, but nothing was gobbled, then that
+     //* file the user wanted to print did not exist
+     //*
+     //*also, there must be a list path specified, if dirPathArg == nArgs,
+     //* then there was no list path specified, so ignore this and use regular routine*/
+    //if(*filePath && gobbled_something == FALSE && dirPathArg != nArgs)
+    //{
+      //k_printf("filePath: %h\n", *filePath);
+      //k_printf("In \"%s%s\", \"%s\" does not exist\n", dirPath, filePath, filePath);
+    //}else{
+  
+      //print the files that we added in the print file buffer
+      ls_print_format();
+    //~ }
 
   }else if(work == 1)
   {
@@ -695,7 +752,7 @@ void program_ls(char *arguements)
   }
 
   //free char **args that holds our individual arguments
-  int c;
+  u32int c;
   for(c = 0; c < nArgs; c++)
   {
     kfree(args[c]);
@@ -708,8 +765,13 @@ void program_ls(char *arguements)
   {
     kfree(ls_files[c].name);
   }
+  
   kfree(ls_files); //frees the block that contained the file names to print
 
+  /*free the dirPath and filePath strings that were formated from the list
+   * path directory in the arg */
+  kfree(dirPath);
+  kfree(filePath);
 }
 
 ///**************************LS function*****************************///
@@ -835,7 +897,7 @@ void program_cp(char *arguments)
   if(src != 0) //if there is a file with the name of the first argument
   {
     setCurrentDir(&root_nodes[currentIno]); //sets the current dir back to the original
-    
+
     s32int i = 0, length = strlen(args[1]), count = -1;
 
     for(i; i < length; i++)
@@ -859,7 +921,7 @@ void program_cp(char *arguments)
 
     //By default, we have not cd'd yet, so u32int work should be set to fail (1)
     u32int work = 1;
-    
+
     //if there is something in the destPath
     if(*(destPath) != 0)
     {
@@ -897,7 +959,7 @@ void program_cp(char *arguments)
 
       for(b = 0; b < (u32int)((src->length - 1) / BLOCK_SIZE) + 1; b++)
       {
-        
+
         src_block = (u32int)block_of_set(src, b);
         copied_block = (u32int)block_of_set(copiedFile, b);
 
@@ -907,7 +969,7 @@ void program_cp(char *arguments)
 
     }else if(work == 0) //if the cd function above did not fail, i.e., we should still copy the file, but with its original name
     {
-      u32int src_block, copied_block;      
+      u32int src_block, copied_block;
       fs_node_t *copiedFile;
       copiedFile = createFile(&root_nodes[currentDir_inode], src->name, src->length);
 
@@ -947,25 +1009,114 @@ void program_mv(char *arguements)
   program_rm(args[0]);
 }
 
+static u32int find_init_dir;
+
+void find_set_current_dir()
+{
+  find_init_dir = currentDir_inode;
+}
+
+void find_print_format(char *dirPath, struct dirent *node)
+{
+  /*if the current dir is the initial dir set when find was first called,
+   * then just print the node->name*/
+  if(find_init_dir == currentDir_inode)
+  {
+    /*if there is no contents in dirPath, that means
+     * the dirPath is the current directory, so print a "./" before
+     * the actual node->name*/
+    if(!*dirPath)
+      k_printf("./%s\n", node->name);
+    else //print the dirPath and then the node->name of the file
+      k_printf("%s%s\n", dirPath, node->name);
+  }else{
+    /*copy the location of the node name to another place, becuase the
+     * structure (struct) dirent is used and is overwritting in the finddir_fs
+     * function, copying the address will keep it still accessible*/
+    char *node_name;
+    node_name = node->name;
+    
+    char *place;
+    u32int size = 0;
+
+    fs_node_t *parent_dir;
+    //set parent_dir to the current directory
+    parent_dir = &root_nodes[currentDir_inode];
+
+    do
+    {
+      /*increment the string size by the size of the name, +1 is for the '/'
+       * following the directory name*/
+      size += strlen(parent_dir->name) + 1;
+    }
+    while((parent_dir = finddir_fs(parent_dir, ".."))->inode != find_init_dir);
+
+    place = (char*)kmalloc(size + 1); //kmalloc +1 for the \000
+
+    //reset parent_dir to the current directory
+    parent_dir = &root_nodes[currentDir_inode];
+
+    u32int offset = size;
+    u32int name_len;
+
+    do
+    {
+      //get the name length of the directory
+      name_len = strlen(parent_dir->name);
+      
+      //decrease offset by the size of the name, +1 for the '/' followind any directory
+      offset = offset - (name_len + 1);
+
+      //copy the name over to place
+      memcpy(place + offset, parent_dir->name, name_len);
+
+      //add the "/" to the end of the directory
+      *(place + offset + name_len) = '/';
+    }
+    while((parent_dir = finddir_fs(parent_dir, ".."))->inode != find_init_dir);
+
+    *(place + size) = 0; //add the \000 to place
+
+    k_printf("./%s%s\n", place, node_name);
+
+  }
+    
+  
+}
+
 void program_find(char *arguments)
 {
+  //save the initial dir inode
   u32int initDir = currentDir_inode;
 
+  //get the name sizes of the dir and file portions of the char *arguments
   u32int dirCount, fileCount;
 
   dirFilePathCount(arguments, &dirCount, &fileCount);
 
+  //save the dir and file names from char *arguments
   char *dirPath, *filePath;
 
   dirPath = (char*)kmalloc(dirCount + 1);
   filePath = (char*)kmalloc(fileCount + 1);
 
+  /*set the first characters to 0, just in case that cdFormatArgs gives error
+   * (likely) since if the search arg has a '*' to symbolize any character, then
+   * that file with the name e.g., "*name", itself will not exist, if cdFormatArgs
+   * returns an error, then it has not touched dirPath nor filePath, having the initial
+   * 0 prevents any junk following it to not appear*/
+  *(dirPath) = 0;
+  *(filePath) = 0;
+
+  //cd to the dirpath locations
   u32int work = cdFormatArgs(arguments, dirPath, filePath);
 
-  u32int i, argLen = strlen(arguments);
+  s32int i;
+  u32int argLen = strlen(arguments);
   for(i = argLen - 1; i >= strlen(arguments) - fileCount; i--)
   {
-    if(*(arguments + i) == '*') //there is an asterisc, so cd would have not found the file, but still let it pass
+     //there is an asterisc, so cd would have not found the file, but still let it pass
+    if(*(arguments + i) == '*')
     {
       work = 0; //correct error
       /*becuase the arguements file has a "*", in it, most of the time,
@@ -976,6 +1127,8 @@ void program_find(char *arguments)
        * will be empty and nothing will be saved to it, we just copy the contents
        * of our file name in the arguments to filePath manually */
       memcpy(filePath, arguments + argLen - fileCount, fileCount);
+
+      *(filePath + fileCount) = 0; //add the \000 at the end
       break;
     }
   }
@@ -990,13 +1143,58 @@ void program_find(char *arguments)
 
     //~ k_printf("\nFILEPATH %s, %d\n", filePath, fileCount);
 
-    while ( (node = readdir_fs(fsnode, i)) != 0)
+    //go through all of the files in the fsnode directory and compare them
+    while(node = readdir_fs(fsnode, i))
     {
       //if the files names are the same (includeing using "*" to represent and characters)
-      if(compareFileName(filePath, node->name) == 0)
+      if(!compareFileName(filePath, node->name))
       {
-        k_printf("%s\n", node->name);
+        /*if there is no contents in dirPath, that means
+         * the dirPath is the current directory, so print a "./" before
+         * the actual node->name*/
+        //~ if(!*dirPath)
+          //~ k_printf("./%s\n", node->name);
+        //~ else //print the dirPath and then the node->name of the file
+          //~ k_printf("%s%s\n", dirPath, node->name);
+        find_print_format(dirPath, node);
       }
+
+      /*if the node is a directory, recurse through its contents also
+       * it also makes sure that the supposed directory is not the "." or ".."
+       * directories, if that was not acounted for, this function would loop forever */
+
+       //TODO make recursive find store inodes so it does not repeat inode searches, avoids hard link problems
+       //TODO remove this "brute force" meathod and apply the technique above
+      if(root_nodes[node->ino].flags == FS_DIRECTORY &&
+          strcmp(node->name, ".") &&
+          strcmp(node->name, ".."))
+      {
+        char *recurse_str;
+        
+        u32int node_name_len = strlen(node->name);
+        /*kmalloc memory 2 for the "./", node->name, + 1 for "/" to separate
+         * the directory to recurce and the search string (filePath), and
+         * filePath, + 1 (\000), to be concatenated */
+        recurse_str = (char*)kmalloc(2 + node_name_len + 1 + fileCount + 1);
+
+        //copy the path to the beginning
+        memcpy(recurse_str, "./", 2);
+
+        //copy the node->name (the directory we will search)
+        memcpy(recurse_str + 2, node->name, node_name_len);
+
+        //copy the "/" between the dir to recurse and the search string (filePath)
+        memcpy(recurse_str + 2 + node_name_len, "/", 1);
+        
+        //copy the filePath search string that was passed in the char *arguments
+        memcpy(recurse_str + 2 + node_name_len + 1, filePath, fileCount);
+
+        *(recurse_str + 2 + node_name_len + 1 + fileCount) = 0; //add the \000 at the end
+
+        //send recurse to find
+        program_find(recurse_str);
+      }
+      
       i++;
     }
 
@@ -1049,14 +1247,14 @@ void program_cat(char *arguments)
       {
         k_putChar(buf[j]);
       }
-  
+
       //if there is a block after this one (we are not at the last block)
       if(a != (u32int)(file->length / BLOCK_SIZE))
       {
 
         //calculate the size to kmalloc for the next block
         next_size = blockSizeAtIndex(file->length, a + 1, 0);
-        
+
         /*if our current kmalloc'd space is not the same as the next block's,
          * then we have to free the current buf and kmalloc it with the
          * new size, else we do not need to touch as it is the same size */
@@ -1071,7 +1269,7 @@ void program_cat(char *arguments)
         kfree(buf);
       }
     }
-    
+
   }else if(file->flags == FS_DIRECTORY)
   {
     k_printf("%s: Is a directory\n", arguments);
@@ -1154,7 +1352,7 @@ void program_rm(char *arguments)
      * of the dirent of the file that we want to remove */
     do
     {
-      
+
       //if we found the file in the directory's contents
       if(*(u32int*)(*(u32int*)dir_block + i) == file->inode)
       {
@@ -1198,7 +1396,7 @@ void program_rm(char *arguments)
     for(c = 0; c < (u32int)((file->length - 1) / BLOCK_SIZE) + 1; c++)
     {
       block = (u32int)block_of_set(file, c);
-      
+
       memset(*(u32int*)block, 0, BLOCK_SIZE);
       kfree((void*)(*(u32int*)block));
       //~ memset(file->blocks[c], 0, BLOCK_SIZE);
@@ -1315,6 +1513,7 @@ void program_now(char *arguments)
 void program_help(char *arguements)
 {
   k_printf("Commands list:");
+  k_printf("\n\tabout - about the project [about]");
   k_printf("\n\tascii - prints ascii animals [ascii -squirrel]");
   k_printf("\n\tcat - prints the contents of a file [cat test.txt]");
   k_printf("\n\tcd - changes directories [cd /test]");
@@ -1334,6 +1533,19 @@ void program_help(char *arguements)
   k_printf("\n\tviewer - a very simple image viewer [viewer]\n");
 }
 
+void program_about(char *arguements)
+{
+  k_printf("%s, version %s, was built on %s at %s.\n", OS_NAME, OS_VERSION, OS_BUILD_DATE, OS_BUILD_TIME);
+  k_printf("\nCopyright (c) 2012-2013 %s.  All rights reserved.\n", OS_NAME);
+  k_printf("%s is released under the GNU General Public License\n", OS_NAME);
+  k_printf("Consult the file '%s' for further license information\n", OS_LICENCE_FILE);
+
+  k_printf("\nSupport is always great!\n");
+  k_printf("If you like what I do, write me an email at '%s',\n\t", OS_CONTACT);
+  k_printf("it is always good to know someone else is interested.\n");
+  k_printf("Donations are welcome at my bitcoin wallet '%s'.", OS_DONATE);
+}
+
 void program_start(char *arguements)
 {
   //if there is an arg tied to the current_task, set it to arguements
@@ -1344,11 +1556,9 @@ void program_start(char *arguements)
     //arguements = (char*)current_task->thread_flags;
   //}
   //asm volatile("sti");
-  
-  if(k_strcmp(arguements, "x") == 0)
+
+  if(!k_strcmp(arguements, "x"))
   {
-    //~ asm volatile("sti");
-    //~ init_mouse(); // Initialise mouse
 
     xServer();
   }

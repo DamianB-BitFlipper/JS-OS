@@ -198,13 +198,27 @@ void set_scheduling_algorithm(u32int algorithm_number)
 
 void preempt_task(task_t *task_to_preempt)
 {
+  asm volatile("cli");
+  
   switch(algorithm)
   {
-    asm volatile("cli");
-
-    //TODO add RR code that puts task_to_preemt at the very end of the list
+    // Add task_t *task_to_preempt to the end of the ready queue.
     case 0: //prioritized RR
+    {
+      // Find the end of the ready queue...
+      task_t *tmp_task;
+      tmp_task = (task_t*)ready_queue;
+      while(tmp_task->next != 0)
+      {
+        tmp_task = tmp_task->next;
+    
+      }
+      
+      // ...And extend it.
+      tmp_task->next = task_to_preempt;
+    
       break;
+    }
     case 1: //prioritized SJF
 
       //the task_to_preempt is of a higher priority than the current task
@@ -272,9 +286,9 @@ void preempt_task(task_t *task_to_preempt)
       //break from the case statement
       break;
 
-    asm volatile("sti");
-
   }
+
+  asm volatile("sti");
 
 }
 

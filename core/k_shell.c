@@ -82,7 +82,7 @@ void greeting_message()
   //print our nice animal friend
   program_ascii("-little_skverl");
   k_printf("\t-meet our little friend, the skverl (squirrel)\n");
-  k_printf("Type \"help\" for a summury of all of the commands\n");
+  k_printf("Type \"%cghelp%cw\" for a summury of all of the commands\n");
 }
 
 void getTypedText(int charCount, int startingYPos, int cursor_y, char *c)
@@ -96,7 +96,7 @@ void getTypedText(int charCount, int startingYPos, int cursor_y, char *c)
 
     //~ k_printf("\n%d\n", lineCount);
 
-    u16int *video_memory = (u16int*)0xB8000;
+    u16int *video_memory = (u16int*)0xb8000;
 
     // The background colour is black (0), the foreground is white (15).
     u8int backColour = 0;
@@ -133,11 +133,12 @@ void getTypedText(int charCount, int startingYPos, int cursor_y, char *c)
 
 }
 
-void dirFilePathCount(char *args, int *dirCount, int *fileCount)
+void dirFilePathCount(char *args, u32int *dirCount, u32int *fileCount)
 {
-  int a, length = strlen(args), count = -1;
+  u32int a, length = strlen(args);
+  s32int count = -1;
 
-  //goes from the back, when it breaks, a == the position of the very last "/"
+  //a == the position of the very last "/" after finnished with for loop
   for(a = 0; a < length; a++)
   {
     if(*(args + a) == '/')
@@ -147,17 +148,9 @@ void dirFilePathCount(char *args, int *dirCount, int *fileCount)
     }
   }
 
-  //if(strcmp(args, "/") == 0)
-  //{
-    //*dirCount = 1;
-    //*fileCount = 0;
-
-    //return;
-  //}
-
-  if(count != -1) //if count remained unchanged (in char *args, there is only text, no "/")
+  if(count != -1) //if count was changed (in char *args, there is atleast one "/")
   {
-    int intitialDir = currentDir_inode;
+    u32int intitialDir = currentDir_inode;
 
     char dirs[count + 2]; //+2 to count because count starts at 0 for the first character and for \000 at the end
     memcpy(dirs, args, count + 1); //+1 to count because count starts at 0 for the first character
@@ -172,25 +165,28 @@ void dirFilePathCount(char *args, int *dirCount, int *fileCount)
 
     if(testDir != 0 && testDir->flags == FS_DIRECTORY) //if testDir is a directory
     {
+      //set the dirCount to the whole arg len
       *dirCount = length;
-      //~ *fileCount = -1;
+
+      //if everything is a directory, then there are no file names, set length to 0
       *fileCount = 0;
     }else if(testDir != 0 && testDir->flags == FS_FILE) //if testDir is a file
     {
-      //~ *dirCount = -1;
+      //the dirCount is everything before the final '/'
       *dirCount = count + 1;
+
+      //the rest of the arg string is the filecount
       *fileCount = length - (count + 1);
-    }else if(testDir == 0) //there is no testDir location
+    }else if(!testDir) //there is no testDir location (nothing exists with that name)
     {
+      //the dirCount is everything before the final '/'      
       *dirCount = count + 1;
-      //~ *dirCount = 0;
+
+      //assume the rest is a file the user wants to create
       *fileCount = length - (count + 1);
-      //~ return;
     }
 
-    //*dirCount = count + 1;
-    //*fileCount = length - (count + 1);
-
+    //return the current directory to the initialDir
     setCurrentDir(&root_nodes[intitialDir]);
 
     return;
@@ -223,10 +219,10 @@ void dirFilePathCount(char *args, int *dirCount, int *fileCount)
 
 int compareFileName(char *testName, char *fileName)
 {
-  int length = strlen(testName);
-  int fileLen = strlen(fileName);
+  u32int length = strlen(testName);
+  u32int fileLen = strlen(fileName);
 
-  int i, s = 0, charsAfter, loop = FALSE, c;
+  s32int i, s = 0, charsAfter, loop = FALSE, c;
 
   for(i = 0; i < length; i++)
   {
@@ -345,9 +341,10 @@ int getopt(int argIndex, int nArgs, char **args, const char *optString)
 
 int cdFormatArgs(char *args, char *dirPath, char *filePath)
 {
-  int i = 0, length = strlen(args), count = -1;
+  u32int i, length = strlen(args);
+  s32int count = -1;
 
-  for(i; i < length; i++)
+  for(i = 0; i < length; i++)
   {
     /* using the following, after it is done executing, the integer
      * count will be equeal to the number of character before and
@@ -358,16 +355,18 @@ int cdFormatArgs(char *args, char *dirPath, char *filePath)
     }
   }
 
+  //if count is still -1, then all of args is the filePath and none of it is dirPath
   if(count == -1)
   {
+    //set count to be the length of args (i) -1 becuase i starts from 0
     count = i - 1;
 
     fs_node_t *isDir;
     isDir = finddir_fs(&root_nodes[currentDir_inode], args);
 
-    if(isDir == 0) //no such entry exists
+    if(!isDir) //no such entry exists
     {
-      //failure!
+      //error!
       return 1;
     }else if(isDir != 0 && isDir->flags == FS_FILE) //the input is a file, cannot be cd'ed to
     {
@@ -378,26 +377,36 @@ int cdFormatArgs(char *args, char *dirPath, char *filePath)
       return 0;
     }else if(isDir != 0 && isDir->flags == FS_DIRECTORY) //the input is just a directory
     {
-      int w = program_cd(args);
+      u32int w = program_cd(args);
+      
+      //there is no filePath, set it to 0
+      *(filePath) = 0;
       return w;
     }
   }
 
-  int intitialDir = currentDir_inode;
+  //~ u32int intitialDir = currentDir_inode;
+
+  char *dirs;
+
+  //+2 to count because count starts at 0 for the first character and for \000 at the end
+  dirs = (char*)kmalloc(count + 2);
+  memcpy(dirs, args, count + 1); //+1 to count because count starts at 0 for the first character
+  *(dirs + count + 1) = 0; //add \000 at the end
+
+  u32int work = program_cd(dirs);
 
   fs_node_t *isDir;
   isDir = finddir_fs(&root_nodes[currentDir_inode], args + count + 1); //test if the rest of the path is a directory
 
   if(isDir != 0 && isDir->flags == FS_DIRECTORY) //the rest is a directory
   {
+    //cd to the directory left out without a ending "/"
+    work = program_cd(args + count + 1);
+
     count = length - 1;
+
   }
-
-  char dirs[count + 2]; //+2 to count because count starts at 0 for the first character and for \000 at the end
-  memcpy(dirs, args, count + 1); //+1 to count because count starts at 0 for the first character
-  *(dirs + count + 1) = 0; //add \000 at the end
-
-  int work = program_cd(dirs);
 
   //copy directory content in args to dirPath
   memcpy(dirPath, args, count + 1);
@@ -406,6 +415,8 @@ int cdFormatArgs(char *args, char *dirPath, char *filePath)
   //copy file content in args to filePath
   memcpy(filePath, args + count + 1, length - count - 1);
   *(filePath + length - count - 1) = 0; //add the \000 to the end
+
+  kfree(dirs);
 
   return work;
 
@@ -420,30 +431,8 @@ typedef struct
   u32int burst_time;
 } programs_list_t;
 
-#define PROGRAM_LIST_NUMBER    18
+#define PROGRAM_LIST_NUMBER    19
 
-//char *programsList[PROGRAM_LIST_NUMBER]=
-//{
-  ///*program names go here*/
-  //"ascii",
-  //"echo",
-  //"tinytext",
-  //"pong",
-  //"song",
-  //"viewer",
-  //"start",
-  //"ls",
-  //"cd",
-  //"now",
-  //"mkdir",
-  //"cp",
-  //"cat",
-  //"rm",
-  //"pwd",
-  //"help",
-  //"mv",
-  //"find"
-//};
 programs_list_t programsList[PROGRAM_LIST_NUMBER]=
 {
   /*program names go here*/
@@ -451,7 +440,7 @@ programs_list_t programsList[PROGRAM_LIST_NUMBER]=
   "echo", PRIO_LOW, PROC_SHORT,
   "tinytext", PRIO_LOW, PROC_MED,
   "pong", PRIO_MED, PROC_MED,
-  "song", PRIO_IDLE, PROC_LONG,
+  "song", PRIO_LOW, PROC_LONG,
   "viewer", PRIO_MED, PROC_LONG,
   "start", PRIO_LOW, PROC_VERY_LONG,
   "ls", PRIO_LOW, PROC_VERY_SHORT,
@@ -464,10 +453,10 @@ programs_list_t programsList[PROGRAM_LIST_NUMBER]=
   "pwd", PRIO_LOW, PROC_VERY_SHORT,
   "help", PRIO_LOW, PROC_VERY_SHORT,
   "mv", PRIO_LOW, PROC_VERY_SHORT,
-  "find", PRIO_LOW, PROC_VERY_SHORT
+  "find", PRIO_LOW, PROC_VERY_SHORT,
+  "about", PRIO_LOW, PROC_VERY_SHORT
 };
 
-//TODO does not seem to work
 void executeInput(char *input, char *arguements)
 {
   if(shellInput == ON)
@@ -499,7 +488,7 @@ void executeInput(char *input, char *arguements)
     if(length != 0)
     {
       /*error command not found*/
-      k_printf("%s: command not found\n", input);
+      k_printf("%s: command not found. Type 'help' for a list\n", input);
     }
   }
 
@@ -552,7 +541,7 @@ int removeTrailingSpaces(char *string)
   return spacesRemoved;
 }
 
-//TODO make this work
+//TODO make get_task_args work
 void get_task_args(char *arguements)
 {
   asm volatile("cli");

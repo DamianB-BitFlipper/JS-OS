@@ -23,7 +23,6 @@
 
 #include <system.h>
 
-extern s32int globalFreq;
 extern window_t desktop;
 
 extern s32int middleButtonPressed, rightButtonPressed, leftButtonPressed;
@@ -138,6 +137,7 @@ void setVesa(u32int mode)
   int32(0x10, &regs); //calls v86 interupt
   memcpy(&info, buffer, sizeof(VESA_INFO)); //copies info from the buffer to the info typedef struct
 
+  //print VESA information
   k_printf("\n\nVesa Signature: %s\n", info.VESASignature);
   k_printf("\n\nVesa Version: %h\n", info.VESAVersion);
   k_printf("\n\nVesa Video Modes: %h\n", info.VideoModePtr);
@@ -160,7 +160,7 @@ void setVesa(u32int mode)
   heightVESA = vbeModeInfo.YResolution;
   depthVESA = vbeModeInfo.BitsPerPixel;
 
-  //print information
+  //print VESA mode information
   k_printf("\nBase Pointer: %h\n", (u32int)vbeModeInfo.PhysBasePtr);
   k_printf("\nXRes: %d\n", (u32int)vbeModeInfo.XResolution);
   k_printf("\nYRes: %d\n", (u32int)vbeModeInfo.YResolution);
@@ -249,7 +249,15 @@ void init_window_manager()
   window.parentid = 0;
   window.id = 0;
   //~ window.data = (unsigned long*)double_buffer;
-  window.data = (unsigned long*)kmalloc((wVESA * hVESA) * (dVESA / 8)); //Creates buffer for window
+
+  //~ u32int tester = (u32int)kmalloc(1024 * 768 * 3);
+  //~ memset(tester, 0xff, 1024 * 768 * 3);
+//~ 
+  //~ k_printf("tester = %h", tester);
+//~ 
+  //~ for(;;);
+  
+  window.data = (u32int*)kmalloc((wVESA * hVESA) * (dVESA / 8)); //Creates buffer for window
 
   memset(window.data, 0xff, (wVESA * hVESA) * (dVESA / 8));
 
@@ -382,7 +390,7 @@ window_t createObject(char *windowname, int x, int y, int priority, int width, i
   window.height = height;
   window.parentid = parent.id;
   window.id = getnewwid();
-  window.data = (unsigned long*)kmalloc((width * height) * (dVESA / 8)); //Creates buffer for window
+  window.data = (u32int*)kmalloc((width * height) * (dVESA / 8)); //Creates buffer for window
 
   memset(window.data, 0xff, (width * height) * (dVESA / 8));
 
@@ -426,7 +434,7 @@ window_t createWindow(char *windowname, int x, int y, int priority, int width, i
   window.height = height;
   window.parentid = parent.id;
   window.id = getnewwid();
-  window.data = (unsigned long*)kmalloc((width * height) * (dVESA / 8)); //Creates buffer for window
+  window.data = (u32int*)kmalloc((width * height) * (dVESA / 8)); //Creates buffer for window
 
   memset(window.data, 0xff, (width * height) * (dVESA / 8));
 
@@ -500,7 +508,7 @@ window_t createPixbufObject(char *windowname, unsigned long *pixbuf, int x, int 
   window.height = height;
   window.parentid = parent.id;
   window.id = getnewwid();
-  window.data = (unsigned long*)kmalloc((width * height) * (dVESA / 8)); //Creates buffer for window
+  window.data = (u32int*)kmalloc((width * height) * (dVESA / 8)); //Creates buffer for window
 
   memset(window.data, 0x0, (width * height) * (dVESA / 8));
 

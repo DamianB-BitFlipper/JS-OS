@@ -40,23 +40,16 @@ int main(struct multiboot *mboot_ptr, u32int initial_stack)
 
   setScreenYMinMax(1, 25); //reserve 1 row at the top for OS name
 
-  k_setprintf(0, 0, "%Cw%cbk  JS-OS 0.0.1                                                                    %Cbk%cw ");
+  k_setprintf(0, 0, "%Cw%cbk  %s %s                                                                    %Cbk%cw ", OS_NAME, OS_VERSION, 0);
 
   k_printf("Hello World\n");
-  k_printf("Welcome to JS-OS, Kernel booted. Running OS.\n");
+  k_printf("Welcome to %s, Kernel booted. Running OS.\n", OS_NAME);
 
   initial_esp = initial_stack;
   // Initialise all the ISRs and segmentation
   init_descriptor_tables();
   k_printf("IDT initialized\n");
   k_printf("GDT initialized\n");
-
-  //~ asm volatile("sti");
-  //~ asm volatile("int $0x3");
-
-
-  //~ asm volatile("int $0x3");
-  //~ asm volatile("int $0x4");
 
   // Initialise the PIT to clockFreq-Hz
   asm volatile("sti");
@@ -74,13 +67,14 @@ int main(struct multiboot *mboot_ptr, u32int initial_stack)
 
   // Find the location of our initial ramdisk.
   ASSERT(mboot_ptr->mods_count > 0);
+
+  //the start of the initrd
   initrd_location = *((u32int*)mboot_ptr->mods_addr);
-  initrd_end = *(u32int*)(mboot_ptr->mods_addr+4);
+  //the end of the initrd is read 4 bytes after the start
+  initrd_end = *(u32int*)(mboot_ptr->mods_addr + 4);
+
   // Don't trample our module with placement accesses, please!
   placement_address = initrd_end;
-
-  //~ k_printf("\ninitrd_location: %h, initrd_end: %h, placement_address: %h", initrd_location, initrd_end, placement_address);
-  //~ while(1);.
 
   u32int memorySize = ((mboot_ptr->mem_lower + mboot_ptr->mem_upper) * 1024); //Bytes
 
@@ -99,15 +93,17 @@ int main(struct multiboot *mboot_ptr, u32int initial_stack)
   
   //test the multitasking
   test("tasking");
+
+  // Initialise the floppy disk controller
+  init_floopy();
+
+  //test the FDC
+  test("floppy disk controller");
   
   // Initialise the initial ramdisk, and set it as the filesystem root.
   fs_root = initialise_initrd(initrd_location);
   k_printf("Initialized the filesystem\n");
     
-  /////*FILE SYSTEM*///
-  //u32int i = 0;
-  //struct dirent *node = 0;
-
   ///Create a few test files and directories
   fs_node_t *testDir = createDirectory(fs_root, "direct");
   fs_node_t *testFile = createFile(testDir, "test_file", 42);
@@ -116,43 +112,6 @@ int main(struct multiboot *mboot_ptr, u32int initial_stack)
 
   write_fs(testFile, 0, 9, "Hello, the file \"test_file\" is being read\n");
   program_cat("./direct/test_file");
-  ///Create a few test files and directories
-  
-  //while((node = readdir_fs(fs_root, i)) != 0)
-  //{
-    //k_printf("[%d] Found file: %s", node->ino, node->name);
-    ////~ k_printf(node->name);
-    //fs_node_t *fsnode = finddir_fs(fs_root, node->name);
-
-    //if ((fsnode->flags&0x7) == FS_DIRECTORY)
-    //{
-      //k_printf("\n\t(directory)\n");
-    //}
-    //else
-    //{
-      //k_printf("\n\t contents: \"");
-      //unsigned char buf[256];
-      ////~ unsigned char writeBuf[9] = "Hi World!";
-
-      ////~ write_fs(fsnode, 0, 9, writeBuf);
-
-      //u32int sz = read_fs(fsnode, 0, 256, buf);
-      //int j;
-      //for (j = 0; j < sz; j++)
-      //{
-        //k_putChar(buf[j]);
-        ////~ k_printf(" %h", buf[j]);
-      //}
-
-      //k_printf("\"\n");
-    //}
-    //i++;
-  //}
-  /////*FILE SYSTEM*/
-
-  ///This does not work yet
-  //~ load_elf(2, root_nodes[2].length);
-  ///This does not work yet
 
   datetime_t n = getDatetime();
   k_printf("The CMOS time is:\n\t%d:%d:%d %d/%d/%d\n",n.hour, n.min, n.sec, n.month, n.day, n.year);
@@ -161,6 +120,7 @@ int main(struct multiboot *mboot_ptr, u32int initial_stack)
 
   addShellIndent();
 
+  //sucess!
   return 0;
 }
 
@@ -180,10 +140,48 @@ u32int test(char *test)
     return 0;
   }else if(!strcmp(test, "tasking"))
   {
-    start_task(PRIO_LOW, PROC_SHORT, tasking_test, "tasking", "tasking_test");
+    start_task(PRIO_HIGH, PROC_SHORT, tasking_test, "tasking", "tasking_test");
 
     //sucess
     return 0;
+  }else if(!strcmp(test, "floppy disk controller"))
+  {
+    if(_FloppyStorage == FALSE) //persistent storage is not enabled
+    {
+
+      k_printf("Floppy test has no persistent storage enabled\n");
+
+      //no error has occured, so return 0
+      return 0;
+    }
+    
+    //THIS IS A TEST FOR THE FLOPPY READ AND WRITE FUNCTIONS
+    //!WARNING, watch what sector you are writing to, you could write over boot data
+    //!WARNING, on the boot floppy, messing the grub/kernel/initrd on the floppy
+    u8int *sector = 0;
+    u32int sector_index = 0;
+    u32int size_to_write = SECTOR_SIZE;
+    u8int write_data = 0xff;
+    u8int *mem;
+    mem = (u8int*)kmalloc(size_to_write);
+    memset(mem, write_data, size_to_write);
+    
+    floppy_write((u32int*)mem, size_to_write, sector_index);
+    
+    sector = floppy_read(sector_index, size_to_write);
+  
+    if(sector)
+    {
+      k_printf("\tFloppy test wrote %h to sector %d with size %d bytes\n", write_data, sector_index, size_to_write);
+
+      //sucess!
+      return 0;
+    }else
+    {
+      k_printf("\tFloppy test Read/Write is not working!\n");
+      //error!
+      return 1;
+    }
   }
 
   //something went wrong

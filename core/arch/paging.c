@@ -25,9 +25,6 @@
 
 #include <system.h>
 
-extern globalFreq;
-unsigned char *double_buffer; //double buffer for VESA video
-
 // The kernel's page directory
 page_directory_t *kernel_directory = 0;
 
@@ -123,7 +120,7 @@ void virtual_map_pages(long addr, long size, u32int rw, u32int user)
 // Function to allocate a frame.
 void alloc_frame(page_t *page, int is_kernel, int is_writeable)
 {
-  if (page->frame != 0)
+  if(page->frame)
   {
     return;
   }else{
@@ -203,12 +200,11 @@ void initialise_paging(u32int memorySize)
   //k_printf("\nkernel_dir: %h", (u32int*)kernel_directory);
 
   //~ This is for our VESA LFB
-  //~ u32int lfb_address = 0xc0081808; //replace me with a routine
   u32int lfb_address = 0xFD000000; //replace me with a routine
-  double_buffer = (u8int*)kmalloc((1024 * 768) * (24 / 8)); //replace me with a routine
+  //~ double_buffer = (u8int*)kmalloc((1024 * 768) * (24 / 8)); //replace me with a routine
 
   pageMem(lfb_address);
-  pageMem((u32int)double_buffer);
+  //~ pageMem((u32int)double_buffer);
 
   // Map some pages in the kernel heap area.
   // Here we call get_page but not alloc_frame. This causes page_table_t's
@@ -248,16 +244,11 @@ void initialise_paging(u32int memorySize)
   switch_page_directory(kernel_directory);
 
   // Initialise the kernel heap.
-  //~ kheap = create_heap(KHEAP_START, KHEAP_START+KHEAP_INITIAL_SIZE, 0xCFFFF000, 0, 0);
-
-  // Initialise the kernel heap.
-  kheap = create_heap(KHEAP_START, KHEAP_START+KHEAP_INITIAL_SIZE, KHEAP_START + KHEAP_MAX_ADDRESS, 0, 0);
+  kheap = create_heap(KHEAP_START, KHEAP_START + KHEAP_INITIAL_SIZE, KHEAP_START + KHEAP_MAX_ADDRESS, 0, 0);
   expand(0x1000000, kheap); // Allocate some more space, 16MB
 
   current_directory = clone_directory(kernel_directory);
   switch_page_directory(current_directory);
-
-  //k_printf("\nkernel_dir: %h", (u32int*)current_directory);
   
 }
 
@@ -294,7 +285,6 @@ page_t *get_page(u32int address, u32int make, page_directory_t *dir)
   }
 }
 
-
 void page_fault(registers_t *regs)
 {
 
@@ -306,38 +296,37 @@ void page_fault(registers_t *regs)
   u32int faulting_address;
   asm volatile("mov %%cr2, %0" : "=r" (faulting_address));
 
-  u32int cr2;
-  __asm__ __volatile__("mov %%cr2, %0": "=r"(cr2));
-
   // The error code gives us details of what happened.
-  int present   = !(regs->err_code & 0x1); // Page not present
-  int rw = regs->err_code & 0x2;           // Write operation?
-  int us = regs->err_code & 0x4;           // Processor was in user-mode?
-  int reserved = regs->err_code & 0x8;     // Overwritten CPU-reserved bits of page entry?
-  int id = regs->err_code & 0x10;          // Caused by an instruction fetch?
+  u32int present = !(regs->err_code & 0x1);   // Page not present
+  u32int rw = regs->err_code & 0x2;           // Write operation?
+  u32int us = regs->err_code & 0x4;           // Processor was in user-mode?
+  u32int reserved = regs->err_code & 0x8;     // Overwritten CPU-reserved bits of page entry?
+  u32int id = regs->err_code & 0x10;          // Caused by an instruction fetch?
 
   // Output an error message.
   k_printf("\nPage fault! ( ");
-  if (present) {k_printf("present ");}
-  if (rw) {k_printf("read-only ");}
-  if (us) {k_printf("user-mode ");}
-  if (reserved) {k_printf("reserved ");}
+  if(present) {k_printf("present ");}
+  if(rw) {k_printf("read-only ");}
+  if(us) {k_printf("user-mode ");}
+  if(reserved) {k_printf("reserved ");}
   k_printf(") at ");
   k_printf("%h", faulting_address);
   k_printf(" - EIP: ");
   k_printf("%h", regs->eip);
   k_printf("\n");
 
+  print_regs();
 
   //~ if(!k_strcmp((char*)regs->eip, (char*)cr2))
-  if(regs->eip != cr2)
+  if(regs->eip != faulting_address)
   {
     k_printf("Page fault caused by executing unpaged memory\n");
   }else{
     k_printf("Page fault caused by reading unpaged memory\n");
   }
 
-  /*Plays a note to indicate the pagefault just in case user is in graphical mode and can not see the error messages*/
+  /*Plays a note to indicate the pagefault just in case user is in
+   * graphical mode and can not see the error messages*/
   //~ playNote("C5", 500);
 
   PANIC("Page fault");

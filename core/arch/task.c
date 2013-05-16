@@ -42,34 +42,6 @@ u32int nTasks = 0;
 
 void initialise_tasking()
 {
-  //// Rather important stuff happening, no interrupts please!
-  //asm volatile("cli");
-
-  //// Relocate the stack so we know where it is.
-  ////~ move_stack((void*)0xE0000000, 0x2000);
-  //move_stack((void*)0x10000000, 0x2000);
-
-  //// Initialise the first task (kernel task)
-  //current_task = ready_queue = (task_t*)kmalloc(sizeof(task_t));
-  //current_task->id = next_pid++;
-  //current_task->esp = current_task->ebp = 0;
-  //current_task->eip = 0;
-
-  //current_task->priority = PRIO_LOW;
-  //current_task->time_to_run = 10;
-  //current_task->time_running = 0;
-  //current_task->ready_to_run = TRUE;
-
-  //current_task->page_directory = current_directory;
-  //current_task->next = 0;
-  ////current_task->kernel_stack = kmalloc_a(KERNEL_STACK_SIZE);
-
-  ////do not waste time
-  ////schedule();
-
-  //// Reenable interrupts.
-  //asm volatile("sti");
-
   asm volatile("cli");
 
   move_stack((void*)0x10000000, 0x2000);
@@ -128,7 +100,7 @@ void initialise_tasking()
 	task->stack = (u32int)stack;
 	task->thread = 0;
   task->thread_flags = 0;
-	strcpy(task->name, "Main");
+	strcpy(task->name, "init");
 
 	task->next = 0;
 
@@ -145,9 +117,9 @@ void move_stack(void *new_stack_start, u32int size)
 {
   u32int i;
   // Allocate some space for the new stack.
-  for( i = (u32int)new_stack_start;
-       i >= ((u32int)new_stack_start-size);
-       i -= 0x1000)
+  for(i = (u32int)new_stack_start;
+    i >= ((u32int)new_stack_start - size);
+    i -= 0x1000)
   {
     // General-purpose stack is in user-mode.
     alloc_frame( get_page(i, 1, current_directory), 0 /* User mode */, 1 /* Is writable */ );
@@ -174,7 +146,7 @@ void move_stack(void *new_stack_start, u32int size)
 
   // Backtrace through the original stack, copying new values into
   // the new stack.
-  for(i = (u32int)new_stack_start; i > (u32int)new_stack_start-size; i -= 4)
+  for(i = (u32int)new_stack_start; i > (u32int)new_stack_start - size; i -= 4)
   {
     u32int tmp = * (u32int*)i;
     // If the value of tmp is inside the range of the old stack, assume it is a base pointer
@@ -280,7 +252,7 @@ void set_current_task(task_t *task_to_set)
 void switch_task()
 {
   // If we haven't initialised tasking yet, just return.
-  if (current_task == 0)
+  if(!current_task)
     return;
 
   asm volatile("cli");
@@ -314,7 +286,7 @@ void switch_task()
   current_task = current_task->next;
   
   // If we fell off the end of the linked list start again at the beginning.
-  if (current_task == 0)
+  if(!current_task)
   {
     current_task = ready_queue;
   }
@@ -328,11 +300,6 @@ void switch_task()
   {
     current_directory = current_task->page_directory;
   }
-
-  //~ k_printf("\nCurrent Process is: %d\n", getpid());
-
-  // Change our kernel stack over.
-  //set_kernel_stack(current_task->kernel_stack+KERNEL_STACK_SIZE);
 
   // Here we:
   // * Stop interrupts so we don't get interrupted.
@@ -606,17 +573,6 @@ void exit()
 u32int start_task(u32int priority, u32int burst_time, void (*func)(), void *arg, char *task_Name)
 {
   
-  //if(fork(priority, func, task_Name) == 0)
-  //{
-    ////~ k_printf("\nNew task ID: %d\n", getpid());
-    //func(arg);
-    //exit();
-    ////~ kill_task(getpid());
-    ////~ asm volatile ("sti");
-    
-    //for(;;);
-  //}
-
   asm volatile("cli");
 
   //Take a pointer to this process' task struct for later reference.
@@ -680,43 +636,9 @@ u32int start_task(u32int priority, u32int burst_time, void (*func)(), void *arg,
 
 	task->next = 0;
 
-  //// Add it to the end of the ready queue.
-  //// Find the end of the ready queue...
-  //task_t *tmp_task = (task_t*)ready_queue;
-  //while(tmp_task->next != 0)
-  //{
-    //tmp_task = tmp_task->next;
-
-  //}
-  
-  //// ...And extend it.
-  //tmp_task->next = task;
-
+  //preempt the task
   preempt_task(task);
 
-  //u32int eip = read_eip();
-
-  //// We could be the parent or the child here - check.
-  //if(current_task == parent_task) //we are the child
-  //{
-    //// We are the parent, so set up the esp/ebp/eip for our child.
-    //u32int esp; asm volatile("mov %%esp, %0" : "=r"(esp));
-    //u32int ebp; asm volatile("mov %%ebp, %0" : "=r"(ebp));
-    //task->esp = esp;
-    //task->ebp = ebp;
-    //task->eip = eip;
-    //// All finished: Reenable interrupts.
-    //asm volatile("sti");
-
-    //// And by convention return the PID of the child.
-    //return task->id;
-  //}else{ //we are the parent
-    ////~ k_printf("\nPID %d\n", getpid());
-    
-    //// We are the child - by convention return 0.
-    //return 0;
-  //}
-	
 	asm volatile("sti");
 
   return id;

@@ -63,17 +63,18 @@ void insert_ordered_array(type_t item, ordered_array_t *array)
 {
   ASSERT(array->less_than);
   u32int iterator = 0;
-  while (iterator < array->size && array->less_than(array->array[iterator], item))
+  while(iterator < array->size && array->less_than(array->array[iterator], item))
     iterator++;
-  if (iterator == array->size) // just add at the end of the array.
+    
+  if(iterator == array->size) // just add at the end of the array.
     array->array[array->size++] = item;
-  else{
+  else{ //add the item to the appropriate array
     type_t tmp = array->array[iterator];
     array->array[iterator] = item;
-    while (iterator < array->size)
+    while(iterator < array->size)
     {
       iterator++;
-      type_t tmp2 = array->array[iterator];
+      type_t tmp2 = array->array[iterator];     
       array->array[iterator] = tmp;
       tmp = tmp2;
     }

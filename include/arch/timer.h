@@ -35,14 +35,16 @@ typedef struct{
   u8int year;
 }datetime_t;
 
+extern u32int globalFreq;
+
 /*initialize the timer*/
 void init_timer(u32int frequency);
 
 /*sleep function in seconds*/
-void sleep(int seconds);
+void sleep(u32int seconds);
 
 /*sleep function in milliseconds*/
-void mSleep(int milliseconds);
+void mSleep(u32int milliseconds);
 
 /*gets the RTC clock time*/
 datetime_t getDatetime();

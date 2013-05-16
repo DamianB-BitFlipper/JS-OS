@@ -64,7 +64,7 @@ void k_restore();
 void k_printf(char *c, ...);
 
 /*k_printf function where developer can set location as to where to print*/
-void k_setprintf(int x, int y, char *text);
+void k_setprintf(int x, int y, char *text, void *arg1, void *arg2, void *arg3);
 
 /*Convert an integer to a char array ex: 123 to [1,2,3]*/
 void k_intToChar(int integer, char *numbersInChar);

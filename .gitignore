@@ -1,2 +1,4 @@
-#nothing as of now
+#any temporary files that libre office has
 .~lock.*
+#custom scripts for my IDE
+my_*

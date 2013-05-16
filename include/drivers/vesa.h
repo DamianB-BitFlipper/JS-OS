@@ -52,7 +52,7 @@ typedef struct window
   int y;
   int width;
   int height;
-  unsigned long *data;
+  u32int *data;
   float z;
 
   char *flag;

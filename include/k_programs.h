@@ -27,7 +27,7 @@
 #include <system.h>
 
 /*function that gets input index and runs corresponding function*/
-void runShellFunction(int runFunction, char *arguements, u32int priority, u32int burst_time);
+void runShellFunction(u32int runFunction, char *arguements, u32int priority, u32int burst_time);
 
 /*program list starts here*/
 void program_ascii(char *arguements); //0 index --prints ascii animals
@@ -69,6 +69,9 @@ void program_help(char *arguements); //15 index --prints help contents
 void program_mv(char *arguements); //16 index --move (rename) a file to a dest
 
 void program_find(char *arguments); //17 index --find a file in a directory
+void find_set_current_dir(); //sets the initial dir for the find command, used with recursion within command
+
+void program_about(char *arguements); //18 index --print information about the project
 
 #endif //PROGRAMS_H
 

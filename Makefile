@@ -40,10 +40,10 @@ $(C_OBJ_DIR)/graphics.o $(C_OBJ_DIR)/x_server.o \
 \
 $(C_OBJ_DIR)/k_math.o \
 \
-$(C_OBJ_DIR)/elf.o $(C_OBJ_DIR)/fs.o $(C_OBJ_DIR)/initrd.o $(C_OBJ_DIR)/keyboard.o \
+$(C_OBJ_DIR)/elf.o $(C_OBJ_DIR)/ext2_fs.o $(C_OBJ_DIR)/initrd.o $(C_OBJ_DIR)/keyboard.o \
 $(C_OBJ_DIR)/k_programs.o $(C_OBJ_DIR)/k_shell.o $(C_OBJ_DIR)/k_stdio.o $(C_OBJ_DIR)/main.o \
 $(C_OBJ_DIR)/mouse.o $(C_OBJ_DIR)/ordered_array.o $(C_OBJ_DIR)/schedule.o $(C_OBJ_DIR)/sound.o \
-$(C_OBJ_DIR)/syscall.o \
+$(C_OBJ_DIR)/syscall.o $(C_OBJ_DIR)/vfs.o \
 \
 $(C_OBJ_DIR)/fdc.o \
 \
@@ -67,6 +67,7 @@ NASM_FLAGS =  -g -f elf32
 LD = @ld
 LD_MESSAGE = ld
 LD_MESSAGE_CONTENTS = linking...
+LD_DONE = done\n
 LD_FLAGS = -g -T link.ld
 LD_FINAL_FLAGS = -melf_i386
 
@@ -79,7 +80,7 @@ all: $(OUTPUT)
 $(OUTPUT): $(OBJECTS)
 				$(MESSAGE_PRINTER) "[$(LD_MESSAGE) ] $(LD_MESSAGE_CONTENTS)"
 				$(LD) $(LD_FLAGS) -o $(OUTPUT) $^ $(LD_FINAL_FLAGS)
-				$(MESSAGE_PRINTER) "$(DONE)"
+				$(MESSAGE_PRINTER) "$(LD_DONE)"
 
 ###********core/_C********###
 $(C_OBJ_DIR)/main.o: core/main.c
@@ -188,7 +189,7 @@ $(C_OBJ_DIR)/elf.o: core/elf.c
 				$(CC) $(C_FLAGS) -o $@ -c $^ $(C_FINAL_FLAGS) $(C_INCLUDES)
 				$(MESSAGE_PRINTER) "$(DONE)"
 
-$(C_OBJ_DIR)/fs.o: core/fs.c
+$(C_OBJ_DIR)/ext2_fs.o: core/ext2_fs.c
 				$(MESSAGE_PRINTER) "[$(CC_MESAGE) ] $^"
 				$(CC) $(C_FLAGS) -o $@ -c $^ $(C_FINAL_FLAGS) $(C_INCLUDES)
 				$(MESSAGE_PRINTER) "$(DONE)"
@@ -242,6 +243,11 @@ $(C_OBJ_DIR)/syscall.o: core/syscall.c
 				$(MESSAGE_PRINTER) "[$(CC_MESAGE) ] $^"
 				$(CC) $(C_FLAGS) -o $@ -c $^ $(C_FINAL_FLAGS) $(C_INCLUDES)
 				$(MESSAGE_PRINTER) "$(DONE)"
+
+$(C_OBJ_DIR)/vfs.o: core/vfs.c
+				$(MESSAGE_PRINTER) "[$(CC_MESAGE) ] $^"
+				$(CC) $(C_FLAGS) -o $@ -c $^ $(C_FINAL_FLAGS) $(C_INCLUDES)
+				$(MESSAGE_PRINTER) "$(DONE)"				
 
 ###********core/_C********###
 
