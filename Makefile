@@ -47,7 +47,9 @@ $(C_OBJ_DIR)/syscall.o $(C_OBJ_DIR)/vfs.o \
 \
 $(C_OBJ_DIR)/fdc.o \
 \
-$(C_OBJ_DIR)/vesa.o
+$(C_OBJ_DIR)/vesa.o \
+\
+$(C_OBJ_DIR)/stdc_string.o
 #object files
 
 #gcc flags
@@ -251,6 +253,12 @@ $(C_OBJ_DIR)/vfs.o: core/vfs.c
 
 ###********core/_C********###
 
+###********core/stdc/_C********###
+$(C_OBJ_DIR)/stdc_string.o: core/stdc/string.c
+				$(MESSAGE_PRINTER) "[$(CC_MESAGE) ] $^"
+				$(CC) $(C_FLAGS) -o $@ -c $^ $(C_FINAL_FLAGS) $(C_INCLUDES)
+				$(MESSAGE_PRINTER) "$(DONE)"
+
 ###********drivers/floppy/_C********###
 $(C_OBJ_DIR)/fdc.o: drivers/floppy/fdc.c
 				$(MESSAGE_PRINTER) "[$(CC_MESAGE) ] $^"
@@ -264,5 +272,3 @@ $(C_OBJ_DIR)/vesa.o: drivers/video/vesa.c
 				$(MESSAGE_PRINTER) "[$(CC_MESAGE) ] $^"
 				$(CC) $(C_FLAGS) -o $@ -c $^ $(C_FINAL_FLAGS) $(C_INCLUDES)
 				$(MESSAGE_PRINTER) "$(DONE)"
-
-###********drivers/video/_C********###
