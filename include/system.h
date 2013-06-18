@@ -55,6 +55,7 @@
 #include "arch/paging.h"
 #include "schedule.h"
 #include "sound.h"
+#include "stdio.h"
 #include "syscall.h"
 #include "arch/task.h"
 #include "arch/timer.h"
