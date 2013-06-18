@@ -24,24 +24,22 @@
 #include <system.h>
 
 extern window_t desktop;
-
 extern s32int middleButtonPressed, rightButtonPressed, leftButtonPressed;
 
 #define wVESA     1024
 #define hVESA     768
 #define dVESA     32
 
-// define our structure
+// Define 16-bit registers struct.
 typedef struct __attribute__ ((packed)) {
   unsigned short di, si, bp, sp, bx, dx, cx, ax;
   unsigned short gs, fs, es, ds, eflags;
 } regs16_t;
 
 int widthVESA, heightVESA, depthVESA;
+unsigned char *vga_mem; // Pointer to VGA address.
 
-unsigned char *vga_mem; //pointer where we assign our vga address
-
-/*Typedef for VESA mode information*/
+// VESA mode information struct.
 typedef struct MODE_INFO
 {
   unsigned short ModeAttributes       __attribute__ ((packed));
@@ -79,7 +77,7 @@ typedef struct MODE_INFO
   unsigned char  Reserved[206];//        __attribute__ ((packed));
 } MODE_INFO;
 
-/*Typedef for VESA information*/
+// Typedef for VESA information struct.
 typedef struct VESA_INFO
 {
   unsigned char  VESASignature[4];//     __attribute__ ((packed));
@@ -96,11 +94,14 @@ typedef struct VESA_INFO
   unsigned char  OemData[256];//         __attribute__ ((packed));
 } VESA_INFO;
 
-
-//int32 runs a bios interrupt, located at v86.asm
+/** 
+ * int32(u8int, regs16_t*) runs a BIOS interrupt. Its implementation is located at v86.asm.
+ */
 extern void int32(u8int intnum, regs16_t *regs);
 
-/*Sets the bank if the Linear Frame Buffer is not supported or enabled*/
+/**
+ * Sets the bank if the Linear Frame Bufferis not enabled or supported.
+ */
 void setBank(int bankNo)
 {
   regs16_t regs;
@@ -113,23 +114,25 @@ void setBank(int bankNo)
 
 }
 
-//sets up VESA for mode
+/** 
+ * Set up the VESA mode.
+ */
 void setVesa(u32int mode)
 {
-  //stop any task switching, but do not stop interupts
+  // Stop any task switching, but don't stoip interrupts.
   current_task->ready_to_run = FALSE;
 
-  VESA_INFO info; //VESA information
-  MODE_INFO vbeModeInfo; //VESA mode information
+  VESA_INFO info;
+  MODE_INFO vbeModeInfo;
 
   regs16_t regs;
 
-  /**Gets VESA information**/
+  // Get VESA information.
 
-  u32int buffer = (u32int)kmalloc(sizeof(VESA_INFO)) & 0xFFFFF; //sets the address for the buffer
+  u32int buffer = (u32int)kmalloc(sizeof(VESA_INFO)) & 0xFFFFF; // Set the address for buffer.
 
   memcpy(buffer, "VBE2", 4);
-  memset(&regs, 0, sizeof(regs)); //clears the registers typedef struct
+  memset(&regs, 0, sizeof(regs)); // Clear register struct.
 
   regs.ax = 0x4f00; //mode that gets VESA information
   regs.di = buffer & 0xF;
