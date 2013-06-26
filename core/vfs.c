@@ -1,7 +1,7 @@
 /*
-* fs.c
+* vfs.c
 *
-* Copyright 2013 JS <js@duck-squirell>
+* Copyright 2013 JS-OS <js@duck-squirell>
 *
 * This program is free software; you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -55,18 +55,37 @@ u32int write_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
     return 0;
 }
 
-void open_fs(fs_node_t *node, u8int read, u8int write)
+FILE *open_fs(char *filename, fs_node_t *dir)
 {
   // Has the node got an open callback?
-  if(node->open)
-    return node->open(node);
+  if((dir->flags & 0x7) == FS_DIRECTORY && dir->finddir != 0)
+  {
+    fs_node_t *file;
+    file = finddir_fs(dir, filename);
+
+    if(file->read)
+    {
+      FILE *buffer;
+      buffer = (FILE*)kmalloc(file->length);
+
+      read_fs(file, 0, file->length, buffer);
+
+      return buffer;
+    }else
+      return 0;
+  }else
+    return 0;
 }
 
-void close_fs(fs_node_t *node)
+u32int *close_fs(FILE *file)
 {
-  // Has the node got a close callback?
-  if(node->close)
-    return node->close(node);
+  if(file)
+  {
+    kfree((void*)file);
+    return 0;
+  }
+  else
+    return (u32int*)1;
 }
 
 struct dirent *readdir_fs(fs_node_t *node, u32int index)
@@ -216,20 +235,7 @@ u32int *block_of_set(fs_node_t *node, u32int block_number)
 
 fs_node_t *createFile(fs_node_t *parentNode, char *name, u32int size)
 {
-  int n = findOpenNode();
-  // Edit the file's header - currently it holds the file offset
-  // relative to the start of the ramdisk. We want it relative to the start
-  // of memory.
-  //strcpy(file_headers[n].name, name);
-  //file_headers[n].offset = file_headers[n - 1].offset + file_headers[n - 1].length;
-  //file_headers[n].length = size;
-
-  /* if the offset + length is greater than the current largest address in the filesystem,
-   * assign the new value */
-  //if(file_headers[n].offset + file_headers[n].length > greatestFS_location)
-  //{
-    //greatestFS_location = file_headers[n].offset + file_headers[n].length;
-  //}
+  u32int n = findOpenNode();
 
   // Create a new file node.
   strcpy(root_nodes[n].name, name);
@@ -243,8 +249,6 @@ fs_node_t *createFile(fs_node_t *parentNode, char *name, u32int size)
   root_nodes[n].write = &initrd_write;
   root_nodes[n].readdir = 0;
   root_nodes[n].finddir = 0;
-  root_nodes[n].open = 0;
-  root_nodes[n].close = 0;
   root_nodes[n].impl = 0;
 
 
@@ -386,8 +390,6 @@ fs_node_t *createDirectory(fs_node_t *parentNode, char *name)
 
   root_nodes[n].read = 0;
   root_nodes[n].write = 0;
-  root_nodes[n].open = 0;
-  root_nodes[n].close = 0;
   root_nodes[n].readdir = &initrd_readdir;
   root_nodes[n].finddir = &initrd_finddir;
   root_nodes[n].ptr = 0;

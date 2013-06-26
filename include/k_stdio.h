@@ -1,7 +1,7 @@
 /*
  * k_stdio.h
  * 
- * Copyright 2013 JS <js@duck-squirell>
+ * Copyright 2013 JS-OS <js@duck-squirell>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

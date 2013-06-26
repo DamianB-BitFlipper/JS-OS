@@ -1,7 +1,7 @@
 /*
  * timer.c
  * 
- * Copyright 2013 JS <js@duck-squirell>
+ * Copyright 2013 JS-OS <js@duck-squirell>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -110,7 +110,7 @@ void init_timer(u32int frequency)
 
 /*================RTC===================*/
 
-#define BCD2BIN(bcd) ((((bcd)&15) + ((bcd)>>4)*10))
+#define BCD2BIN(bcd) ((((bcd) & 15) + ((bcd) >> 4) * 10))
 #define MINUTE 60
 #define HOUR (60*MINUTE)
 #define DAY (24*HOUR)
@@ -128,7 +128,31 @@ datetime_t getDatetime()
   now.day = BCD2BIN(readCMOS(0x7));
   now.month = BCD2BIN(readCMOS(0x8));
   now.year = BCD2BIN(readCMOS(0x9));
+  now.century = BCD2BIN(readCMOS(0x32));
   asm volatile("sti");
   
   return now;
+}
+
+/*================Convertor to POSIX===================*/
+
+#define Y_TO_SECS(y) (31556000 * y)   //there are 31,556,000 seconds in a year (this accounts for a leap year every 4 years)
+#define MO_TO_SECS(m) (2629667 * m)   //approximation of the amount of seconds per month as the length of a month is not constant
+#define D_TO_SECS(d) (86400 * d)      //seconds in a day
+#define H_TO_SECS(h) (3600 * h)       //seconds in an hour
+#define MIN_TO_SECS(min) (60 * min)   //seconds in a minute
+
+u32int posix_time()
+{
+  datetime_t time;
+  u32int years_passed;
+  
+  time = getDatetime();
+
+  //calculate the time pased since the begining of POSIX
+  years_passed = (time.century * 100 + time.year) - POSIX_YEAR;
+
+  //convert the RTC times to seconds and sum everything up
+  return Y_TO_SECS(years_passed) + MO_TO_SECS(time.month) + D_TO_SECS(time.day) + H_TO_SECS(time.hour) + MIN_TO_SECS(time.min) + time.sec;
+  
 }

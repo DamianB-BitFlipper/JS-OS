@@ -1,7 +1,7 @@
 /*
  * main.c
  *
- * Copyright 2013 JS <js@duck-squirell>
+ * Copyright 2013 JS-OS <js@duck-squirell>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -90,20 +90,20 @@ int main(struct multiboot *mboot_ptr, u32int initial_stack)
   //// Start multitasking.
   initialise_tasking();
   k_printf("Initialized multitasking with PID: %h\n", getpid());
-  
+
   //test the multitasking
   test("tasking");
 
   // Initialise the floppy disk controller
-  init_floopy();
+  init_floppy();
 
   //test the FDC
-  test("floppy disk controller");
-  
+  //~ test("floppy disk controller");
+
   // Initialise the initial ramdisk, and set it as the filesystem root.
   fs_root = initialise_initrd(initrd_location);
   k_printf("Initialized the filesystem\n");
-    
+
   ///Create a few test files and directories
   fs_node_t *testDir = createDirectory(fs_root, "direct");
   fs_node_t *testFile = createFile(testDir, "test_file", 42);
@@ -117,7 +117,31 @@ int main(struct multiboot *mboot_ptr, u32int initial_stack)
   k_printf("The CMOS time is:\n\t%d:%d:%d %d/%d/%d\n",n.hour, n.min, n.sec, n.month, n.day, n.year);
 
   greeting_message();
+  //~ ext2_set_block_group(FLOPPY_SIZE - EXT2_SBLOCK_OFF);
 
+  ext2_create_file(0, 0, 17 * EXT2_BLOCK_SZ);
+  
+  //u8int *datas, *out, location;
+  //datas = (u8int*)kmalloc(10);
+  //out = (u8int*)kmalloc(10);
+
+  //location = 2;
+
+  //u32int nu;
+  //for(nu = 0; nu < 10; nu++)
+  //{
+    //*(datas + nu) = nu;
+    //*(out + nu) = 0;
+  //}
+
+  //floppy_write((u32int*)datas, 10, location);
+  //floppy_read(location, 10, (u32int*)out);
+
+  //for(nu = 0; nu < 10; nu++)
+  //{
+    //k_printf("%h ", *(out + nu));
+  //}  
+  
   addShellIndent();
 
   //sucess!
@@ -154,7 +178,7 @@ u32int test(char *test)
       //no error has occured, so return 0
       return 0;
     }
-    
+
     //THIS IS A TEST FOR THE FLOPPY READ AND WRITE FUNCTIONS
     //!WARNING, watch what sector you are writing to, you could write over boot data
     //!WARNING, on the boot floppy, messing the grub/kernel/initrd on the floppy
@@ -165,14 +189,14 @@ u32int test(char *test)
     u8int *mem;
     mem = (u8int*)kmalloc(size_to_write);
     memset(mem, write_data, size_to_write);
-    
+
     floppy_write((u32int*)mem, size_to_write, sector_index);
-    
-    sector = floppy_read(sector_index, size_to_write);
-  
+
+    floppy_read(sector_index, size_to_write, (u32int*)sector);
+
     if(sector)
     {
-      k_printf("\tFloppy test wrote %h to sector %d with size %d bytes\n", write_data, sector_index, size_to_write);
+      k_printf("\tFloppy test wrote %h to sector %d with size %d bytes\n", write_data, sector_index + 1, size_to_write);
 
       //sucess!
       return 0;

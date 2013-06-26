@@ -1,6 +1,6 @@
 #  debug.sh
 #  
-#  Copyright 2013 JS <js@duck-squirell>
+#  Copyright 2013 JS-OS <js@duck-squirell>
 #  
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@
 #~ harddisk_image="harddisk.img"
 floppy_image="floppy.img"
 storage_image="storage.img"
+#~ storage_image="test.img"
 
 printf "\n--------------------------GDB------[in new terminal window]----"
 printf "\ntarget remote localhost:1234"

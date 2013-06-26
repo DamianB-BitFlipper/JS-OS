@@ -1,7 +1,7 @@
 /*
  * fdc.c
  *
- * Copyright 2013 JS <js@duck-squirell>
+ * Copyright 2013 JS-OS <js@duck-squirell>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,7 +39,8 @@ static volatile u8int nDrives = 0;
 static volatile u8int _CurrentDrive;
 
 //our buffer for the DMA
-static volatile u8int floppy_dmaBuf[DMA_LEN];
+//~ static volatile u8int floppy_dmaBuf[DMA_LEN];
+static volatile u8int floppy_dmaBuf[DMA_LEN] __attribute__ ((aligned(0x10000)));
 //~ static volatile u8int *floppy_dmaBuf;
 
 //Floppy Registers
@@ -61,54 +62,54 @@ typedef enum
 //main statur register masks
 enum FLOPPY_MSR_MASK
 {
-	FLOPPY_MSR_MASK_DRIVE1_POS_MODE =	1,	     //00000001
-	FLOPPY_MSR_MASK_DRIVE2_POS_MODE =	2,	     //00000010
-	FLOPPY_MSR_MASK_DRIVE3_POS_MODE =	4,	     //00000100
-	FLOPPY_MSR_MASK_DRIVE4_POS_MODE =	8,	     //00001000
-	FLOPPY_MSR_MASK_BUSY	=	16,	               //00010000
-	FLOPPY_MSR_MASK_DMA	=	32,	                 //00100000
-	FLOPPY_MSR_MASK_DATAIO	=	64, 	           //01000000
-	FLOPPY_MSR_MASK_DATAREG =	128	             //10000000
+  FLOPPY_MSR_MASK_DRIVE1_POS_MODE = 1,       //00000001
+  FLOPPY_MSR_MASK_DRIVE2_POS_MODE = 2,       //00000010
+  FLOPPY_MSR_MASK_DRIVE3_POS_MODE = 4,       //00000100
+  FLOPPY_MSR_MASK_DRIVE4_POS_MODE = 8,       //00001000
+  FLOPPY_MSR_MASK_BUSY  = 16,                //00010000
+  FLOPPY_MSR_MASK_DMA = 32,                  //00100000
+  FLOPPY_MSR_MASK_DATAIO  = 64,              //01000000
+  FLOPPY_MSR_MASK_DATAREG = 128              //10000000
 };
 
 //floppy disk commands
 enum FLOPPY_CMD
 {
-	FDC_CMD_READ_TRACK =	2,
-	FDC_CMD_SPECIFY	=	3,
-	FDC_CMD_CHECK_STAT =	4,
-	FDC_CMD_WRITE_SECT =	5,
-	FDC_CMD_READ_SECT	=	6,
-	FDC_CMD_CALIBRATE	=	7,
-	FDC_CMD_CHECK_INT	=	8,
-	FDC_CMD_WRITE_DEL_S	=	9,
-	FDC_CMD_READ_ID_S	=	0xa,
-	FDC_CMD_READ_DEL_S =	0xc,
-	FDC_CMD_FORMAT_TRACK =	0xd,
-	FDC_CMD_SEEK =	0xf
+  FDC_CMD_READ_TRACK =  2,
+  FDC_CMD_SPECIFY = 3,
+  FDC_CMD_CHECK_STAT =  4,
+  FDC_CMD_WRITE_SECT =  5,
+  FDC_CMD_READ_SECT = 6,
+  FDC_CMD_CALIBRATE = 7,
+  FDC_CMD_CHECK_INT = 8,
+  FDC_CMD_WRITE_DEL_S = 9,
+  FDC_CMD_READ_ID_S = 0xa,
+  FDC_CMD_READ_DEL_S =  0xc,
+  FDC_CMD_FORMAT_TRACK =  0xd,
+  FDC_CMD_SEEK =  0xf
 };
 
 enum FLOPPY_CMD_EXT
 {
-	FDC_CMD_EXT_SKIP =	0x20,      	//00100000
-	FDC_CMD_EXT_DENSITY	=	0x40,	    //01000000
-	FDC_CMD_EXT_MULTITRACK =	0x80	//10000000
+  FDC_CMD_EXT_SKIP =  0x20,       //00100000
+  FDC_CMD_EXT_DENSITY = 0x40,     //01000000
+  FDC_CMD_EXT_MULTITRACK =  0x80  //10000000
 };
 
 enum FLOPPY_SECTOR_DTL
-{ 
-	FLOPPY_SECTOR_DTL_128	=	0,
-	FLOPPY_SECTOR_DTL_256	=	1,
-	FLOPPY_SECTOR_DTL_512	=	2,
-	FLOPPY_SECTOR_DTL_1024	=	4
+{
+  FLOPPY_SECTOR_DTL_128 = 0,
+  FLOPPY_SECTOR_DTL_256 = 1,
+  FLOPPY_SECTOR_DTL_512 = 2,
+  FLOPPY_SECTOR_DTL_1024  = 4
 };
 
 enum FLOPPY_GAP3_LENGTH
 {
- 
-	FLOPPY_GAP3_LENGTH_STD = 42,
-	FLOPPY_GAP3_LENGTH_5_14 = 32,
-	FLOPPY_GAP3_LENGTH_3_5 = 27
+
+  FLOPPY_GAP3_LENGTH_STD = 0x2a,
+  FLOPPY_GAP3_LENGTH_5_14 = 0x20,
+  FLOPPY_GAP3_LENGTH_3_5 = 0x1b
 };
 
 enum
@@ -142,8 +143,8 @@ void floppy_handler()
 
 u8int floppy_status()
 {
-	//return main status register
-	return inb(floppy_base + FLOPPY_MSR);
+  //return main status register
+  return inb(floppy_base + FLOPPY_MSR);
 }
 
 void floppy_send_command(u8int command)
@@ -152,28 +153,30 @@ void floppy_send_command(u8int command)
   init_timer(globalFreq); // Initialise timer to globalFreq-Hz
 
   u32int i;
-	//loop a certain amount of times, untill 60 second timeout
-	for(i = 0; i < 600; i++)
+
+  //loop a certain amount of times, untill 60 second timeout
+  for(i = 0; i < 600; i++)
   {
     //sleep for 10ms
     mSleep(10);
 
     //if the most significant bit is 1, then the data register is ready
-		if(floppy_status() & FLOPPY_MSR_MASK_DATAREG)
-			return (void)outb(floppy_base + FLOPPY_FIFO, command);
+    if(floppy_status() & FLOPPY_MSR_MASK_DATAREG)
+      return (void)outb(floppy_base + FLOPPY_FIFO, command);
   }
+
 }
 
 //read data from the FIFO
 u8int floppy_read_data()
 {
   u32int i;
-	//loop a certain amount of times, untill data register is ready
-	for(i = 0; i < 500; i++)
+  //loop a certain amount of times, untill data register is ready
+  for(i = 0; i < 500; i++)
   {
     //if the most significant bit is 1, then the data register is ready
-		if(floppy_status() & FLOPPY_MSR_MASK_DATAREG)
-			return inb(floppy_base + FLOPPY_FIFO);
+    if(floppy_status() & FLOPPY_MSR_MASK_DATAREG)
+      return inb(floppy_base + FLOPPY_FIFO);
   }
 }
 
@@ -222,7 +225,7 @@ u32int floppy_change_drive(u8int drive)
   //set the 4 least significant bits of data
   u8int dor_data = 0b1100 | (drive & 0x3);
   floppy_write_dor(dor_data);
-  
+
   //set _CurrentDrive to its appropriate drive number
   _CurrentDrive = drive;
 
@@ -240,7 +243,7 @@ void floppy_drive_data(u32int stepr, u32int loadt, u32int unloadt, u32int dma)
   /*data is set to the 4 least significant bits of stepr
    * shifted 4 to the left and then the 4 least significant bits of unloadt
    * added to the end */
-	data = ((stepr & 0xf) << 4) | (unloadt & 0xf);
+  data = ((stepr & 0xf) << 4) | (unloadt & 0xf);
 
   //sets the steprate and the unload time
   floppy_send_command(data);
@@ -253,7 +256,7 @@ void floppy_drive_data(u32int stepr, u32int loadt, u32int unloadt, u32int dma)
   //sets load time
   floppy_send_command(data);
 
-  k_printf("Floppy drive data sent!\n");
+  //~ k_printf("Floppy drive data sent!\n");
 }
 
 void floppy_write_dor(u8int val)
@@ -265,8 +268,8 @@ void floppy_write_dor(u8int val)
 
 void floppy_write_ccr(u8int val)
 {
-	//write to ccr floppy register
-	outb(floppy_base + FLOPPY_CCR, val);
+  //write to ccr floppy register
+  outb(floppy_base + FLOPPY_CCR, val);
 }
 
 void floppy_motor(u32int state, u8int drive)
@@ -306,7 +309,7 @@ void floppy_motor(u32int state, u8int drive)
       floppy_write_dor(data);
       break;
     case FLOPPY_MOTOR_OFF:
-    
+
       //set the 4 significant bits of data to 0
       data = data & 0xf;
       floppy_write_dor(data);
@@ -390,7 +393,7 @@ u32int floppy_reset()
   //~ asm volatile("sti");
   //~ init_timer(globalFreq); // Initialise timer to globalFreq-Hz
 
-	u32int st0, cyl;
+  u32int st0, cyl;
 
   //disable the controller by setting all of the dor bits to 0
   floppy_write_dor(0x0);
@@ -430,7 +433,7 @@ u32int floppy_reset()
   return 0;
 }
 
-u32int init_floopy()
+u32int init_floppy()
 {
   //get the amount of drives
   u8int drives = readCMOS(0x10);
@@ -464,16 +467,16 @@ u32int init_floopy()
   k_printf("IRQ6 set up\n");
 
   //initialize the floppy dma
-  if(init_floppy_dma())
-  {
-    //an error occured in the DMA initialization
-    return 2;
-  }
+  //if(init_floppy_dma())
+  //{
+    ////an error occured in the DMA initialization
+    //return 2;
+  //}
 
   if(floppy_reset())
   {
     k_printf("Floppy Drive Controler reset was not completed successfully...\n");
-    
+
     //error
     return 1;
   }else
@@ -488,7 +491,7 @@ u32int init_floopy()
     /*do not enable floppy persistent storage, we do not want any usermode
      * function writing over sensitive boot information on the boot floppy*/
     _FloppyStorage = FALSE;
-    
+
     return 2; //error
   }
 
@@ -498,7 +501,7 @@ u32int init_floopy()
     /*do not enable floppy persistent storage, we do not want any usermode
      * function writing over sensitive boot information on the boot floppy*/
     _FloppyStorage = FALSE;
-        
+
     return 3; //error
   }else{
     k_printf("Floppy persistent storage set up to default, second floppy disk\n");
@@ -506,12 +509,12 @@ u32int init_floopy()
     //enable floppy persistent storage on second storage floppy
     _FloppyStorage = TRUE;
   }
-    
+
   //Sucess!
   return 0;
 }
 
-u32int init_floppy_dma()
+u32int set_floppy_dma(u8int read)
 {
   //made it a union for future expansion and development
   union
@@ -555,50 +558,91 @@ u32int init_floppy_dma()
     return 1;
   }
 
+  //~ k_printf("DMA INFO: starting addr: %h, ending addr: %h, size %d bytes", addr.len, addr.len + count.len, count.len);
+
+
+  u32int mode;
+  switch(read)
+  {
+    case FALSE: //user wants to write
+      mode = 0x4a;
+      break;
+    case TRUE: //user wants to read
+      mode = 0x46;
+      break;
+    default:
+      mode = 0;
+      break;
+  }
+
+  asm volatile("cli");
+
   outb(0x0a, 0x06);           // mask DMA channel 2
 
-  outb(0x0c, 0xff);           // reset flip-flop
+  //~ outb(0x0c, 0xff);           // reset flip-flop
+  outb(0x0c, 0x00);           // reset flip-flop
+  outb(0x0b, mode);           // reset flip-flop
+
   outb(0x04, addr.buf[0]);    // the beginning addr of the dma - address low byte
   outb(0x04, addr.buf[1]);    // the beginning addr of the dma - address high byte
+  outb(0x81, addr.buf[2]);    // external page register
 
   outb(0x0c, 0xff);           // reset flip-flop
   outb(0x05, count.buf[0]);   // the size of the dma - count low byte
   outb(0x05, count.buf[1]);   // the size of the dma - count high byte
 
-  outb(0x81, addr.buf[2]);    // external page register
+  //~ outb(0x81, addr.buf[2]);    // external page register
 
   outb(0x0a, 0x02);           // unmask chan 2
 
-  k_printf("DMA initialized sucessfully!\n");
+  asm volatile("sti");
+
+  //~ k_printf("DMA initialized sucessfully!\n");
 
   //sucess!
   return 0;
 }
 
-void floppy_dma_read()
-{
-	outb(0x0a, 0x06); //mask dma channel 2
-	outb(0x0b, 0x56); //single transfer, address increment, autoinit, read, channel 2
-	outb(0x0a, 0x02); //unmask dma channel 2
-}
+//void floppy_dma_read()
+//{
+  //outb(0x0a, 0x06); //mask dma channel 2
+  ////~ outb(0x0b, 0x56); //single transfer, address increment, autoinit, read, channel 2
+  //outb(0x0b, 0x46); //single transfer, address increment, autoinit, read, channel 2
+  //outb(0x0a, 0x02); //unmask dma channel 2
+//}
 
-void floppy_dma_write()
-{
-	outb(0x0a, 0x06); //mask dma channel 2
-	outb(0x0b, 0x5a); //single transfer, address increment, autoinit, write, channel 2
-	outb(0x0a, 0x02); //unmask dma channel 2
-}
+//void floppy_dma_write()
+//{
+  //outb(0x0a, 0x06); //mask dma channel 2
+  ////~ outb(0x0b, 0x5a); //single transfer, address increment, autoinit, write, channel 2
+  //outb(0x0b, 0x4a); //single transfer, address increment, autoinit, write, channel 2
+  //outb(0x0a, 0x02); //unmask dma channel 2
+//}
 
 u32int floppy_seek(u32int cyl, u8int head)
 {
   //_CurrentDrive can only have upto 4 drives, 0-3
   if(_CurrentDrive >= 4)
-    return 0; //error
+    return 1; //error
 
   u32int st0, cyl0, i;
 
   //the motor must be on to be able to seek
   floppy_motor(FLOPPY_MOTOR_ON, _CurrentDrive);
+
+  if(head > 1)
+  {
+    k_printf("Floppy seek error: head is invalid (head > 1), head is: %d\n", head);
+
+    //error
+    return 3;
+  }else if(cyl > 79)
+  {
+    k_printf("Floppy seek error: cylinder is invalid (cylinder > 79), cylinder is: %d\n", cyl);
+
+    //error
+    return 4;
+  }
 
   //attempt to position to input cylinder 10 times until sucess
   for(i = 0; i < 10; i++)
@@ -635,8 +679,31 @@ void floppy_lba_to_chs(u32int lba, u32int *head, u32int *track, u32int *sector)
 
   *(head) = (lba % (FLOPPY_SECTORS_PER_TRACK * 2)) / (FLOPPY_SECTORS_PER_TRACK);
   *(track) = lba / (FLOPPY_SECTORS_PER_TRACK * 2);
+  //~ *(track) = lba / (FLOPPY_SECTORS_PER_TRACK);
   *(sector) = lba % FLOPPY_SECTORS_PER_TRACK + 1;
 
+}
+
+u32int floppy_nhead_switches(u32int sector, u32int size)
+{
+  //~ u32int track_size = FLOPPY_SECTORS_PER_TRACK * SECTOR_SIZE;
+  u32int tmp_sector = sector - 1; //sector numbers start at 1, not 0, counter that by subracting one
+
+  /*the amount of sectors that will be written on
+   * calculated by the ceiling of (size / SECTOR_SIZE)*/
+  u32int sectors_write = (u32int)(size / SECTOR_SIZE) + 1;
+
+  u32int switches;
+
+  /*the starting sector + the sectors_write equals the last sector's number that
+   * will be written on. We divide that result by the number of sectors on a track plus 1
+   * since, for example, out tmp_sector starting position was 0 and our sectors to write
+   * was 18, dividing 18 / 18 will give 1, although, no jumps between heads were made since all
+   * 18 sectors of the data could all fit on the same sector.*/
+  switches = (u32int)(tmp_sector + sectors_write)/(FLOPPY_SECTORS_PER_TRACK + 1);
+
+  return switches;
+  
 }
 
 void floppy_read_sector(u8int head, u8int track, u8int sector, u32int size)
@@ -646,12 +713,14 @@ void floppy_read_sector(u8int head, u8int track, u8int sector, u32int size)
   //the floppy must be on in order to read from it
   floppy_motor(FLOPPY_MOTOR_ON, _CurrentDrive);
 
-  floppy_dma_read();
+  //~ floppy_dma_read();
+  set_floppy_dma(TRUE);
   //~ k_printf("Floppy read sector, dma set to read\n");
 
   //send command that we want to read from a sector with some generic flags
-  floppy_send_command(FDC_CMD_READ_SECT | FDC_CMD_EXT_MULTITRACK |
-                      FDC_CMD_EXT_SKIP | FDC_CMD_EXT_DENSITY);
+  //~ floppy_send_command(FDC_CMD_READ_SECT | FDC_CMD_EXT_MULTITRACK |
+                      //~ FDC_CMD_EXT_SKIP | FDC_CMD_EXT_DENSITY);
+  floppy_send_command(FDC_CMD_READ_SECT | FDC_CMD_EXT_MULTITRACK | FDC_CMD_EXT_DENSITY);
 
   //specify which head and drive to use
   floppy_send_command((head << 2) | _CurrentDrive);
@@ -671,10 +740,12 @@ void floppy_read_sector(u8int head, u8int track, u8int sector, u32int size)
    * the -1 in (size - 1) is used if size == SECTOR_SIZE, then the output
    * of this calucation would be still 1 sector, without the -1, the ouput
    * would be 2 which is incorrect*/
-  floppy_send_command((int)((size - 1) / SECTOR_SIZE) + 1);      
+  //~ floppy_send_command((u32int)((size - 1) / SECTOR_SIZE) + 1);
+  floppy_send_command(18);
 
   //state that we are using a 3.5in floppy disk
   floppy_send_command(FLOPPY_GAP3_LENGTH_3_5);
+  //~ floppy_send_command(FLOPPY_GAP3_LENGTH_WORKING);
   floppy_send_command(0xff); //floppy data length, set to 0xff if sector size != 0
 
   //wait for interupt
@@ -689,24 +760,107 @@ void floppy_read_sector(u8int head, u8int track, u8int sector, u32int size)
   floppy_check_int(&st0, &cyl);
 }
 
-u8int *floppy_read(u32int sectorLBA, u32int size)
+u8int *floppy_read(u32int sectorLBA, u32int size, u32int *output)
 {
   //_CurrentDrive can only have upto 4 drives, 0-3
   if(_CurrentDrive >= 4)
     return 0; //error
 
+  /*if the data to read is larger than DMA_LEN, send multiple
+   * floppy_read to read the entire data in segments*/
+  if(size > DMA_LEN)
+  {
+    u8int *tmp;
+    tmp = (u8int*)kmalloc(DMA_LEN);
+
+    u32int count;
+    for(count = 0; size - count >= DMA_LEN; count+=DMA_LEN)
+    {
+      /*count / SECTOR_SIZE is derived from multiplying
+       * (count / DMA_LEN), the amount of times the for loop has run, starting from 0
+       * by
+       * (DMA_LEN / SECTOR_SIZE), the offset the next DMA_LEN writing of data has to have in sectors
+       * to line up exactly with the end of the last writing
+       *
+       * DMA_LEN cancels out, making the code simpler
+       *
+       * all this does is offset the sectorLBA by a certain amount of DMA_LENs*/
+      floppy_read(sectorLBA + (count / SECTOR_SIZE), DMA_LEN, (u32int*)tmp);
+            
+      memcpy((u8int*)output + count, tmp, DMA_LEN);
+
+    }
+
+    kfree(tmp);
+
+    //if the rest size is 0, there is no point to continue, we are done
+    if(!(size % DMA_LEN))
+      return (u8int*)floppy_dmaBuf;
+
+    tmp = (u8int*)kmalloc(size % DMA_LEN);
+
+    floppy_read(sectorLBA + (u32int)((size - (size % DMA_LEN)) / SECTOR_SIZE), size % DMA_LEN, (u32int*)tmp);
+
+    //copy the data from data offest from the end minus the size left to copy (size % DMA_LEN)
+    memcpy((u8int*)output + (size - (size % DMA_LEN)), tmp, size % DMA_LEN);
+    
+    kfree(tmp);
+
+    return (u8int*)floppy_dmaBuf;
+
+  }
+
+  u32int switches;
 
   //Convert the linear block address (LBA) sector to cyliner, head, sector (CHS)
   u32int head = 0, track = 0, sector = 1;
   floppy_lba_to_chs(sectorLBA, &head, &track, &sector);
+
+  //get the number of switches
+  switches = floppy_nhead_switches(sector, size);
+
+  if(switches == 2) //if the floppy has to switch between heads twice, it cannot, so split the job into 2 floppy_write function calls
+  {
+    u8int *out;
+    out = (u8int*)kmalloc(size);
+      
+    u32int track_size = FLOPPY_SECTORS_PER_TRACK * SECTOR_SIZE;
+
+    //get the distance from the beginning of the first byte of the containing track and the beginning of the read byte
+    u32int offset = SECTOR_SIZE * (sectorLBA % FLOPPY_SECTORS_PER_TRACK);
+    //the amount of data read from the first track
+    u32int first_read = track_size - offset;
+    
+    //read the whole track that the starting byte to write to is
+    floppy_read(sectorLBA, first_read, (u32int*)out);
+  
+    //write the rest of the data, starting at the beginning of the next track
+    floppy_read(sectorLBA + FLOPPY_SECTORS_PER_TRACK - (sectorLBA % FLOPPY_SECTORS_PER_TRACK),
+                size - (first_read), (u32int*)((u8int*)out + (first_read)));
+
+    //dump that data to ouput
+    memcpy(output, out, size);
+
+    kfree(out);
+
+    //we have written everything, so exit with success
+    return (u8int*)floppy_dmaBuf;
+    
+  }else if(switches > 2) //switches should never exceed 2, because the DMA_LEN is not large enough. If it does occur, it is an error
+  {
+    k_printf("FLOPPY WRITE FATAL ERROR: number of switches (%d) are too many\n", switches);
+
+    return 0;
+  }
 
   //~ k_printf("Floppy read, seeking head\n");
   if(floppy_seek(track, head))
   {
     k_printf("Floppy read seek head returned with error, aborted\n");
     return 0; //error
-  }else
-    //~ k_printf("Head seeked sucessfully\n");
+  }
+
+  k_printf("secotor: %d\n", sector);
 
   /*after completing floppy_read_sector, the data for that sector should
    * be stored in the dma buffer */
@@ -715,68 +869,85 @@ u8int *floppy_read(u32int sectorLBA, u32int size)
   //We are done reading, shut the motor off
   floppy_motor(FLOPPY_MOTOR_OFF, _CurrentDrive);
 
+  memcpy(output, floppy_dmaBuf, size);
+
   /*return the pointer to the dma buffer, this is where the data we got
    * from the floppy is stored */
-  return(u8int*)floppy_dmaBuf;
+  return (u8int*)floppy_dmaBuf;
 }
 
-void floppy_write_sector(u8int head, u8int track, u8int sector, u32int size)
+void floppy_write_sector(u8int head, u8int track, u8int sector)
 {
+  u32int st0, cyl, tries;
 
-  //size cannot exceed DMA_LEN, if greater, print warning and set to DMA_LEN
-  if(size > DMA_LEN)
+  for(tries = 0; tries < 3; tries++)
   {
-    size = DMA_LEN;
-    k_printf("WARNING, floppy wanted to write a chunck of data larger than DMA_LEN (18KB)\n");
+
+    //~ k_printf("tries: %d\n", tries);
+
+    //the floppy must be on in order to read from it
+    floppy_motor(FLOPPY_MOTOR_ON, _CurrentDrive);
+
+    floppy_write_ccr(0);
+
+    //set the dma to write
+    set_floppy_dma(FALSE);
+
+    //send command that we want to write to a sector with some generic flags
+    floppy_send_command(FDC_CMD_WRITE_SECT | FDC_CMD_EXT_MULTITRACK | FDC_CMD_EXT_DENSITY);
+
+    //~ k_printf("head %d, track %d, sector %d at location: %h\n", head, track, sector, (head * 80 + track * 18 + (sector - 1)) * 0x200);
+
+    //specify which head and drive to use
+    floppy_send_command((head << 2) | _CurrentDrive);
+    floppy_send_command(track);    //specify the track
+    floppy_send_command(head);     //specify the head
+    floppy_send_command(sector);   //specify the sector
+    floppy_send_command(FLOPPY_SECTOR_DTL_512); //specify to use 512 bytes per sector
+
+    /*send command to write the ceil of the number of sectors that make
+     * up size, (size - 1) / SECTOR_SIZE, add 1 to make it ceiling
+     *
+     * the -1 in (size - 1) is used if size == SECTOR_SIZE, then the output
+     * of this calculation would be still 1 sector, without the -1, the ouput
+     * would be 2 which is incorrect*/
+    //~ floppy_send_command((u32int)((size - 1) / SECTOR_SIZE) + 1);
+    floppy_send_command(18);
+
+    //state that we are using a 3.5in floppy disk
+    floppy_send_command(FLOPPY_GAP3_LENGTH_3_5);
+    floppy_send_command(0xff); //floppy data length, set to 0xff if sector size != 0
+
+    //wait for interupt
+    floppy_wait_irq();
+
+    //~ k_printf("WRITE\n");
+
+    //read the status info
+    u32int _st0, _st1, _st2, ncyl, ehead, esect, final;
+    _st0 = floppy_read_data();
+    _st1 = floppy_read_data();
+    _st2 = floppy_read_data();
+    ncyl = floppy_read_data();
+    ehead = floppy_read_data();
+    esect = floppy_read_data();
+    final = floppy_read_data();
+
+    //let the FDC aknowledge that the interupt has been handled
+    floppy_check_int(&st0, &cyl);
+
+    if(!(_st0 & 0xc0))
+      break;
+
+    floppy_calibrate(_CurrentDrive);
   }
-  u32int st0, cyl;
 
-  //the floppy must be on in order to read from it
-  floppy_motor(FLOPPY_MOTOR_ON, _CurrentDrive);
-
-  floppy_dma_write();
-  //~ k_printf("Floppy write sector, dma set to write\n");
-
-  //send command that we want to read from a sector with some generic flags
-  floppy_send_command(FDC_CMD_WRITE_SECT | FDC_CMD_EXT_MULTITRACK |
-                      FDC_CMD_EXT_SKIP | FDC_CMD_EXT_DENSITY);
-
-  //specify which head and drive to use
-  floppy_send_command((head << 2) | _CurrentDrive);
-  floppy_send_command(track);    //specify the track
-  floppy_send_command(head);     //specify the head
-  floppy_send_command(sector);   //specify the sector
-  floppy_send_command(FLOPPY_SECTOR_DTL_512); //specify to use 512 bytes per sector
-
-  //~ k_printf("Sectors writing to %d, track %d, head %d\n", sector + 1, track, head);
-
-  /*send command to write the ceil of the number of sectors that make
-   * up size (size - 1) / SECTOR_SIZE, add 1 to make it ceiling
-   *
-   * the -1 in (size - 1) is used if size == SECTOR_SIZE, then the output
-   * of this calucation would be still 1 sector, without the -1, the ouput
-   * would be 2 which is incorrect*/
-  floppy_send_command((int)((size - 1) / SECTOR_SIZE) + 1);                      
-
-  //state that we are using a 3.5in floppy disk
-  floppy_send_command(FLOPPY_GAP3_LENGTH_3_5);
-  floppy_send_command(0xff); //floppy data length, set to 0xff if sector size != 0
-
-  //wait for interupt
-  floppy_wait_irq();
-
-  //read the status info
-  u32int i;
-  for(i = 0; i < 7; i++)
-    floppy_read_data();
-
-  //let the FDC aknowledge that the interupt has been handled
-  floppy_check_int(&st0, &cyl);
+  //~ k_printf("out\n");
 }
 
 u8int *floppy_write(u32int *data, u32int size, u32int sectorLBA)
 {
-
+ 
   //_CurrentDrive can only have upto 4 drives, 0-3
   if(_CurrentDrive >= 4)
     return 0; //error
@@ -784,30 +955,123 @@ u8int *floppy_write(u32int *data, u32int size, u32int sectorLBA)
   //if no persistent storage is enabled, then it is most likly we do not want to write data to any drive
   if(_FloppyStorage == FALSE)
     k_printf("%cr**WARNING** Floppy writing to boot floppy%cw\n"); //print a warning
-    
+
+  //clear the dma buffer
   memset(floppy_dmaBuf, 0, DMA_LEN);
-  memcpy(floppy_dmaBuf, data, size > DMA_LEN ? DMA_LEN : size);
+
+  /*if the data to write is larger than DMA_LEN, send multiple
+   * floppy_write to write the entire data in segments*/
+  if(size > DMA_LEN)
+  {
+    u8int *tmp;
+    tmp = (u8int*)kmalloc(DMA_LEN);
+
+    u32int count;
+    for(count = 0; size - count >= DMA_LEN; count+=DMA_LEN)
+    {
+      memcpy(tmp, (u8int*)data + count, DMA_LEN);
+
+      /*count / SECTOR_SIZE is derived from multiplying
+       * (count / DMA_LEN), the amount of times the for loop has run, starting from 0
+       * by
+       * (DMA_LEN / SECTOR_SIZE), the offset the next DMA_LEN writing of data has to have in sectors
+       * to line up exactly with the end of the last writing
+       *
+       * DMA_LEN cancels out, making the code simpler
+       *
+       * all this does is offset the sectorLBA by a certain amount of DMA_LENs*/
+      floppy_write((u32int*)tmp, DMA_LEN, sectorLBA + (count / SECTOR_SIZE));
+    }
+
+    kfree(tmp);
+
+    //if the rest size is 0, there is no point to continue, we are done
+    if(!(size % DMA_LEN))
+      return (u8int*)floppy_dmaBuf;
+
+    tmp = (u8int*)kmalloc(size % DMA_LEN);
+
+    //copy the data from data offest from the end minus the size left to copy (size % DMA_LEN)
+    memcpy(tmp, (u8int*)data + (size - (size % DMA_LEN)), size % DMA_LEN);    
+    //~ floppy_write((u32int*)tmp, size % DMA_LEN, sectorLBA + (u32int)((size - 1) / SECTOR_SIZE) - 1);
+    floppy_write((u32int*)tmp, size % DMA_LEN, sectorLBA + (u32int)((size - (size % DMA_LEN)) / SECTOR_SIZE));
+
+    //~ k_printf("true sector: %d, lba %d, size %d\n", sectorLBA + (u32int)((size - (size % DMA_LEN)) / SECTOR_SIZE), sectorLBA, size % DMA_LEN);
+
+    kfree(tmp);
+
+    return (u8int*)floppy_dmaBuf;
+
+  }
+
+  u32int switches;
+  u8int *track_buf;
+  track_buf = (u8int*)kmalloc(DMA_LEN);
 
   //Convert the linear block address (LBA) sector to cyliner, head, sector (CHS)
   u32int head = 0, track = 0, sector = 1;
   floppy_lba_to_chs(sectorLBA, &head, &track, &sector);
 
-  //~ k_printf("Floppy write, seeking head\n");
+  //get the number of switches
+  switches = floppy_nhead_switches(sector, size);
+
+  if(switches <= 1)
+  {
+    floppy_read(sectorLBA, DMA_LEN, (u32int*)track_buf);
+  
+    memcpy(track_buf, data, size);
+    memcpy(floppy_dmaBuf, track_buf, DMA_LEN);
+
+    kfree(track_buf);
+    
+  }else if(switches == 2) //if the floppy has to switch between heads twice, it cannot, so split the job into 2 floppy_write function calls
+  {
+    u32int track_size = FLOPPY_SECTORS_PER_TRACK * SECTOR_SIZE;
+    
+    //read the whole track that the starting byte to write to is
+    floppy_read(sectorLBA - (sectorLBA % FLOPPY_SECTORS_PER_TRACK), track_size, (u32int*)track_buf);
+
+    //get the amount of data (its size) to write in this first track
+    u32int offset = track_size - SECTOR_SIZE * (sectorLBA % FLOPPY_SECTORS_PER_TRACK);
+    memcpy(track_buf + SECTOR_SIZE * (sectorLBA % FLOPPY_SECTORS_PER_TRACK), data, offset);
+  
+    floppy_write((u32int*)track_buf, track_size, sectorLBA - (sectorLBA % FLOPPY_SECTORS_PER_TRACK));
+
+    //write the rest of the data, starting at the beginning of the next track
+    floppy_write((u32int*)((u8int*)data + offset), size - offset, sectorLBA + FLOPPY_SECTORS_PER_TRACK - (sectorLBA % FLOPPY_SECTORS_PER_TRACK));
+
+    kfree(track_buf);
+
+    //we have written everything, so exit with success
+    return (u8int*)floppy_dmaBuf;
+    
+  }else //switches should never exceed 2, because the DMA_LEN is not large enough. If it does occur, it is an error
+  {
+    k_printf("FLOPPY WRITE FATAL ERROR: number of switches (%d) are too many\n", switches);
+
+    kfree(track_buf);
+
+    return 0;
+  }
+  
   if(floppy_seek(track, head))
   {
     k_printf("Floppy write, seek head returned with error, aborted\n");
+
+    //the floppy was unable to seek, shut the motor off
+    floppy_motor(FLOPPY_MOTOR_OFF, _CurrentDrive);
+    
     return 0; //error
-  }//else
-    //~ k_printf("Head seeked sucessfully\n");
+  }
 
   /*after completing floppy_read_sector, the data for that sector should
    * be stored in the dma buffer */
-  floppy_write_sector(head, track, sector, size);
+  floppy_write_sector(head, track, sector);
 
   //We are done reading, shut the motor off
   floppy_motor(FLOPPY_MOTOR_OFF, _CurrentDrive);
 
   /*return the pointer to the dma buffer, this is where the data we got
    * from the floppy is stored */
-  return(u8int*)floppy_dmaBuf;  
+  return (u8int*)floppy_dmaBuf;
 }

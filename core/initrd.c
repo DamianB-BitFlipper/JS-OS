@@ -1,24 +1,24 @@
 /*
  * initrd.c
- * 
- * Copyright 2013 JS <js@duck-squirell>
- * 
+ *
+ * Copyright 2013 JS-OS <js@duck-squirell>
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  * MA 02110-1301, USA.
- * 
- * 
+ *
+ *
  */
 
 #include <system.h>
@@ -91,7 +91,7 @@ u32int initrd_read(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
      *
      * (u32int*)block points to the address of the node->blocks[i]
      * e.g. &node->blocks[i]
-     * 
+     *
      * then the *(u32int*)block is the value of that address, i.e. it impersonates
      * that it (u32int block) is node->blocks[i], although
      * they are found at different memory locations, same concept with hard links */
@@ -120,7 +120,7 @@ u32int initrd_write(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
   {
     size = node->length - offset;
   }
-  
+
   u32int i, block_size_at_index, size_to_copy;
   u32int block;
   for(i = startingBlock; i < endingBlock + 1; i++)
@@ -146,10 +146,10 @@ u32int initrd_write(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
      *
      * (u32int*)block points to the address of the node->blocks[i]
      * e.g. &node->blocks[i]
-     * 
+     *
      * then the *(u32int*)block is the value of that address, i.e. it impersonates
      * that it (u32int block) is node->blocks[i], although
-     * they are found at different memory locations, same concept with hard links */    
+     * they are found at different memory locations, same concept with hard links */
     if(offset != 0 && i == startingBlock)
     {
       memcpy((u8int*)(*(u32int*)block), buffer + (i - startingBlock) * BLOCK_SIZE + offset % BLOCK_SIZE, block_size_at_index);
@@ -222,7 +222,7 @@ struct dirent *initrd_readdir(fs_node_t *dirNode, u32int index)
           //recalculate the block address
           block = (u32int)block_of_set(dirNode, b);
         }
-        
+
       }
 
     }
@@ -288,8 +288,6 @@ fs_node_t *initialise_initrd(u32int location)
   initrd_root->flags = FS_DIRECTORY;
   initrd_root->read = 0;
   initrd_root->write = 0;
-  initrd_root->open = 0;
-  initrd_root->close = 0;
   initrd_root->readdir = &initrd_readdir;
   initrd_root->finddir = &initrd_finddir;
   initrd_root->ptr = 0;
@@ -319,8 +317,6 @@ fs_node_t *initialise_initrd(u32int location)
     root_nodes[i].write = &initrd_write;
     root_nodes[i].readdir = 0;
     root_nodes[i].finddir = 0;
-    root_nodes[i].open = 0;
-    root_nodes[i].close = 0;
     root_nodes[i].impl = 0;
 
     //calculates the number of blocks this file has
@@ -333,32 +329,38 @@ fs_node_t *initialise_initrd(u32int location)
     if(nBlocks >= BLOCKS_DIRECT && nBlocks < BLOCKS_DIRECT + BLOCKS_SINGLY)
     {
       //allocate the singly typedef
-      root_nodes[i].singly = (fs_singly_t*)kmalloc_a(sizeof(fs_singly_t));
-      
+      //~ root_nodes[i].singly = (fs_singly_t*)kmalloc_a(sizeof(fs_singly_t));
+      root_nodes[i].singly = (fs_singly_t*)kmalloc(sizeof(fs_singly_t));
+
     //if this file has a singly set and a doubly set
     }else if(nBlocks >= BLOCKS_DIRECT + BLOCKS_SINGLY &&
             nBlocks < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY)
     {
-      //allocate the singly typedef    
-      root_nodes[i].singly = (fs_singly_t*)kmalloc_a(sizeof(fs_singly_t));
+      //allocate the singly typedef
+      //~ root_nodes[i].singly = (fs_singly_t*)kmalloc_a(sizeof(fs_singly_t));
+      root_nodes[i].singly = (fs_singly_t*)kmalloc(sizeof(fs_singly_t));
 
-      //allocate the doubly typedef   
-      root_nodes[i].doubly = (fs_doubly_t*)kmalloc_a(sizeof(fs_doubly_t));
+      //allocate the doubly typedef
+      //~ root_nodes[i].doubly = (fs_doubly_t*)kmalloc_a(sizeof(fs_doubly_t));
+      root_nodes[i].doubly = (fs_doubly_t*)kmalloc(sizeof(fs_doubly_t));
 
     //if this file has a singly set, a doubly set, and a triply set
     }else if(nBlocks >= BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY&&
             nBlocks < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY + BLOCKS_TRIPLY)
     {
-      //allocate the singly typedef    
-      root_nodes[i].singly = (fs_singly_t*)kmalloc_a(sizeof(fs_singly_t));
+      //allocate the singly typedef
+      //~ root_nodes[i].singly = (fs_singly_t*)kmalloc_a(sizeof(fs_singly_t));
+      root_nodes[i].singly = (fs_singly_t*)kmalloc(sizeof(fs_singly_t));
 
-      //allocate the doubly typedef   
-      root_nodes[i].doubly = (fs_doubly_t*)kmalloc_a(sizeof(fs_doubly_t));    
+      //allocate the doubly typedef
+      //~ root_nodes[i].doubly = (fs_doubly_t*)kmalloc_a(sizeof(fs_doubly_t));
+      root_nodes[i].doubly = (fs_doubly_t*)kmalloc(sizeof(fs_doubly_t));
 
-      //allocate the triply typedef   
-      root_nodes[i].triply = (fs_triply_t*)kmalloc_a(sizeof(fs_triply_t));    
+      //allocate the triply typedef
+      //~ root_nodes[i].triply = (fs_triply_t*)kmalloc_a(sizeof(fs_triply_t));
+      root_nodes[i].triply = (fs_triply_t*)kmalloc(sizeof(fs_triply_t));
     }
-    
+
     /* This section copies the file's data into the blocks of the node
      *
      * ((u32int)(root_nodes[i].length / BLOCK_SIZE) + 1) calculates the
@@ -377,7 +379,7 @@ fs_node_t *initialise_initrd(u32int location)
        *
        * (u32int*)block points to the address of the rootnodes[i].blocks[a]
        * e.g. &rootnodes[i].blocks[a]
-       * 
+       *
        * then the *(u32int*)block is the value of that address, i.e. it impersonates
        * that it (u32int block) is rootnodes[i].blocks[a], although
        * they are found at different memory locations, same concept with hard links */

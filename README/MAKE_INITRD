@@ -1,0 +1,9 @@
+To create the initrd of JS-OS on a unix-like operating system, use the script 'make_initrd.sh' in the directory <file_path>/JS-OS/initrd/. The usage is as follows:
+
+If there is a file, for example 'test.txt' to create an initrd of it, type:
+./make_initrd.sh test.txt <what you want the file to be called in the initrd>
+
+For example: './make_initrd.sh test.txt text_file', the initrd will be edited with 'test.txt' in it and will have the name 'text_file' in the initrd itself.
+
+./make_initrd supports multiple files by stringing the arguments.
+For example two files to initrd: './make_initrd file1 name1 file2 name2' ...ect.

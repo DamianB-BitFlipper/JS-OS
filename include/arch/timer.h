@@ -1,7 +1,7 @@
 /*
  * timer.h
  * 
- * Copyright 2013 JS <js@duck-squirell>
+ * Copyright 2013 JS-OS <js@duck-squirell>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,7 +33,10 @@ typedef struct{
   u8int day;
   u8int month;
   u8int year;
+  u8int century;
 }datetime_t;
+
+#define POSIX_YEAR       1970
 
 extern u32int globalFreq;
 
@@ -48,5 +51,8 @@ void mSleep(u32int milliseconds);
 
 /*gets the RTC clock time*/
 datetime_t getDatetime();
+
+/*returns the current time in POSIX time*/
+u32int posix_time();
 
 #endif //TIMER_H

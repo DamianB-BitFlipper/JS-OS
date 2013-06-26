@@ -1,5 +1,5 @@
 /*
- * sound.h
+ * elf_test.c
  * 
  * Copyright 2013 JS-OS <js@duck-squirell>
  * 
@@ -21,19 +21,9 @@
  * 
  */
 
-#ifndef SOUND
-#define SOUND
+//this file is used for testing elf binary execution
+int main(void)
+{
 
-#include <system.h>
-
-/*make the audio beep at frequency for milliseconds time*/
-void beep(int frequency, int milliseconds);
-
-/*Plays a note using a char array to type note*/
-void playNote(char *note, int milliseconds);
-
-/*Songs and tunes*/
-//~ void song_pacman(int tempo);
-void song_pacman(); //pacman tune
-
-#endif
+  return 0;
+}

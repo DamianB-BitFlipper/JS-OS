@@ -1,7 +1,7 @@
 /*
  * k_programs.c
  *
- * Copyright 2013 JS <js@duck-squirell>
+ * Copyright 2013 JS-OS <js@duck-squirell>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -1415,8 +1415,6 @@ void program_rm(char *arguments)
     root_nodes[dirent2->ino].write = 0;
     root_nodes[dirent2->ino].readdir = 0;
     root_nodes[dirent2->ino].finddir = 0;
-    root_nodes[dirent2->ino].open = 0;
-    root_nodes[dirent2->ino].close = 0;
     root_nodes[dirent2->ino].impl = 0;
     root_nodes[dirent2->ino].ptr = 0;
 
@@ -1508,6 +1506,8 @@ void program_now(char *arguments)
   time = getDatetime();
 
   k_printf("%d:%d:%d %d/%d/%d\n", time.hour, time.min, time.sec, time.month, time.day, time.year);
+
+  k_printf("cent: %d\n", time.century);
 }
 
 void program_help(char *arguements)

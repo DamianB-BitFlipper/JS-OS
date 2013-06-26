@@ -1,7 +1,7 @@
 /*
  * graphics.c
  * 
- * Copyright 2013 JS <js@duck-squirell>
+ * Copyright 2013 JS-OS <js@duck-squirell>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,7 +38,6 @@ u32int VGA_bpp;
 
 s32int isVESAon;
 u8int *double_buffer; //double buffer for VESA video
-
 
 void (*putPixel)(int, int, int);
 void (*clearScreen)(void); //function pointer for clearing the screen

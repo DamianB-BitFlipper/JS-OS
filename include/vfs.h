@@ -1,7 +1,7 @@
 /*
- * fs.h
+ * vfs.h
  * 
- * Copyright 2013 JS <js@duck-squirell>
+ * Copyright 2013 JS-OS <js@duck-squirell>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,8 +38,8 @@ struct fs_node;
 // are called.
 typedef u32int (*read_type_t)(struct fs_node*,u32int,u32int,u8int*);
 typedef u32int (*write_type_t)(struct fs_node*,u32int,u32int,u8int*);
-typedef void (*open_type_t)(struct fs_node*);
-typedef void (*close_type_t)(struct fs_node*);
+//~ typedef void (*open_type_t)(struct fs_node*);
+//~ typedef void (*close_type_t)(struct fs_node*);
 typedef struct dirent * (*readdir_type_t)(struct fs_node*,u32int);
 typedef struct fs_node * (*finddir_type_t)(struct fs_node*,char *name);
 
@@ -82,8 +82,8 @@ typedef struct fs_node
   
   read_type_t read;         //function to file read event
   write_type_t write;       //function to file write event
-  open_type_t open;         //function to file open event
-  close_type_t close;       //function to file close event
+  //~ open_type_t open;         //function to file open event
+  //~ close_type_t close;       //function to file close event
   readdir_type_t readdir;   //function to file readdir event
   finddir_type_t finddir;   //function to file finddir event
   struct fs_node *ptr;      //used by mountpoints and symlinks.
@@ -92,7 +92,7 @@ typedef struct fs_node
 struct dirent
 {
   u32int ino;               //inode number. Required by POSIX.
-  u16int rec_len;           //bytes from begining of this dirent to end of this dirent, size of file
+  u16int rec_len;           //bytes from begining of this dirent to end of this dirent, size of dirent
   u8int name_len;           //the number of bytes of charachters in the name
   u8int file_type;          //a flag that states what type of file this dirent is (ie: a file, pipe, directory, etc.)
   char *name;               //filename, remember to kmalloc this to give it an address, or else it will page fault
@@ -107,9 +107,13 @@ extern fs_node_t *fs_root; // The root of the filesystem.
 // , not file nodes.
 u32int read_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer);
 u32int write_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer);
-void open_fs(fs_node_t *node, u8int read, u8int write);
-void close_fs(fs_node_t *node);
+FILE *open_fs(char *filename, fs_node_t *dir);
+u32int *close_fs(FILE *file);
+
+/*fs_node_t *node is the directory node to search in, returns dirent of file at the index input*/
 struct dirent *readdir_fs(fs_node_t *node, u32int index);
+
+/*fs_node_t *node is the directory node to search in, returns fs_node_t of file the the name input*/
 fs_node_t *finddir_fs(fs_node_t *node, char *name);
 
 /*creates a directory in the ramdisk filesystem*/

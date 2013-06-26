@@ -1,7 +1,7 @@
 /*
  * fdc.h
  * 
- * Copyright 2013 JS <js@duck-squirell>
+ * Copyright 2013 JS-OS <js@duck-squirell>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,16 +34,10 @@
 extern u32int _FloppyStorage;
 
 /*initialize the floppy disk*/
-u32int init_floopy();
+u32int init_floppy();
 
-/*initialize the floppy dma*/
-u32int init_floppy_dma();
-
-/*set the dam to read*/
-void floppy_dma_read();
-
-/*set the dma to write*/
-void floppy_dma_write();
+/*set the floppy dma*/
+u32int set_floppy_dma(u8int dir);
 
 /*waits untill the floppy irq has been recieved*/
 void floppy_wait_irq();
@@ -82,7 +76,7 @@ u32int floppy_calibrate(u8int drive);
 void floppy_motor(u32int state, u8int drive);
 
 /*read data from the floppy*/
-u8int *floppy_read(u32int sectorLBA, u32int size);
+u8int *floppy_read(u32int sectorLBA, u32int size, u32int *output);
 
 /*write data to the floppy*/
 u8int *floppy_write(u32int *data, u32int size, u32int sectorLBA);
@@ -94,9 +88,12 @@ u32int floppy_seek(u32int cyl, u8int head);
 void floppy_read_sector(u8int head, u8int track, u8int sector, u32int size);
 
 /*write data to a specific sector*/
-void floppy_write_sector(u8int head, u8int track, u8int sector, u32int size);
+void floppy_write_sector(u8int head, u8int track, u8int sector);
 
 /*change floppy drives*/
 u32int floppy_change_drive(u8int drive);
+
+/*calculates the number of times the head will switch, floppies can switch up to twice before reset*/
+u32int floppy_nhead_switches(u32int sector, u32int size);
 
 #endif //FDC_H

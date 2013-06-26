@@ -1,4 +1,10 @@
 #any temporary files that libre office has
 .~lock.*
+
 #custom scripts for my IDE
 my_*
+
+#ignore backup files created by my IDE
+\#*\#
+.#*
+*emacs*
