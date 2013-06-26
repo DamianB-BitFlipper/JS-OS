@@ -117,30 +117,8 @@ int main(struct multiboot *mboot_ptr, u32int initial_stack)
   k_printf("The CMOS time is:\n\t%d:%d:%d %d/%d/%d\n",n.hour, n.min, n.sec, n.month, n.day, n.year);
 
   greeting_message();
-  //~ ext2_set_block_group(FLOPPY_SIZE - EXT2_SBLOCK_OFF);
 
-  ext2_create_file(0, 0, 17 * EXT2_BLOCK_SZ);
-  
-  //u8int *datas, *out, location;
-  //datas = (u8int*)kmalloc(10);
-  //out = (u8int*)kmalloc(10);
-
-  //location = 2;
-
-  //u32int nu;
-  //for(nu = 0; nu < 10; nu++)
-  //{
-    //*(datas + nu) = nu;
-    //*(out + nu) = 0;
-  //}
-
-  //floppy_write((u32int*)datas, 10, location);
-  //floppy_read(location, 10, (u32int*)out);
-
-  //for(nu = 0; nu < 10; nu++)
-  //{
-    //k_printf("%h ", *(out + nu));
-  //}  
+  ext2_initialize(FLOPPY_SIZE - EXT2_SBLOCK_OFF);
   
   addShellIndent();
 

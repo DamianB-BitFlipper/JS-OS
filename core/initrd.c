@@ -39,7 +39,7 @@ char *path; //a character array containing the path from root to the current dir
 extern u32int initrd_location;
 extern u32int initrd_end;
 
-struct dirent dirent;
+static struct dirent dirent;
 
 u32int initrd_read(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
 {
@@ -234,7 +234,7 @@ struct dirent *initrd_readdir(fs_node_t *dirNode, u32int index)
 
 fs_node_t *initrd_finddir(fs_node_t *dirNode, char *name)
 {
-  if (dirNode == initrd_root && !strcmp(name, "/") )
+  if(dirNode == initrd_root && !strcmp(name, "/"))
     return initrd_dev;
 
   if(dirNode->flags == FS_DIRECTORY)
@@ -252,14 +252,17 @@ fs_node_t *initrd_finddir(fs_node_t *dirNode, char *name)
         //the input name matches to the dirent2.name that we got
         if(!strcmp(name, dirent2->name))
         {
+          kfree(dirent2->name);
           return &root_nodes[dirent2->ino];
         }
       }
+
+      kfree(dirent2->name);
     }
 
   }
 
-  //no file found
+  //no file found, error
   return 0;
 }
 
@@ -271,15 +274,12 @@ fs_node_t *initialise_initrd(u32int location)
 
   //size = the size of the initrd module (address of end - address of start), end and start are defined by the bootloader
   memcpy(tempLoc, location, initrd_end - initrd_location);
-  //~ memcpy(fs_location, location, initrd_end - initrd_location);
 
   // Initialise the main and file header pointers and populate the root directory.
   initrd_header = (initrd_header_t *)tempLoc; //first part of location is the number of headers (in struct)
-  //~ initrd_header = (initrd_header_t *)fs_location; //first part of location is the number of headers (in struct)
 
   //the location offset with the struct that contains the number of headers
   file_headers = (initrd_file_header_t *)(tempLoc + sizeof(initrd_header_t));
-  //~ file_headers = (initrd_file_header_t *)(fs_location + sizeof(initrd_header_t));
 
   // Initialise the root directory.
   initrd_root = (fs_node_t*)kmalloc(sizeof(fs_node_t));
@@ -293,7 +293,7 @@ fs_node_t *initialise_initrd(u32int location)
   initrd_root->ptr = 0;
   initrd_root->impl = 0;
 
-  //allocate space for the root nodes, 0x20000 is presumably 128 dirs with 256 files in each at max
+  //allocate space for the root nodes, default 32KB size
   root_nodes = (fs_node_t*)kmalloc(sizeof(fs_node_t) * (0x8000));
   nroot_nodes = initrd_header->nfiles;
 

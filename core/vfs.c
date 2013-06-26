@@ -222,7 +222,7 @@ u32int *block_of_set(fs_node_t *node, u32int block_number)
     return &node->doubly->singly->blocks[block_number];
 
   //if the block is in the triply set
-  }else if(block_number >= BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY&&
+  }else if(block_number >= BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY &&
           block_number < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY + BLOCKS_TRIPLY)
   {
     return &node->triply->doubly->singly->blocks[block_number];
@@ -283,8 +283,6 @@ fs_node_t *createFile(fs_node_t *parentNode, char *name, u32int size)
 
 int addHardLinkToDir(fs_node_t *hardlink, fs_node_t *directory, char *name)
 {
-  //this part adds a harlink to this directory with the name .. for the parent directory
-  u32int dirINode = directory->inode;
   u32int fileINode = hardlink->inode;
 
   struct dirent dirent;
@@ -326,7 +324,7 @@ int addHardLinkToDir(fs_node_t *hardlink, fs_node_t *directory, char *name)
       }
 
       //if the offset (i) + the length of the contents in the struct dirent is greater than what a direcotory can hold, exit function before page fault happens
-      if(i + dirent.rec_len >= directory->length)
+      if(b * BLOCK_SIZE + i + dirent.rec_len >= directory->length)
       {
         //failed, out of directory left over space
         return 1;
@@ -429,7 +427,6 @@ fs_node_t *createDirectory(fs_node_t *parentNode, char *name)
 
 int addFileToDir(fs_node_t *dirNode, fs_node_t *fileNode)
 {
-  u32int dirINode = dirNode->inode;
   u32int fileINode = fileNode->inode;
 
   struct dirent dirent;
@@ -475,7 +472,7 @@ int addFileToDir(fs_node_t *dirNode, fs_node_t *fileNode)
       }
 
       //if the offset (i) + the length of the contents in the struct dirent is greater than what a direcotory can hold, exit function before page fault happens
-      if(i + dirent.rec_len >= dirNode->length)
+      if(b * BLOCK_SIZE + i + dirent.rec_len >= dirNode->length)
       {
         //failed, out of directory left over space
         return 1;

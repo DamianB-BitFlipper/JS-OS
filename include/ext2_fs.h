@@ -25,8 +25,8 @@
 #ifndef FLOPPY_FS
 #define FLOPPY_FS
 
-///*FLOPPY DISK LAYOUT SCHEME
-///* Block    Offset    Length            Description
+// *          FLOPPY DISK LAYOUT SCHEME
+// * Block    Offset    Length            Description
 // * byte     0         512               bytes boot record (if present)
 // * byte     512       512               bytes additional boot record data (if present)
 // *
@@ -147,7 +147,8 @@ enum EXT2_DIRENT
   EXT2_BLOCK_DEV,
   EXT2_FIFO,
   EXT2_SOCKET,
-  EXT2_SYMLINK
+  EXT2_SYMLINK,
+  EXT2_MOUNTPOINT
 };
 
 typedef struct ext2_superblock
@@ -158,6 +159,7 @@ typedef struct ext2_superblock
   u32int first_data_block;
   u32int block_size;
   u32int blocks_per_group;
+  u32int inodes_per_group;
   u32int mtime; //mount time
   u32int wtime; //write time
   u32int utime; //unmount time
@@ -192,14 +194,18 @@ typedef struct ext2_group_descriptor
   u16int free_inodes;
   u16int used_dirs;
   u16int pad;
-  u32int reserved[3];
+  u32int inode_table_size;  //the amount of EXT2_BLOCK_SZ the inode table is
+  u32int gdesc_location;
+  u32int reserved;
 }ext2_group_descriptor_t;
 
 typedef struct ext2_inode
 {
+  u32int inode;
   u16int mode;
+  u32int type;
   u16int uid;
-  u16int size;
+  u32int size;
   u32int atime;
   u32int ctime;
   u32int mtime;
@@ -215,7 +221,7 @@ typedef struct ext2_inode
   u16int dir_acl;
   u16int fragment_addr;
   u16int osd2[3];
-  u8int reserved[20];
+  u8int reserved[14];
 }ext2_inode_t;
 
 struct ext2_dirent
@@ -224,7 +230,7 @@ struct ext2_dirent
   u16int rec_len;           //bytes from begining of this dirent to end of this dirent, size of file
   u8int name_len;           //the number of bytes of charachters in the name
   u8int file_type;          //a flag that states what type of file this dirent is (ie: a file, pipe, directory, etc.)
-  char *name;               //filename, remember to kmalloc this to give it an address, or else it will page fault
+  char *name;           //filename, remember to kmalloc this to give it an address, or else it will page fault
 };
 
 /*set the block group of a floppy*/
@@ -237,22 +243,49 @@ void ext2_sblock_set_data(ext2_superblock_t *data, u32int reserved_blocks, u32in
 /*set the default group descriptor data*/
 void ext2_set_gdesc_table(ext2_group_descriptor_t *data);
 
-/*write specific data to the ext2 file system meta data header sectors*/
-void *ext2_edit_block_headers(u32int header, u32int block_group);
-
 /*place the meta data (sblock and gdesc) into the ram to be easily read*/
 u32int ext2_read_meta_data(ext2_superblock_t **sblock, ext2_group_descriptor_t **gdesc);
 
 /*create a file*/
 ext2_inode_t *ext2_create_file(ext2_inode_t *parentNode, char *name, u32int size);
 
+/*create a directory*/
+ext2_inode_t *ext2_create_dir(ext2_inode_t *parentNode, char *name);
+
 /*formats the block bitmap by flipping the correct bits*/
-u32int *ext2_format_block_bitmap(u32int location, u32int blocks_used);
+u32int *ext2_format_block_bitmap(ext2_group_descriptor_t *gdesc, u32int blocks_used);
 
 /*writes the locations of the blocks to the inode entries blocks data*/
 u32int ext2_inode_entry_blocks(ext2_inode_t *inode, ext2_group_descriptor_t *gdesc, u32int *block_locations, u32int blocks_used);
 
-/*read a data block with its designated number*/
-u32int ext2_read_data_block(u32int number);
+/*write an inode data to the inode table*/
+u32int ext2_data_to_inode_table(ext2_inode_t *data, ext2_group_descriptor_t *gdesc, ext2_superblock_t *sblock);
+
+/*creates a singly block*/
+u32int ext2_singly_create(u32int *block_locations, u32int offset, u32int nblocks, ext2_group_descriptor_t *gdesc);
+
+/*creates a doubly block*/
+u32int ext2_doubly_create(u32int *block_locations, u32int offset, u32int nblocks, ext2_group_descriptor_t *gdesc);
+
+/*adds a file to a directory*/
+u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, char *name);
+
+/*returns a number of an open inode*/
+s32int ext2_find_open_inode(ext2_group_descriptor_t *gdesc);
+
+/*read this block in the block set of a file's inode*/
+u32int ext2_block_of_set(ext2_inode_t *file, u32int block_number, u32int *block_output);
+
+/*add a hardlink to a directory*/
+u32int ext2_add_hardlink_to_dir(ext2_inode_t *directory, ext2_inode_t *hardlink, char *name);
+
+/*returns the inode data at a specific locaiton*/
+u32int ext2_inode_from_inode_table(u32int inode_number, ext2_inode_t *output, ext2_group_descriptor_t *gdesc);
+
+/*initialize the ext2 filesystem*/
+u32int ext2_initialize(u32int size);
+
+/*find a dirent by index from a directory*/
+struct ext2_dirent *ext2_dirent_from_dir(ext2_inode_t *dir, u32int index);
 
 #endif
