@@ -148,6 +148,7 @@ enum EXT2_DIRENT
   EXT2_FIFO,
   EXT2_SOCKET,
   EXT2_SYMLINK,
+  EXT2_HARDLINK,
   EXT2_MOUNTPOINT
 };
 
@@ -233,6 +234,10 @@ struct ext2_dirent
   char *name;           //filename, remember to kmalloc this to give it an address, or else it will page fault
 };
 
+
+//adding a hardlink to a directory is exactly the same as adding a file to a directory, so I just make an alias
+#define ext2_add_hardlink_to_dir(parent_dir, file, filename)    (ext2_add_file_to_dir(parent_dir, file, EXT2_HARDLINK, filename))
+
 /*set the block group of a floppy*/
 u32int ext2_set_block_group(u32int size);
 
@@ -247,7 +252,7 @@ void ext2_set_gdesc_table(ext2_group_descriptor_t *data);
 u32int ext2_read_meta_data(ext2_superblock_t **sblock, ext2_group_descriptor_t **gdesc);
 
 /*create a file*/
-ext2_inode_t *ext2_create_file(ext2_inode_t *parentNode, char *name, u32int size);
+ext2_inode_t *ext2_create_file(ext2_inode_t *parent_dir, char *name, u32int size);
 
 /*create a directory*/
 ext2_inode_t *ext2_create_dir(ext2_inode_t *parentNode, char *name);
@@ -268,16 +273,13 @@ u32int ext2_singly_create(u32int *block_locations, u32int offset, u32int nblocks
 u32int ext2_doubly_create(u32int *block_locations, u32int offset, u32int nblocks, ext2_group_descriptor_t *gdesc);
 
 /*adds a file to a directory*/
-u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, char *name);
+u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, u32int file_type, char *name);
 
 /*returns a number of an open inode*/
-s32int ext2_find_open_inode(ext2_group_descriptor_t *gdesc);
+u32int ext2_find_open_inode(ext2_group_descriptor_t *gdesc);
 
 /*read this block in the block set of a file's inode*/
 u32int ext2_block_of_set(ext2_inode_t *file, u32int block_number, u32int *block_output);
-
-/*add a hardlink to a directory*/
-u32int ext2_add_hardlink_to_dir(ext2_inode_t *directory, ext2_inode_t *hardlink, char *name);
 
 /*returns the inode data at a specific locaiton*/
 u32int ext2_inode_from_inode_table(u32int inode_number, ext2_inode_t *output, ext2_group_descriptor_t *gdesc);
@@ -287,5 +289,8 @@ u32int ext2_initialize(u32int size);
 
 /*find a dirent by index from a directory*/
 struct ext2_dirent *ext2_dirent_from_dir(ext2_inode_t *dir, u32int index);
+
+/*set the current directory the system is in*/
+u32int ext2_set_current_dir(ext2_inode_t *directory);
 
 #endif

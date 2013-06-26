@@ -27,13 +27,17 @@
 
 #define BLOCKS_TO_SECTORS(blocks)          ((blocks * EXT2_BLOCK_SZ) / SECTOR_SIZE)
 
-//patch is a variable that offsets all writings to the floppy, when the fdc driver can write to sector 3
-u32int patch = 0;
+//the global path for the current directory
+char *ext2_path;
 
 //defaults (logged as user) for permisions files need to have in order to be accesed
 u32int _Rlogged = EXT2_I_RUSR, _Wlogged = EXT2_I_WUSR, _Xlogged = EXT2_I_XUSR;
 
 static ext2_inode_t *__create_root__(void);
+static ext2_inode_t *__create_file__(u32int size);
+static ext2_inode_t *__create_dir__(ext2_superblock_t *sblock, ext2_group_descriptor_t *gdesc);
+static char *__get_name_of_dir__(ext2_inode_t *directory);
+
 static struct ext2_dirent dirent;
 
 u32int ext2_read(ext2_inode_t *node, u32int offset, u32int size, u8int *buffer)
@@ -89,6 +93,13 @@ u32int *ext2_format_block_bitmap(ext2_group_descriptor_t *gdesc, u32int blocks_u
     
   u32int *output;
   output = (u32int*)kmalloc(blocks_used * sizeof(u32int));
+
+  if(blocks_used == 2)
+  {
+    k_printf("forwvere\n");
+    //~ kfree(output);
+    //~ for(;;);
+  }
 
   memset(output, 0x0, blocks_used * sizeof(u32int));
   
@@ -151,6 +162,7 @@ u32int *ext2_format_block_bitmap(ext2_group_descriptor_t *gdesc, u32int blocks_u
   }
 
   kfree(block_bitmap);
+  kfree(output);
 
   //if we did not exit yet, there must be no space
   return 0;
@@ -336,8 +348,8 @@ u32int ext2_data_to_inode_table(ext2_inode_t *data, ext2_group_descriptor_t *gde
   
   kfree(buffer);
 
-  //sucess
-  return 0;
+  //sucess!, return where we put it
+  return off;
  
 }
 
@@ -409,7 +421,6 @@ ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name)
 
 struct ext2_dirent *ext2_dirent_from_dir(ext2_inode_t *dir, u32int index)
 {
-
   if(dir->type == EXT2_DIR) //just to check if the input node is a directory
   {
 
@@ -678,21 +689,23 @@ u32int ext2_block_of_set(ext2_inode_t *file, u32int block_number, u32int *block_
 
 }
 
-u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, char *filename)
+u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, u32int file_type, char *filename)
 {
-
   struct ext2_dirent dirent;
 
   u32int lengthOfName = strlen(filename);
+
+  if(lengthOfName > 255)
+    lengthOfName = 255;
 
   dirent.ino = file->inode;
 
   //The size of this whole struct basically
   dirent.rec_len = sizeof(dirent.ino) + sizeof(dirent.rec_len) + sizeof(dirent.name_len) + sizeof(dirent.file_type) + lengthOfName + 1; //+1 is NULL terminating \000
   dirent.name_len = (u8int)lengthOfName;
-  dirent.file_type = file->type;
-  
-  lengthOfName = lengthOfName > 255 ? 255 : lengthOfName;
+  dirent.file_type = file_type;
+
+  k_printf("dirent.name is :%d\n", *dirent.name);
 
   //+1 being the \000 NULL termination 0 byte at the end of the string
   dirent.name = (char*)kmalloc(lengthOfName + 1);
@@ -701,19 +714,19 @@ u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, char *
   memcpy(dirent.name, filename, lengthOfName); //fileNode->name already had a \000 termination zero
   *(dirent.name + lengthOfName) = 0; //Just in case add a \000 at the end
 
-  u32int i, b, *block;
+  u32int i, b, *block, location;
 
   block = (u32int*)kmalloc(EXT2_BLOCK_SZ);
 
   /*In this section, we find a valid offset (i) and block number (b)
    * to an open dirent space
    *
-   * length - 1 because if length == EXT2_BLOCK size, there should be only one
+   * length - 1 because if length == EXT2_BLOCK_SZ, there should be only one
    * block checked, but w/o that -1, 2 will be checked */
   for(b = 0; b <= (u32int)((parent_dir->size - 1) / EXT2_BLOCK_SZ); b++)
   {
     i = 0;
-    ext2_block_of_set(parent_dir, b, block);
+    location = ext2_block_of_set(parent_dir, b, block);
 
     //this dir has not blocks assigned
     if(!block)
@@ -724,10 +737,10 @@ u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, char *
     }
 
     //loop until we hit the end of the current block or get an open dirent
-    while(*(u16int*)(*(u32int*)block + i + sizeof(dirent.ino)))
+    while(*(u16int*)((u8int*)block + i + sizeof(dirent.ino)))
     {
       //increase i with the rec_len that we get by moving fileheader sizeof(dirent.ino) (4 bytes) and reading its value
-      i = i + *(u16int*)(*(u32int*)block + i + sizeof(dirent.ino));
+      i = i + *(u16int*)((u8int*)block + i + sizeof(dirent.ino));
 
       //if the offset (i) + the length of the contents in the struct dirent is greater than what a block can hold, exit and go to new block
       if(i + dirent.rec_len >= EXT2_BLOCK_SZ)
@@ -748,7 +761,7 @@ u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, char *
     }
 
     //if i is a valid offset, do not go to a new block, just exit
-    if(!*(u16int*)(*(u32int*)block + i + sizeof(dirent.ino)))
+    if(!*(u16int*)((u8int*)block + i + sizeof(dirent.ino)))
     {
       break;
     }
@@ -756,29 +769,59 @@ u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, char *
   }
 
   //assigns the contents of the struct dirent to the directory contents location
-  memcpy((u32int*)(*(u32int*)block + i), &dirent, dirent.rec_len - dirent.name_len);
+  memcpy((u8int*)block + i, &dirent, dirent.rec_len - dirent.name_len);
 
-  strcpy((char*)(*(u32int*)block + i + sizeof(dirent.ino) + sizeof(dirent.rec_len) + sizeof(dirent.name_len) + sizeof(dirent.file_type)), dirent.name);
+  strcpy((u8int*)block + i + sizeof(dirent.ino) + sizeof(dirent.rec_len) + sizeof(dirent.name_len) + sizeof(dirent.file_type), dirent.name);
 
+  floppy_write(block, EXT2_BLOCK_SZ, location);
 
   kfree(block);
+
+  k_printf("PLEASE DONT SHOWWWWW!!!!\n");
+
+  //TODO freeing this causes assertion
   kfree(dirent.name);
+
+  k_printf("FREEE==========================================================\n");
 
 }
 
-ext2_inode_t *ext2_create_dir(ext2_inode_t *parentNode, char *name)
+ext2_inode_t *ext2_create_dir(ext2_inode_t *parent_dir, char *name)
 {
   ext2_superblock_t *sblock;  
-  ext2_group_descriptor_t *gdesc;
-  
-  //a new directory will consist of one block for the '.' and '..' directories
-  u32int blocks_used = 1;
+  ext2_group_descriptor_t *gdesc; 
 
   ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc);
 
-  k_printf("sblock total blocks = %d, gdesc: BB %d\n", (u32int)(sblock->total_blocks / sblock->blocks_per_group), gdesc->block_bitmap);
+  ext2_inode_t *dir;
+  dir = __create_dir__(sblock, gdesc);
 
-  u32int *block_locations;
+  /*initrd_root (sblock->first_inode) is the "mother root" directory, a directory
+   * that contains root and only root directory, if the parentNode is
+   * initrd_root, then we are creating root, and root has its own special
+   * hard links that are made outside of this function, else, make those hard
+   * links */
+  if(parent_dir->inode != sblock->first_inode)
+  {
+    ext2_add_file_to_dir(parent_dir, dir, dir->type, name);
+
+    ext2_add_hardlink_to_dir(dir, dir, "."); //adds hardlink for the current directory
+    ext2_add_hardlink_to_dir(parent_dir, dir, ".."); //adds hardlink for the parent directory
+
+  }
+
+  // free all of the data
+  kfree(sblock);
+  kfree(gdesc);
+
+  return dir;
+}
+
+static ext2_inode_t *__create_dir__(ext2_superblock_t *sblock, ext2_group_descriptor_t *gdesc)
+{
+ 
+  //a new directory will consist of one block for the '.' and '..' directories
+  u32int blocks_used = 1, *block_locations;
 
   block_locations = ext2_format_block_bitmap(gdesc, blocks_used);
   
@@ -817,31 +860,12 @@ ext2_inode_t *ext2_create_dir(ext2_inode_t *parentNode, char *name)
 
   floppy_write((u32int*)gdesc, sizeof(ext2_group_descriptor_t), gdesc->gdesc_location);
 
-  /*initrd_root (sblock->first_inode) is the "mother root" directory, a directory
-   * that contains root and only root directory, if the parentNode is
-   * initrd_root, then we are creating root, and root has its own special
-   * hard links that are made outside of this function, else, make those hard
-   * links */
-  if(parentNode->inode != sblock->first_inode)
-  {
-    ext2_add_file_to_dir(parentNode, data, name);
-
-    ext2_add_hardlink_to_dir(data, data, "."); //adds hardlink for the current directory
-    ext2_add_hardlink_to_dir(parentNode, data, ".."); //adds hardlink for the parent directory
-
-  }
-
-  // free all of the data
-  kfree(sblock);
-  kfree(gdesc);
   kfree(block_locations);
-  //~ kfree(data);
-
+  
   return data;
-
 }
 
-s32int ext2_find_open_inode(ext2_group_descriptor_t *gdesc)
+u32int ext2_find_open_inode(ext2_group_descriptor_t *gdesc)
 {
   u32int i = 0;
 
@@ -851,8 +875,6 @@ s32int ext2_find_open_inode(ext2_group_descriptor_t *gdesc)
   data = (ext2_inode_t*)kmalloc(gdesc->inode_table_size * EXT2_BLOCK_SZ);
 
   floppy_read(gdesc->inode_table_id, gdesc->inode_table_size * EXT2_BLOCK_SZ, (u32int*)data);
-
-  //TODO it asserts from something here
 
   while(data[i].inode || data[i].nlinks)
   {
@@ -866,117 +888,37 @@ s32int ext2_find_open_inode(ext2_group_descriptor_t *gdesc)
     }
   }
 
-  gdesc->free_inodes--;
-
   //after we exit the while loop, 'i' is the open inode
   return i;
 
 }
 
-u32int ext2_add_hardlink_to_dir(ext2_inode_t *directory, ext2_inode_t *hardlink, char *name)
+ext2_inode_t *ext2_create_file(ext2_inode_t *parent_dir, char *name, u32int size)
 {
-  struct ext2_dirent dirent;
+  ext2_inode_t *file;
+  file = __create_file__(size);
 
-  u32int lengthOfName = strlen(name);
+  ext2_add_file_to_dir(parent_dir, file, file->type, name);
 
-  if(lengthOfName > 255)
-    lengthOfName = 255;
-
-  dirent.ino = hardlink->inode;
-
-  //The size of this whole struct basically
-  dirent.rec_len = sizeof(dirent.ino) + sizeof(dirent.rec_len) + sizeof(dirent.name_len) + sizeof(dirent.file_type) + lengthOfName + 1; //+1 is NULL terminating \000
-  dirent.name_len = (u8int)lengthOfName;
-  dirent.file_type = hardlink->type;
-
-  //+1 being the \000 NULL termination 0 byte at the end of the string  
-  dirent.name = (char*)kmalloc(lengthOfName + 1);
-
-  //with strcp this dirent.name includes the \000 at the end
-  memcpy(dirent.name, name, lengthOfName + 1); //name already had a \000 termination zero
-  *(dirent.name + lengthOfName) = 0; //Just in case add a \000
-
-  u32int i, b, *block, location;
-
-  block = (u32int*)kmalloc(EXT2_BLOCK_SZ);
-
-  for(b = 0; b <= (u32int)((directory->size - 1) / EXT2_BLOCK_SZ); b++) // length - 1 because if length == EXT2_BLOCK size, there should be only one block checked, but w/o that -1, 2 will be checked
-  {
-    i = 0;
-
-    location = ext2_block_of_set(directory, b, block);
-
-    //this dir has not blocks assigned
-    if(!block)
-    {
-      kfree(block);
-      kfree(dirent.name);
-      return 0;
-    }
-
-    while(*(u16int*)((u8int*)block + i + sizeof(dirent.ino)))
-    {
-      //increase i with the rec_len that we get by moving fileheader sizeof(dirent.ino) (4 bytes) and reading its value
-      i = i + *(u16int*)((u8int*)block + i + sizeof(dirent.ino));
-
-      //if the offset (i) + the length of the contents in the struct dirent is greater than what a block can hold, exit and go to new block
-      if(i + dirent.rec_len >= BLOCK_SIZE)
-      {
-        break;
-      }
-
-      //if the offset (i) + the length of the contents in the struct dirent is greater than what a direcotory can hold, exit function before page fault happens
-      if(b * EXT2_BLOCK_SZ + i + dirent.rec_len >= directory->size)
-      {
-        //failed, out of directory left over space
-        return 1;
-      }
-
-    }
-
-    //if i is a valid offset, dont go to a new block, just exit
-    if(!*(u16int*)((u8int*)block + i + sizeof(dirent.ino)))
-    {
-      break;
-    }
-
-  }
-
-  //assigns the contents of the struct dirent to the directory contents location
-  memcpy((u8int*)block + i, &dirent, dirent.rec_len - dirent.name_len);
-
-  //copy the name over
-  strcpy(((char*)block + i + sizeof(dirent.ino) + sizeof(dirent.rec_len) + sizeof(dirent.name_len) + sizeof(dirent.file_type)), dirent.name);
-
-  floppy_write(block, EXT2_BLOCK_SZ, location);
-
-  kfree(block);
-  kfree(dirent.name);
-
-  //success!
-  return 0;
-
+  return file;
 }
 
-
-ext2_inode_t *ext2_create_file(ext2_inode_t *parentNode, char *name, u32int size)
+static ext2_inode_t *__create_file__(u32int size)
 {
   ext2_superblock_t *sblock;  
   ext2_group_descriptor_t *gdesc;
-  
-  ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc);
-
-  k_printf("sblock total blocks = %d, gdesc: BB %d\n", (u32int)(sblock->total_blocks / sblock->blocks_per_group), gdesc->block_bitmap);
-
-  u32int *block_locations;
-
+   
   //the the number of blocks the initial size will take up
   u32int blocks_used = (u32int)((size - 1) / EXT2_BLOCK_SZ) + 1;
+  
+  ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc);
+  
+  u32int *block_locations;
   block_locations = ext2_format_block_bitmap(gdesc, blocks_used);
   
   ext2_inode_t *data;
   data = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
-
+  
   data->inode = ext2_find_open_inode(gdesc);
   data->mode = EXT2_I_RUSR | EXT2_I_WUSR | EXT2_I_RGRP | EXT2_I_WGRP | EXT2_I_ROTH | EXT2_I_WOTH;
   data->type = EXT2_FILE;
@@ -987,10 +929,12 @@ ext2_inode_t *ext2_create_file(ext2_inode_t *parentNode, char *name, u32int size
   data->mtime = posix_time();
   data->dtime = 0;
   data->gid = 0;
-  data->nlinks = 1;    //number of hard links
+  data->nlinks = 1;    //number of hard links, itself
   data->nblocks = BLOCKS_TO_SECTORS(blocks_used);   //blocks of 512 bytes
   data->flags = 0;
   data->osd1 = EXT2_OS_JSOS;
+  
+  k_printf("INODE ENTRY BLOCKS\n");
 
   ext2_inode_entry_blocks(data, gdesc, block_locations, blocks_used);
   
@@ -998,24 +942,32 @@ ext2_inode_t *ext2_create_file(ext2_inode_t *parentNode, char *name, u32int size
   data->fire_acl = 0;
   data->dir_acl = 0;
   data->fragment_addr = 0;
+  
+  k_printf("INODE data to table\n");
 
   //add the inode data to the table
   ext2_data_to_inode_table(data, gdesc, sblock);
-
+  
   //decrement the number of free inodes and blocks there are
   gdesc->free_inodes--;
   gdesc->free_blocks -= blocks_used;
-
+  
   floppy_write((u32int*)gdesc, sizeof(ext2_group_descriptor_t), gdesc->gdesc_location);
+  
+  k_printf("file to dir\n");
 
+  //add the file to the parent directory
+  //~ ext2_add_file_to_dir(parentNode, data, name);
+  
   // free all of the data
   kfree(sblock);
   kfree(gdesc);
+
+  k_printf("IMMMMM TRAIYIIKFDSJALKFSLJ trying");
   kfree(block_locations);
-  kfree(data);
+  k_printf("ROGER: and out\n");
 
   return data;
-  
 }
 
 u32int ext2_write(ext2_inode_t *node, u32int offset, u32int size, u8int *buffer)
@@ -1173,7 +1125,7 @@ u32int ext2_set_block_group(u32int size)
     
     //!write the primary super block to the floppy (SB)
     ext2_sblock_set_data(sblock_data, 0,
-                          group_offset + (u32int)((EXT2_SBLOCK_OFF) / SECTOR_SIZE) + patch,
+                          group_offset + (u32int)((EXT2_SBLOCK_OFF) / SECTOR_SIZE),
                           EXT2_ERRORS_CONTINUE, 0, "Primary");
     sblock_data->total_inodes = nblock_groups * inodes_per_group;
     sblock_data->total_blocks = (u32int)(orig_size / EXT2_BLOCK_SZ);
@@ -1182,7 +1134,7 @@ u32int ext2_set_block_group(u32int size)
     sblock_data->block_group_number = nbgroup; //the block group number that this superblock is located in
     
     floppy_write((u32int*)sblock_data, sizeof(ext2_superblock_t),
-                  group_offset + (u32int)((EXT2_SBLOCK_OFF) / SECTOR_SIZE) + patch); //write to sector 2
+                  group_offset + (u32int)((EXT2_SBLOCK_OFF) / SECTOR_SIZE)); //write to sector 2
 
     //!write zeros over the block bitmap and inode bitmap (BB + IB)
     /*Pertaining to block bitmap, inode bitmap, inode table:
@@ -1196,15 +1148,15 @@ u32int ext2_set_block_group(u32int size)
      *
      * the multiplication in front of the first EXT2_BLOCK_SZ is an additional offset
      * for example, the inode bitmap is 1 block after the block bitmap, so another EXT2_BLOCK_SZ offset is necessary*/
-    block_BB = group_offset + (u32int)((EXT2_SBLOCK_OFF + EXT2_BLOCK_SZ + EXT2_BLOCK_SZ * nblock_groups) / SECTOR_SIZE) + patch;
-    block_IB = group_offset + (u32int)((EXT2_SBLOCK_OFF + 2 * EXT2_BLOCK_SZ + EXT2_BLOCK_SZ * nblock_groups) / SECTOR_SIZE) + patch;
+    block_BB = group_offset + (u32int)((EXT2_SBLOCK_OFF + EXT2_BLOCK_SZ + EXT2_BLOCK_SZ * nblock_groups) / SECTOR_SIZE);
+    block_IB = group_offset + (u32int)((EXT2_SBLOCK_OFF + 2 * EXT2_BLOCK_SZ + EXT2_BLOCK_SZ * nblock_groups) / SECTOR_SIZE);
 
     k_printf("BB %d IB %d\n", block_BB, block_IB);
   
     floppy_write((u32int*)mem, 2 * EXT2_BLOCK_SZ, block_BB); //write to sector 3 and 5
   
     //!write zeros over the inode tables (IT)
-    block_IT = group_offset + (u32int)((EXT2_SBLOCK_OFF + 3 * EXT2_BLOCK_SZ + EXT2_BLOCK_SZ * nblock_groups) / SECTOR_SIZE) + patch;
+    block_IT = group_offset + (u32int)((EXT2_SBLOCK_OFF + 3 * EXT2_BLOCK_SZ + EXT2_BLOCK_SZ * nblock_groups) / SECTOR_SIZE);
     
     floppy_write((u32int*)i_tables, sizeof(ext2_inode_t) * inodes_per_group, block_IT); //write to sector 5
     //~ k_printf("IT size: %d, %h, loc: %d\n", inode_table_size, sizeof(ext2_inode_t) * inodes_per_group, block_IT);
@@ -1239,7 +1191,7 @@ u32int ext2_set_block_group(u32int size)
     }
 
     floppy_write((u32int*)gdesc_buf, nblock_groups * SECTOR_SIZE,
-                group_offset + (u32int)((EXT2_SBLOCK_OFF + EXT2_BLOCK_SZ) / SECTOR_SIZE) + patch); //write starting from sector 2
+                group_offset + (u32int)((EXT2_SBLOCK_OFF + EXT2_BLOCK_SZ) / SECTOR_SIZE)); //write starting from sector 2
   }
   
   kfree(mem);
@@ -1249,6 +1201,126 @@ u32int ext2_set_block_group(u32int size)
   kfree(gdesc_table_data);
   kfree(gdesc_buf);
 
+  //sucess!
+  return 0;
+}
+
+static char *__get_name_of_dir__(ext2_inode_t *directory)
+{
+  ext2_superblock_t *sblock;  
+  ext2_group_descriptor_t *gdesc;
+  
+  ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc);
+  
+  struct ext2_dirent *dirent;
+  //get the inode of the parent, always the second index (1) starting from 0
+  dirent = ext2_dirent_from_dir(directory, 1);
+
+  ext2_inode_t *parent;
+  parent = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
+  ext2_inode_from_inode_table(dirent->ino, parent, gdesc);
+
+  u32int i = 0;
+  do
+  {
+    dirent = ext2_dirent_from_dir(parent, i);
+  }
+  while(dirent->file_type != EXT2_DIR || dirent->ino != directory->inode);
+
+  kfree(sblock);
+  kfree(gdesc);
+  kfree(parent);
+}
+
+//TODO make set current directory work
+u32int ext2_set_current_dir(ext2_inode_t *directory)
+{
+  kfree(ext2_path); //frees the contents of the char array pointer, ext2_path
+  
+  currentDir_inode = directory->inode; //sets the value of the dir inode to the cuurentDir_inode
+  
+  ext2_inode_t *node = directory;
+  ext2_inode_t *copy;
+  
+  u32int count = 0, totalCharLen = 0;
+  
+  /*starts from the current directory, goes backwards by getting the node
+   * of the parent (looking up the data in ".." dir), adding its namelen
+   * to the u32int totalCharLen and getting its parent, etc.
+   *
+   *once the parent is the same as the child, that only occurs with the
+   * root directory, so we should exit */
+  do
+  {
+    copy = node;
+  
+    if(copy)
+    {
+      //+1 being the preceding "/" to every dir that will be added later
+      totalCharLen = totalCharLen + strlen(copy->name) + 1; 
+      count++;
+    }
+  
+    node = finddir_fs(copy, "..");
+  }
+  while(node != copy);
+  
+  if(count > 1) //if we are in a directory other than root
+  {
+    /*we have the root dir
+     * that does not need a preceding "/" because we will get "//"
+     * which is ugly and not right. Also the "/" before the very first
+     * directory should not be there because it will look ugly with
+     * the root "/". So the total totalCharLen should be
+     * -2 to count for both of those instances*/
+    totalCharLen -= 2;
+  
+    ext2_path = (char*)kmalloc(totalCharLen + 1); //+1 is for the \000 NULL terminating 0
+    //~ strcpy(ext2_path, "/");
+  
+    //reset the copy back to the top (current directory)
+    copy = directory;
+  
+    u32int i, charsWritten = 0, nameLen;
+    for(i = 0; i < count; i++)
+    {
+      nameLen = strlen(copy->name);
+  
+      /* i < count - 2 is a protection from drawing the preceding "/"
+       * on the first two dirs in the ext2_path (root and one more). The first two dirs will
+       * allways be drawn the last two times (we write the dir names to ext2_path from
+       * current dir (top) to root (bottom)), thus if i is less
+       * than the count - 2, that means we are not yet at the last
+       * two drawing and it is ok to have a precedding "/" */
+      if(copy != fs_root && i < count - 2)
+      {
+        memcpy(ext2_path + (totalCharLen - charsWritten - nameLen - 1), "/", 1);
+        memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), copy->name, nameLen);
+        charsWritten = charsWritten + nameLen + 1; //increment charsWritten with the "/<name>" string we just wrote, +1 is that "/"
+  
+      }else{
+        memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), copy->name, nameLen);
+        charsWritten = charsWritten + nameLen; //increment charsWritten with the "/" string we just wrote
+  
+      }
+  
+      //find the parent of copy
+      node = finddir_fs(copy, "..");
+      copy = node;
+    }
+  
+    *(ext2_path + totalCharLen) = 0; //added \000 to the end of ext2_path
+  
+  }else{
+    //keep it simple, if root is the only directory, copy its name manually
+    ext2_path = (char*)kmalloc(2); //2 chars beign "/" for root and \000
+  
+    *(ext2_path) = '/';
+    *(ext2_path + 1) = 0; //added \000 to the end
+  }
+  
+  k_printf("\n\nEXT2_PATH is: %s\n", ext2_path);
+  
   //sucess!
   return 0;
 }
@@ -1301,7 +1373,6 @@ static ext2_inode_t *__create_root__()
   // free all of the data
   kfree(sblock);
   kfree(gdesc);
-  kfree(data);
 
   return data;
 }
@@ -1310,24 +1381,29 @@ u32int ext2_initialize(u32int size)
 {
   ext2_set_block_group(size);
 
-  ext2_inode_t *root;
+  ext2_inode_t *root, *file;
 
   //create the root directory
   root = ext2_create_dir(__create_root__(), "/");
 
   ext2_add_hardlink_to_dir(root, root, "."); //adds hardlink to root
   ext2_add_hardlink_to_dir(root, root, ".."); //adds hardlink to root
+  ext2_add_hardlink_to_dir(root, root, "ppoopp");
 
-  ext2_create_file(root, "winner", 2 * EXT2_BLOCK_SZ);
+  //~ file = ext2_create_file(root, "file_que_gana", 2 * EXT2_BLOCK_SZ);
+  //~ ext2_add_file_to_dir(root, file, "file_que_es_nuevo");
+  
+  file = ext2_create_dir(root, "winner");
 
   struct ext2_dirent *test;
 
-  test = ext2_dirent_from_dir(root, 2);
+  test = ext2_dirent_from_dir(root, 3);
 
   k_printf("the magic name is: %s\n", test->name);
 
   k_printf("freeing\n");
   kfree(test->name);
+  kfree(file);
   kfree(root);
-
+  
 }

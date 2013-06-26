@@ -34,6 +34,6 @@ printf "\nUse 'continue' instead of 'run' in gdb\n\n"
 
 objcopy --only-keep-debug kernel kernel.sym
 
-qemu-system-x86_64 -vga std -soundhw pcspk -s -S -fda "$floppy_image" -fdb "$storage_image"
+qemu-system-x86_64 -m 64M -vga std -soundhw pcspk -s -S -fda "$floppy_image" -fdb "$storage_image"
 
 
