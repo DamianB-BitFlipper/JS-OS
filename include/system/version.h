@@ -26,7 +26,7 @@
 
 //OS information
 #define OS_VERSION "0.0.2a"
-#define OS_NAME "JS-OS"
+#define OS_NAME "JS-OS (testing)"
 #define OS_BUILD_DATE __DATE__
 #define OS_BUILD_TIME __TIME__
 

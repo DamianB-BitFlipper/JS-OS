@@ -746,7 +746,7 @@ void k_restore()
 {
   int i;
 
-  for (i = 0*80; i < 25*80 + 1; i++)
+  for(i = 0; i < 25 * 80 + 1; i++)
   {
     //~ screen[i] = video_memory[i];
     video_memory[i] = 3840 + screen[i];
@@ -928,4 +928,34 @@ void k_setprintf(int x, int y, char *text, void *arg1, void *arg2, void *arg3)
   move_cursor();
 
   scroll();  
+}
+
+void k_warning(char *warning, char *version)
+{
+  u32int warn_len = strlen(warning);
+  u32int vers_len = strlen(version);
+
+  //TODO add a safety cap for warning_length to be no greater than 80
+  u32int warning_length = warn_len + vers_len;
+
+  //the amount of spaces before and after the warning to center the warning on the display
+  u32int space_length = (80 - warning_length) / 2;
+
+  //1 more for the \000 at the end
+  char *message = (char*)kmalloc(81);
+
+  //set the beginning spaces
+  memset(message, 0x0, space_length);
+  memcpy(message + space_length, warning, warn_len);
+  memcpy(message + space_length + warn_len, version, vers_len);
+  memset(message + space_length + warn_len + vers_len, 0x0, space_length);
+
+  //add the \000 at the end
+  *(message + 80) = 0;
+
+  setScreenYMinMax(2, 25); //reserve 2 rows
+
+  k_setprintf(0, 1, "%Cr%cbk%s%Cbk%cw ", message, 0, 0);
+
+  kfree(message);
 }

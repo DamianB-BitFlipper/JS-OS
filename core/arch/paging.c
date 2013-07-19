@@ -235,7 +235,7 @@ void initialise_paging(u32int memorySize)
 
   // Now allocate those pages we mapped earlier.
   for(i = KHEAP_START; i < KHEAP_START + KHEAP_INITIAL_SIZE; i += 0x1000)
-    alloc_frame( get_page(i, TRUE, kernel_directory), 0, 0);
+    alloc_frame(get_page(i, TRUE, kernel_directory), 0, 0);
 
   // Before we enable paging, we must register our page fault handler.
   register_interrupt_handler(14, page_fault);

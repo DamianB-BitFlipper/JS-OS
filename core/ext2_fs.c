@@ -29,6 +29,8 @@
 
 //the global path for the current directory
 char *ext2_path;
+u32int ext2_current_dir_inode = 0;
+ext2_inode_t *ext2_root;
 
 //defaults (logged as user) for permisions files need to have in order to be accesed
 u32int _Rlogged = EXT2_I_RUSR, _Wlogged = EXT2_I_WUSR, _Xlogged = EXT2_I_XUSR;
@@ -36,7 +38,7 @@ u32int _Rlogged = EXT2_I_RUSR, _Wlogged = EXT2_I_WUSR, _Xlogged = EXT2_I_XUSR;
 static ext2_inode_t *__create_root__(void);
 static ext2_inode_t *__create_file__(u32int size);
 static ext2_inode_t *__create_dir__(ext2_superblock_t *sblock, ext2_group_descriptor_t *gdesc);
-static char *__get_name_of_dir__(ext2_inode_t *directory);
+static char *__get_name_of_dir__(ext2_inode_t *directory, ext2_inode_t *inode_table);
 
 static struct ext2_dirent dirent;
 
@@ -91,15 +93,18 @@ u32int *ext2_format_block_bitmap(ext2_group_descriptor_t *gdesc, u32int blocks_u
   block_bitmap = (u8int*)kmalloc(EXT2_BLOCK_SZ);
   floppy_read(location, EXT2_BLOCK_SZ, (u32int*)block_bitmap);
     
-  u32int *output;
+  u32int *output;//, *test;
   output = (u32int*)kmalloc(blocks_used * sizeof(u32int));
+  //~ test = (u32int*)kmalloc(8);
 
-  if(blocks_used == 2)
-  {
-    k_printf("forwvere\n");
+  //~ if(blocks_used == 2)
+  //~ {
     //~ kfree(output);
+    //~ k_printf("out is GOOOOOOONE\n");
+    //~ kfree(test);
+    //~ k_printf("I'M a FREEEEEE super freee\n");
     //~ for(;;);
-  }
+  //~ }
 
   memset(output, 0x0, blocks_used * sizeof(u32int));
   
@@ -819,7 +824,6 @@ ext2_inode_t *ext2_create_dir(ext2_inode_t *parent_dir, char *name)
 
 static ext2_inode_t *__create_dir__(ext2_superblock_t *sblock, ext2_group_descriptor_t *gdesc)
 {
- 
   //a new directory will consist of one block for the '.' and '..' directories
   u32int blocks_used = 1, *block_locations;
 
@@ -838,7 +842,7 @@ static ext2_inode_t *__create_dir__(ext2_superblock_t *sblock, ext2_group_descri
   data->mtime = posix_time();
   data->dtime = 0;
   data->gid = 0;
-  data->nlinks = 2;    //number of hard links (itself and the '.' directory
+  data->nlinks = 2;    //number of hard links (itself and the '.' directory)
   data->nblocks = BLOCKS_TO_SECTORS(blocks_used);   //blocks of 512 bytes
   data->flags = 0;
   data->osd1 = EXT2_OS_JSOS;
@@ -915,7 +919,7 @@ static ext2_inode_t *__create_file__(u32int size)
   
   u32int *block_locations;
   block_locations = ext2_format_block_bitmap(gdesc, blocks_used);
-  
+
   ext2_inode_t *data;
   data = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
   
@@ -1205,31 +1209,186 @@ u32int ext2_set_block_group(u32int size)
   return 0;
 }
 
-static char *__get_name_of_dir__(ext2_inode_t *directory)
+/* static char *__get_name_of_dir__(ext2_inode_t *directory)
+ * {
+ *   ext2_superblock_t *sblock;  
+ *   ext2_group_descriptor_t *gdesc;
+ *   
+ *   ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc);
+ *   
+ *   struct ext2_dirent *dirent;
+ *   //get the inode of the parent, always the second index (1) starting from 0
+ *   dirent = ext2_dirent_from_dir(directory, 1);
+ * 
+ *   ext2_inode_t *parent;
+ *   parent = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
+ *   ext2_inode_from_inode_table(dirent->ino, parent, gdesc);
+ * 
+ *   u32int i = 0;
+ *   do
+ *   {
+ *     dirent = ext2_dirent_from_dir(parent, i);
+ *   }
+ *   while(dirent->file_type != EXT2_DIR || dirent->ino != directory->inode);
+ * 
+ *   //save the name to a different buffer so we can free the dirent
+ *   char *name;
+ *   name = (char*)kmalloc(dirent->name_len + 1); //+1 for the \000
+ *   memcpy(name, dirent->name, dirent->name_len);
+ * 
+ *   *(name + dirent->name_len) = 0;
+ * 
+ *   kfree(sblock);
+ *   kfree(gdesc);
+ *   kfree(parent);
+ *   kfree(dirent);
+ * 
+ *   return name;
+ * }
+ * 
+ * //TODO make set current directory work
+ * u32int ext2_set_current_dir(ext2_inode_t *directory)
+ * {
+ *   kfree(ext2_path); //frees the contents of the char array pointer, ext2_path
+ *   
+ *   currentDir_inode = directory->inode; //sets the value of the dir inode to the cuurentDir_inode
+ *   
+ *   ext2_inode_t *node = directory;
+ *   ext2_inode_t *copy;
+ *   
+ *   u32int count = 0, totalCharLen = 0;
+ *   char *name;
+ * 
+ *   /\*starts from the current directory, goes backwards by getting the node
+ *    * of the parent (looking up the data in ".." dir), adding its namelen
+ *    * to the u32int totalCharLen and getting its parent, etc.
+ *    *
+ *    *once the parent is the same as the child, that only occurs with the
+ *    * root directory, so we should exit *\/
+ *   do
+ *   {
+ *     //TODO make this more efficient
+ *     copy = node;
+ *     name = __get_name_of_dir__(copy);
+ *     if(copy)
+ *     {
+ *       //+1 being the preceding "/" to every dir that will be added later
+ *       totalCharLen = totalCharLen + strlen(name) + 1; 
+ *       count++;
+ *     }
+ *   
+ *     node = finddir_fs(copy, "..");
+ *     kfree(name);
+ *   }
+ *   while(node != copy);
+ *   
+ *   if(count > 1) //if we are in a directory other than root
+ *   {
+ *     /\*we have the root dir
+ *      * that does not need a preceding "/" because we will get "//"
+ *      * which is ugly and not right. Also the "/" before the very first
+ *      * directory should not be there because it will look ugly with
+ *      * the root "/". So the total totalCharLen should be
+ *      * -2 to count for both of those instances*\/
+ *     totalCharLen -= 2;
+ *   
+ *     ext2_path = (char*)kmalloc(totalCharLen + 1); //+1 is for the \000 NULL terminating 0
+ *     //~ strcpy(ext2_path, "/");
+ *   
+ *     //reset the copy back to the top (current directory)
+ *     copy = directory;
+ *   
+ *     u32int i, charsWritten = 0, nameLen;
+ *     for(i = 0; i < count; i++)
+ *     {
+ *       nameLen = strlen(copy->name);
+ *   
+ *       /\* i < count - 2 is a protection from drawing the preceding "/"
+ *        * on the first two dirs in the ext2_path (root and one more). The first two dirs will
+ *        * allways be drawn the last two times (we write the dir names to ext2_path from
+ *        * current dir (top) to root (bottom)), thus if i is less
+ *        * than the count - 2, that means we are not yet at the last
+ *        * two drawing and it is ok to have a precedding "/" *\/
+ *       if(copy != fs_root && i < count - 2)
+ *       {
+ *         memcpy(ext2_path + (totalCharLen - charsWritten - nameLen - 1), "/", 1);
+ *         memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), copy->name, nameLen);
+ *         charsWritten = charsWritten + nameLen + 1; //increment charsWritten with the "/<name>" string we just wrote, +1 is that "/"
+ *   
+ *       }else{
+ *         memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), copy->name, nameLen);
+ *         charsWritten = charsWritten + nameLen; //increment charsWritten with the "/" string we just wrote
+ *   
+ *       }
+ *   
+ *       //find the parent of copy
+ *       node = finddir_fs(copy, "..");
+ *       copy = node;
+ *     }
+ *   
+ *     *(ext2_path + totalCharLen) = 0; //added \000 to the end of ext2_path
+ *   
+ *   }else{
+ *     //keep it simple, if root is the only directory, copy its name manually
+ *     ext2_path = (char*)kmalloc(2); //2 chars beign "/" for root and \000
+ *   
+ *     *(ext2_path) = '/';
+ *     *(ext2_path + 1) = 0; //added \000 to the end
+ *   }
+ *   
+ *   k_printf("\n\nEXT2_PATH is: %s\n", ext2_path);
+ *   
+ *   //sucess!
+ *   return 0;
+ * } */
+
+ext2_inode_t *ext2_inode_from_offset(u32int inode_number, ext2_inode_t *inode_table)
 {
-  ext2_superblock_t *sblock;  
-  ext2_group_descriptor_t *gdesc;
-  
-  ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc);
-  
+  ext2_inode_t *buffer;
+  buffer = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
+
+  memcpy(buffer, (u8int*)inode_table + sizeof(ext2_inode_t) * inode_number, sizeof(ext2_inode_t));
+
+  //sucess!
+  return buffer;
+}
+
+ext2_inode_t *ext2_get_inode_table(ext2_group_descriptor_t *gdesc)
+{
+  ext2_inode_t *buffer;
+  buffer = (ext2_inode_t*)kmalloc(gdesc->inode_table_size * EXT2_BLOCK_SZ);
+
+  floppy_read(gdesc->inode_table_id, gdesc->inode_table_size * EXT2_BLOCK_SZ, (u32int*)buffer);
+
+  return buffer;
+}
+
+static char *__get_name_of_dir__(ext2_inode_t *directory, ext2_inode_t *inode_table) 
+{
   struct ext2_dirent *dirent;
   //get the inode of the parent, always the second index (1) starting from 0
   dirent = ext2_dirent_from_dir(directory, 1);
 
   ext2_inode_t *parent;
-  parent = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
-  ext2_inode_from_inode_table(dirent->ino, parent, gdesc);
+  parent = ext2_inode_from_offset(dirent->ino, inode_table);
 
   u32int i = 0;
   do
   {
     dirent = ext2_dirent_from_dir(parent, i);
+    i++;
   }
   while(dirent->file_type != EXT2_DIR || dirent->ino != directory->inode);
 
-  kfree(sblock);
-  kfree(gdesc);
+  char *name;
+  name = dirent->name;
+  //~ name = (char*)kmalloc(dirent->name_len + 1);
+  //~ *(name + dirent->name_len) = 0;
+
   kfree(parent);
+  kfree(dirent);
+
+  return name;
 }
 
 //TODO make set current directory work
@@ -1237,13 +1396,26 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
 {
   kfree(ext2_path); //frees the contents of the char array pointer, ext2_path
   
-  currentDir_inode = directory->inode; //sets the value of the dir inode to the cuurentDir_inode
+  ext2_current_dir_inode = directory->inode; //sets the value of the dir inode to the cuurentDir_inode
+
+  ext2_superblock_t *sblock;  
+  ext2_group_descriptor_t *gdesc;
   
-  ext2_inode_t *node = directory;
+  ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc);
+
+  ext2_inode_t *inode_table;
+  inode_table = ext2_get_inode_table(gdesc);
+  
+  ext2_inode_t *node;
+  node = directory;
   ext2_inode_t *copy;
   
-  u32int count = 0, totalCharLen = 0;
-  
+  u32int count = 0, totalCharLen = 0, allocated_names = 15, *name_locs;
+
+  name_locs = (u32int*)kmalloc(allocated_names * sizeof(u32int));
+
+  char *name;
+
   /*starts from the current directory, goes backwards by getting the node
    * of the parent (looking up the data in ".." dir), adding its namelen
    * to the u32int totalCharLen and getting its parent, etc.
@@ -1253,15 +1425,30 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
   do
   {
     copy = node;
-  
+    name = __get_name_of_dir__(directory, inode_table);
+
     if(copy)
     {
       //+1 being the preceding "/" to every dir that will be added later
-      totalCharLen = totalCharLen + strlen(copy->name) + 1; 
+      totalCharLen = totalCharLen + strlen(name) + 1; 
       count++;
     }
-  
-    node = finddir_fs(copy, "..");
+
+    *(name_locs + count) = *(u32int*)&name;
+
+    if(count == allocated_names)
+    {
+      allocated_names *= 2;
+
+      u32int *tmp;
+      tmp = (u32int*)kmalloc(allocated_names);
+      memcpy(tmp, name_locs, allocated_names / 2);
+      
+      kfree(name_locs);
+      name_locs = tmp;
+    }
+
+    node = ext2_file_from_dir(copy, "..");
   }
   while(node != copy);
   
@@ -1284,7 +1471,7 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
     u32int i, charsWritten = 0, nameLen;
     for(i = 0; i < count; i++)
     {
-      nameLen = strlen(copy->name);
+      nameLen = strlen(*(name_locs + i));
   
       /* i < count - 2 is a protection from drawing the preceding "/"
        * on the first two dirs in the ext2_path (root and one more). The first two dirs will
@@ -1292,20 +1479,18 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
        * current dir (top) to root (bottom)), thus if i is less
        * than the count - 2, that means we are not yet at the last
        * two drawing and it is ok to have a precedding "/" */
-      if(copy != fs_root && i < count - 2)
+      if(copy->inode != ext2_root->inode && i < count - 2)
       {
         memcpy(ext2_path + (totalCharLen - charsWritten - nameLen - 1), "/", 1);
-        memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), copy->name, nameLen);
+        memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), *(name_locs + i), nameLen);
         charsWritten = charsWritten + nameLen + 1; //increment charsWritten with the "/<name>" string we just wrote, +1 is that "/"
-  
       }else{
-        memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), copy->name, nameLen);
+        memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), *(name_locs + i), nameLen);
         charsWritten = charsWritten + nameLen; //increment charsWritten with the "/" string we just wrote
-  
       }
   
       //find the parent of copy
-      node = finddir_fs(copy, "..");
+      node = ext2_file_from_dir(copy, "..");
       copy = node;
     }
   
@@ -1321,6 +1506,8 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
   
   k_printf("\n\nEXT2_PATH is: %s\n", ext2_path);
   
+  kfree(name_locs);
+
   //sucess!
   return 0;
 }
@@ -1385,6 +1572,11 @@ u32int ext2_initialize(u32int size)
 
   //create the root directory
   root = ext2_create_dir(__create_root__(), "/");
+  ext2_root = root;
+
+  ext2_path = (char*)kmalloc(2);
+  *(ext2_path) = '/';
+  *(ext2_path + 1) = 0;
 
   ext2_add_hardlink_to_dir(root, root, "."); //adds hardlink to root
   ext2_add_hardlink_to_dir(root, root, ".."); //adds hardlink to root
@@ -1401,9 +1593,10 @@ u32int ext2_initialize(u32int size)
 
   k_printf("the magic name is: %s\n", test->name);
 
+  ext2_set_current_dir(file); 
+
   k_printf("freeing\n");
   kfree(test->name);
   kfree(file);
-  kfree(root);
   
 }
