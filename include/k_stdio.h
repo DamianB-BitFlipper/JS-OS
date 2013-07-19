@@ -121,6 +121,6 @@ void deleteLine(int yValue); // if yValue < 0, then deletes line of cursor_y
 void setScreenYMinMax(int yMinimun, int yMaximum); // if arg is negative, yMin/yMax will not change
 
 /*print a possible non-stable release warning*/
-void k_warning(char *warning, char *version);
+void k_warning(char *warning, char *added_text, u32int row);
 
 #endif // K_STDIO

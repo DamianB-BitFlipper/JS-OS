@@ -864,6 +864,12 @@ static ext2_inode_t *__create_dir__(ext2_superblock_t *sblock, ext2_group_descri
 
   floppy_write((u32int*)gdesc, sizeof(ext2_group_descriptor_t), gdesc->gdesc_location);
 
+  u32int *test;
+  test = (u32int*)kmalloc(EXT2_BLOCK_SZ);
+  floppy_read(60, EXT2_BLOCK_SZ, test);
+
+
+  kfree(test);
   kfree(block_locations);
   
   return data;
