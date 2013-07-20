@@ -234,7 +234,6 @@ struct ext2_dirent
   char *name;           //filename, remember to kmalloc this to give it an address, or else it will page fault
 };
 
-
 //adding a hardlink to a directory is exactly the same as adding a file to a directory, so I just make an alias
 #define ext2_add_hardlink_to_dir(parent_dir, file, filename)    (ext2_add_file_to_dir(parent_dir, file, EXT2_HARDLINK, filename))
 
@@ -292,5 +291,17 @@ struct ext2_dirent *ext2_dirent_from_dir(ext2_inode_t *dir, u32int index);
 
 /*set the current directory the system is in*/
 u32int ext2_set_current_dir(ext2_inode_t *directory);
+
+/*gets a file's inode from a directory*/
+ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name, ext2_inode_t *inode_table);
+
+/*returns an inode with the inode table as input*/
+ext2_inode_t *ext2_inode_from_offset(u32int inode_number, ext2_inode_t *inode_table);
+
+/*returns the whole inode table data*/
+ext2_inode_t *ext2_get_inode_table(ext2_group_descriptor_t *gdesc);
+
+/*writes data to a specific block*/
+u32int ext2_write_block_of_set(ext2_inode_t *file, u32int block_number, u32int *block_data, u32int size);
 
 #endif

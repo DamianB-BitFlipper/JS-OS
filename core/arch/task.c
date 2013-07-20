@@ -445,38 +445,38 @@ u32int fork(u32int priority, u32int burst_time, char *task_Name)
 
   nTasks++;
 
-	stack = (u32int*)task->stack;
+  stack = (u32int*)task->stack;
 
-	// processor data (iret)
-	*--stack = 0x202;	// EFLAGS
-	*--stack = 0x08;	// CS
-	*--stack = 0;	// EIP
+  // processor data (iret)
+  *--stack = 0x202;	// EFLAGS
+  *--stack = 0x08;	// CS
+  *--stack = 0;	// EIP
   task->eip = 0;
 
-	// pusha
-	*--stack = 0;		// EDI
-	*--stack = 0;		// ESI
-	*--stack = 0;		// EBP
+  // pusha
+  *--stack = 0;		// EDI
+  *--stack = 0;		// ESI
+  *--stack = 0;		// EBP
   task->ebp = 0;
-	*--stack = 0;		// NULL
-	*--stack = 0;		// EBX
-	*--stack = 0;		// EDX
-	*--stack = 0;		// ECX
-	*--stack = 0;		// EAX
+  *--stack = 0;		// NULL
+  *--stack = 0;		// EBX
+  *--stack = 0;		// EDX
+  *--stack = 0;		// ECX
+  *--stack = 0;		// EAX
 
-	// data segments
-	*--stack = 0x10;	// DS
-	*--stack = 0x10;	// ES
-	*--stack = 0x10;	// FS
-	*--stack = 0x10;	// GS
+  // data segments
+  *--stack = 0x10;	// DS
+  *--stack = 0x10;	// ES
+  *--stack = 0x10;	// FS
+  *--stack = 0x10;	// GS
 
-	task->id = id;
-	task->stack = (u32int)stack;
-	task->thread = 0;
+  task->id = id;
+  task->stack = (u32int)stack;
+  task->thread = 0;
   task->thread_flags = 0;
-	strcpy(task->name, task_Name);
+  strcpy(task->name, task_Name);
 
-	task->next = 0;
+  task->next = 0;
 
   // Add it to the end of the ready queue.
   // Find the end of the ready queue...
@@ -515,7 +515,7 @@ u32int fork(u32int priority, u32int burst_time, char *task_Name)
     return 0;
   }
 	
-	asm volatile("sti");
+  asm volatile("sti");
 
   return id;
 }
@@ -578,12 +578,12 @@ u32int start_task(u32int priority, u32int burst_time, void (*func)(), void *arg,
   //Take a pointer to this process' task struct for later reference.
   //task_t *parent_task = (task_t*)current_task;
   
-	u32int id = next_pid++;
+  u32int id = next_pid++;
 
-	u32int *stack;
-	task_t *task = (task_t*)kmalloc(sizeof(task_t));
-	task->stack = kmalloc(0x1000) + 0x1000;	// Allocate 4 kilobytes of space
-	task->esp = task->stack;
+  u32int *stack;
+  task_t *task = (task_t*)kmalloc(sizeof(task_t));
+  task->stack = kmalloc(0x1000) + 0x1000;	// Allocate 4 kilobytes of space
+  task->esp = task->stack;
   task->originalStack = task->stack - 0x1000; //set the originalStack to its starting location
 
   // Clone the address space.
@@ -603,43 +603,43 @@ u32int start_task(u32int priority, u32int burst_time, void (*func)(), void *arg,
 
   nTasks++;
 
-	stack = (u32int*)task->stack;
+  stack = (u32int*)task->stack;
 
-	// processor data (iret)
-	*--stack = 0x202;	// EFLAGS
-	*--stack = 0x08;	// CS
-	*--stack = (u32int)func;	// EIP
+  // processor data (iret)
+  *--stack = 0x202;	// EFLAGS
+  *--stack = 0x08;	// CS
+  *--stack = (u32int)func;	// EIP
   task->eip = (u32int)func;
 
-	// pusha
-	*--stack = 0;		// EDI
-	*--stack = 0;		// ESI
-	*--stack = 0;		// EBP
+  // pusha
+  *--stack = 0;		// EDI
+  *--stack = 0;		// ESI
+  *--stack = 0;		// EBP
   task->ebp = 0;
-	*--stack = 0;		// NULL
-	*--stack = 0;		// EBX
-	*--stack = 0;		// EDX
-	*--stack = 0;		// ECX
-	*--stack = 0;		// EAX
+  *--stack = 0;		// NULL
+  *--stack = 0;		// EBX
+  *--stack = 0;		// EDX
+  *--stack = 0;		// ECX
+  *--stack = 0;		// EAX
 
-	// data segments
-	*--stack = 0x10;	// DS
-	*--stack = 0x10;	// ES
-	*--stack = 0x10;	// FS
-	*--stack = 0x10;	// GS
+  // data segments
+  *--stack = 0x10;	// DS
+  *--stack = 0x10;	// ES
+  *--stack = 0x10;	// FS
+  *--stack = 0x10;	// GS
 
-	task->id = id;
-	task->stack = (u32int)stack;
-	task->thread = func;
+  task->id = id;
+  task->stack = (u32int)stack;
+  task->thread = func;
   task->thread_flags = (u32int)arg;
-	strcpy(task->name, task_Name);
+  strcpy(task->name, task_Name);
 
-	task->next = 0;
+  task->next = 0;
 
   //preempt the task
   preempt_task(task);
 
-	asm volatile("sti");
+  asm volatile("sti");
 
   return id;
 }
@@ -657,15 +657,15 @@ int kill_task(u32int pid)
       task_prev = task_r;
     }
   }
-  
-  if(task_prev == 0)
+
+  //we did not find our task
+  if(!task_prev)
     return 1;
     
   task_r = task_prev->next;
   task_prev->next = task_r->next;
 
   nTasks--;
-  
       
   kfree((void*)task_r);     
   return 0;

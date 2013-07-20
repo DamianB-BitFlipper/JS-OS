@@ -314,6 +314,10 @@ void k_printf(char *c, ...)
         {
           foreColour = DARK_BLUE;
           i++;
+        }else if(c[i+2] == 'b' && c[i+3] == 'r') //brown text
+        {
+          foreColour = BROWN;
+          i++;
         }else if(c[i+2] == 'g') //dark green text
         {
           foreColour = DARK_GREEN;
@@ -340,6 +344,10 @@ void k_printf(char *c, ...)
         }else if(c[i+2] == 'b' && c[i+3] == 'l') //dark blue background
         {
           backColour = DARK_BLUE;
+          i++;
+        }else if(c[i+2] == 'b' && c[i+3] == 'r') //brown background
+        {
+          backColour = BROWN;
           i++;
         }else if(c[i+2] == 'g') //dark green background
         {
@@ -908,6 +916,22 @@ void normalVCursor(int movement) //up and down cursor movement
   move_cursor();
 
   scroll();
+}
+
+void working()
+{
+  asm volatile("sti");
+  init_timer(globalFreq); // Initialise timer to globalFreq-Hz
+
+  //loop untill the OS kills this process
+  for(;;)
+  {
+    //sleep a bit
+    mSleep(400);
+
+    //then print the text
+    k_printf(".");
+  }
 }
 
 //TODO, make this function take variable number of arguments

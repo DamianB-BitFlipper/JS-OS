@@ -860,7 +860,7 @@ u8int *floppy_read(u32int sectorLBA, u32int size, u32int *output)
     return 0; //error
   }
 
-  k_printf("sector: %d [Read]\n", sector);
+  //~ k_printf("sector: %d [Read]\n", sector);
 
   /*after completing floppy_read_sector, the data for that sector should
    * be stored in the dma buffer */

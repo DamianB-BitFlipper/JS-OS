@@ -123,4 +123,7 @@ void setScreenYMinMax(int yMinimun, int yMaximum); // if arg is negative, yMin/y
 /*print a possible non-stable release warning*/
 void k_warning(char *warning, char *added_text, u32int row);
 
+/*prints the same text, used for verbose functions to keep the trail of '.' growing after the ...*/
+void working();
+
 #endif // K_STDIO

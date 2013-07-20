@@ -182,11 +182,18 @@ void program_ascii(char *arguements)
   {
     /*The little_skverl*/
 
-    k_printf("\t  .  _ |  |  _\n");
-    k_printf("\t  )\\|';| @| //\n");
-    k_printf("\t / (/ \\=  |//\n");
-    k_printf("\t \\__:_.=   /\n");
+    k_printf("\t  %cbr.  _%cw |  |  _\n");
+    k_printf("\t  %cbr)\\|';%cw| @| //\n");
+    k_printf("\t %cbr/ (/ \\=%cw  |//\n");
+    k_printf("\t %cbr\\__:_.=%cw   /\n");
     k_printf("\t       |  |    ");
+
+    //the original skverl with out the added coloration
+    //~ k_printf("\t  .  _  |  |  _\n");
+    //~ k_printf("\t  )\\|';| @| //\n");
+    //~ k_printf("\t / (/ \\=  |//\n");
+    //~ k_printf("\t \\__:_.=   /\n");
+    //~ k_printf("\t       |  |    ");
   }else{
     k_printf("Arguement: %s not found\n", arguements);
     k_printf("Usage: ascii -<animal>\nType ascii -list to see list of animals");
