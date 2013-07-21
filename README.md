@@ -14,8 +14,7 @@ high school student and is meant to be a learning/research tool for both the dev
 user. The code is mostly commented and not too difficult to follow.
 
 Using this operating system is meant to be easy and very intuitive. It is currently under
-development and supports preemptive multitasking, interrupts, an ext-2 clone file system
-(supporting up to 16GB files), a bunch of file system utilities, a basic shell, a dynamic
+development and supports preemptive multitasking, interrupts, a full-blown ext2 file system, a floppy disk driver that has support for having persistent storage, an ext2/JS-OS clone file system (supporting up to 16GB files), a bunch of file system utilities, a basic shell, a dynamic
 heap, memory protection, a 32bpp VESA VBE and a VGA driver, a window manager,
 keyboard and mouse driver, and a sound driver.
 

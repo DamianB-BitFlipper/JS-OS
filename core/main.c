@@ -42,6 +42,10 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
 
   k_setprintf(0, 0, "%Cw%cbk  %s %s                                                                    %Cbk%cw ", OS_NAME, OS_VERSION, 0);
 
+  //possible non-stable release warning
+  k_warning("Warning!!! This is NOT a stable release, Latest stable release is version:", OS_VERSION, 2);
+  k_warning(" Latest stable release ID is: ", "12621d1855a0e332600fe7e79d12993ccf248a27          ", 3);
+
   k_printf("Hello World\n");
   k_printf("Welcome to %s, Kernel booted. Running OS.\n", OS_NAME);
 

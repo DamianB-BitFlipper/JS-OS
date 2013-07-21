@@ -32,6 +32,14 @@ char *ext2_path;
 u32int ext2_current_dir_inode = 0;
 ext2_inode_t *ext2_root;
 
+//caches
+ext2_superblock_t *ext2_g_sblock = 0;
+ext2_group_descriptor_t *ext2_g_gdesc = 0;
+ext2_inode_t *ext2_g_inode_table = 0;
+u8int *ext2_g_bb = 0;                                   //the block bitmap
+u8int *ext2_g_ib = 0;                                    //the inode bitmap
+//caches
+
 //defaults (logged as user) for permisions files need to have in order to be accesed
 u32int _Rlogged = EXT2_I_RUSR, _Wlogged = EXT2_I_WUSR, _Xlogged = EXT2_I_XUSR;
 
@@ -96,6 +104,10 @@ u32int ext2_read_meta_data(ext2_superblock_t **sblock, ext2_group_descriptor_t *
   //~ k_printf("junk location %h, actual %h\n", *sblock, sdata);
 
   *gdesc = gdata;
+
+  //TODO make this work with the mutltiple sblocks and gdescs due to possible multiple block groups
+  memcpy(ext2_g_sblock, sdata, sizeof(ext2_superblock_t));
+  memcpy(ext2_g_gdesc, gdata, sizeof(ext2_group_descriptor_t));
 
   //Sucess!
   return 0;
@@ -1278,6 +1290,9 @@ u32int ext2_set_block_group(u32int size)
   ext2_superblock_t *sblock_data;
   sblock_data = (ext2_superblock_t*)kmalloc(sizeof(ext2_superblock_t));
 
+  if(!ext2_g_sblock)
+    ext2_g_sblock = (ext2_superblock_t*)kmalloc(nblock_groups * sizeof(ext2_superblock_t));
+
   //group descriptor data
   ext2_group_descriptor_t *gdesc_table_data;
   //one group desciptor data
@@ -1286,6 +1301,10 @@ u32int ext2_set_block_group(u32int size)
   //the buffer that will hold all of the group descriptors
   u8int *gdesc_buf;
   gdesc_buf = (u8int*)kmalloc(nblock_groups * EXT2_BLOCK_SZ);
+
+  //for the gdesc cache
+  if(!ext2_g_gdesc)
+    ext2_g_gdesc = (ext2_group_descriptor_t*)kmalloc(nblock_groups * (nblock_groups * EXT2_BLOCK_SZ));
   
   //block bitmap, inode bitmap, inode table locations
   u32int block_BB, block_IB, block_IT;
@@ -1296,10 +1315,19 @@ u32int ext2_set_block_group(u32int size)
   mem = (u8int*)kmalloc(2 * EXT2_BLOCK_SZ); //two blocks for the block bitmap and inode bitmap combined
   memset(mem, write_data, 2 * EXT2_BLOCK_SZ);
 
+  if(!ext2_g_bb)
+    ext2_g_bb = (u8int*)kmalloc(nblock_groups * EXT2_BLOCK_SZ);
+
+  if(!ext2_g_ib)
+    ext2_g_ib = (u8int*)kmalloc(nblock_groups * EXT2_BLOCK_SZ);
+
   //inode table data
   u8int *i_tables;
   i_tables = (u8int*)kmalloc(sizeof(ext2_inode_t) * inodes_per_group);
   memset(i_tables, write_data, sizeof(ext2_inode_t) * inodes_per_group);
+
+  if(!ext2_g_inode_table)
+    ext2_g_inode_table = (ext2_inode_t*)kmalloc(nblock_groups * (sizeof(ext2_inode_t) * inodes_per_group));
 
   u32int nbgroup, group_offset;
   for(nbgroup = 0; nbgroup < nblock_groups; nbgroup++)
@@ -1316,7 +1344,9 @@ u32int ext2_set_block_group(u32int size)
     sblock_data->blocks_per_group = (u32int)(blocks_per_group);
     sblock_data->inodes_per_group = inodes_per_group;
     sblock_data->block_group_number = nbgroup; //the block group number that this superblock is located in
-    
+
+    memcpy(ext2_g_sblock + sizeof(ext2_superblock_t) * nbgroup, sblock_data, sizeof(ext2_superblock_t));
+
     floppy_write((u32int*)sblock_data, sizeof(ext2_superblock_t),
                   group_offset + (u32int)((EXT2_SBLOCK_OFF) / SECTOR_SIZE)); //write to sector 2
 
@@ -1336,12 +1366,15 @@ u32int ext2_set_block_group(u32int size)
     block_IB = group_offset + (u32int)((EXT2_SBLOCK_OFF + 2 * EXT2_BLOCK_SZ + EXT2_BLOCK_SZ * nblock_groups) / SECTOR_SIZE);
 
     //~ k_printf("BB %d IB %d\n", block_BB, block_IB);
-  
+    memcpy(ext2_g_bb + EXT2_BLOCK_SZ * nbgroup, mem, EXT2_BLOCK_SZ);
+    memcpy(ext2_g_ib + EXT2_BLOCK_SZ * nbgroup, mem, EXT2_BLOCK_SZ);
+
     floppy_write((u32int*)mem, 2 * EXT2_BLOCK_SZ, block_BB); //write to sector 3 and 5
   
     //!write zeros over the inode tables (IT)
     block_IT = group_offset + (u32int)((EXT2_SBLOCK_OFF + 3 * EXT2_BLOCK_SZ + EXT2_BLOCK_SZ * nblock_groups) / SECTOR_SIZE);
     
+    memcpy(ext2_g_inode_table + sizeof(ext2_inode_t) * inodes_per_group * nbgroup, i_tables, sizeof(ext2_inode_t) * inodes_per_group);
     floppy_write((u32int*)i_tables, sizeof(ext2_inode_t) * inodes_per_group, block_IT); //write to sector 5
     //~ k_printf("IT size: %d, %h, loc: %d\n", inode_table_size, sizeof(ext2_inode_t) * inodes_per_group, block_IT);
   
@@ -1367,14 +1400,16 @@ u32int ext2_set_block_group(u32int size)
       gdesc_table_data->gdesc_location = group_offset + (u32int)((EXT2_SBLOCK_OFF + EXT2_BLOCK_SZ) / SECTOR_SIZE);
 
       //write the actual contents in the beggining of the EXT2_BLOCK_SZ of the buffer
-      memcpy((u32int*)(gdesc_buf + gdesc * SECTOR_SIZE), (u32int*)gdesc_table_data, sizeof(ext2_group_descriptor_t));
+      memcpy((u32int*)(gdesc_buf + gdesc * EXT2_BLOCK_SZ), (u32int*)gdesc_table_data, sizeof(ext2_group_descriptor_t));
 
       //fill the rest of the EXT2_BLOCK_SZ of the buffer that was not used with zeros
-      memset((u32int*)(gdesc_buf + gdesc * SECTOR_SIZE + sizeof(ext2_group_descriptor_t)), 0x0, EXT2_BLOCK_SZ - sizeof(ext2_group_descriptor_t));
+      memset((u32int*)(gdesc_buf + gdesc * EXT2_BLOCK_SZ + sizeof(ext2_group_descriptor_t)), 0x0, EXT2_BLOCK_SZ - sizeof(ext2_group_descriptor_t));
       
     }
 
-    floppy_write((u32int*)gdesc_buf, nblock_groups * SECTOR_SIZE,
+    memcpy(ext2_g_gdesc + nbgroup * nblock_groups * EXT2_BLOCK_SZ, gdesc_buf, nblock_groups * EXT2_BLOCK_SZ);
+
+    floppy_write((u32int*)gdesc_buf, nblock_groups * EXT2_BLOCK_SZ,
                 group_offset + (u32int)((EXT2_SBLOCK_OFF + EXT2_BLOCK_SZ) / SECTOR_SIZE)); //write starting from sector 2
   }
   
@@ -1589,12 +1624,23 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
   return 0;
 }
 
+//TODO make this compatable with the cache
 static ext2_inode_t *__create_root__()
 {
   ext2_superblock_t *sblock;  
   ext2_group_descriptor_t *gdesc;
-  
-  ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc);
+ 
+  u32int update;
+
+  if(!ext2_g_sblock || !ext2_g_gdesc)
+  {
+    ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc);
+    update = TRUE;
+  }else{
+    sblock = ext2_g_sblock;
+    gdesc = ext2_g_gdesc;
+    update = FALSE;
+  }
   
   ext2_inode_t *data;
   data = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
@@ -1626,17 +1672,24 @@ static ext2_inode_t *__create_root__()
   data->dir_acl = 0;
   data->fragment_addr = 0;
 
+  //TODO make this work with cache
   //add the inode data to the table
   ext2_data_to_inode_table(data, gdesc, sblock);
 
+  //TODO check if decrementing this gdesc will also affect the ext2_g_gdesc, it should
   //decrement the number of free inodes and blocks there are
   gdesc->free_inodes--;
 
   floppy_write((u32int*)gdesc, sizeof(ext2_group_descriptor_t), gdesc->gdesc_location);
 
-  // free all of the data
-  kfree(sblock);
-  kfree(gdesc);
+  if(update == TRUE)
+  {
+    memcpy(ext2_g_gdesc, gdesc, sizeof(ext2_group_descriptor_t));
+
+    // free all of the data
+    kfree(sblock);
+    kfree(gdesc);
+  }
 
   return data;
 }
