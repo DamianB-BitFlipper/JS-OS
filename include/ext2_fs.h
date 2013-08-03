@@ -39,7 +39,7 @@
 
 ///Defaults
 #define EXT2_MAGIC           0xEF53
-#define EXT2_BLOCK_SZ        1024         //a default block size of 1024 bytes
+#define EXT2_BLOCK_SZ        1024              //a default block size of 1024 bytes
 #define EXT2_MAX_BLK_GRP_SZ  8 * EXT2_BLOCK_SZ //maximum blocks in a block group, (8192) with block sizes of 1024
 #define EXT2_MAX_INODES_GRP  8 * EXT2_BLOCK_SZ //maximum indoes in a block group, (8192) with block sizes of 1024
 
@@ -99,6 +99,11 @@
 
 //number of blocks in the inode typedef
 #define EXT2_N_BLOCKS        (EXT2_TIND_BLOCK + 1)   //total number of block (15)
+
+//Ext2 open file permisions
+#define EXT2_OPEN_W          0b01
+#define EXT2_OPEN_R          0b10
+#define EXT2_OPEN_RW         0b11
 
 ///Inode mode values
 enum EXT2_IMODE
@@ -234,6 +239,14 @@ struct ext2_dirent
   char *name;           //filename, remember to kmalloc this to give it an address, or else it will page fault
 };
 
+typedef struct ext2_open_files
+{
+  u32int inode;
+  u8int permissions;
+  u32int *data;
+  u32int *next;
+}ext2_open_files_t;
+
 //adding a hardlink to a directory is exactly the same as adding a file to a directory, so I just make an alias
 #define ext2_add_hardlink_to_dir(parent_dir, file, filename)    (ext2_add_file_to_dir(parent_dir, file, EXT2_HARDLINK, filename))
 
@@ -274,9 +287,6 @@ u32int ext2_doubly_create(u32int *block_locations, u32int offset, u32int nblocks
 /*adds a file to a directory*/
 u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, u32int file_type, char *name);
 
-/*returns a number of an open inode*/
-u32int ext2_find_open_inode(ext2_group_descriptor_t *gdesc);
-
 /*read this block in the block set of a file's inode*/
 u32int ext2_block_of_set(ext2_inode_t *file, u32int block_number, u32int *block_output);
 
@@ -303,5 +313,23 @@ ext2_inode_t *ext2_get_inode_table(ext2_group_descriptor_t *gdesc);
 
 /*writes data to a specific block*/
 u32int ext2_write_block_of_set(ext2_inode_t *file, u32int block_number, u32int *block_data, u32int size);
+
+/*gets a dirent from a directory with input data*/
+u32int ext2_find_open_inode(ext2_superblock_t *sblock, ext2_group_descriptor_t *gdesc);
+
+/*returns a list of the blocks the file has*/
+u32int *ext2_block_locs(ext2_inode_t *node);
+
+/*reads a chunk of data in a file and returns it*/
+u32int *ext2_chunk_data(u32int *blocks, u32int nblocks, u32int chunk, u32int *out_chunk_size);
+
+/*returns the blocks in a singly block*/
+u32int *ext2_get_singly(u32int location, u32int *nblocks);
+
+/*returns the blocks in a doubly block*/
+u32int *ext2_get_doubly(u32int location, u32int *nblocks);
+
+/*returns the blocks in a triply block*/
+u32int *ext2_get_triply(u32int location, u32int *nblocks);
 
 #endif

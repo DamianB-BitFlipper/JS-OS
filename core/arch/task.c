@@ -23,10 +23,10 @@
 
 #include <system.h>
 
-//The currently running task.
+//The currently running task
 volatile task_t *current_task;
 
-//The start of the task linked list.
+//The start of the task linked list
 volatile task_t *ready_queue;
 
 //Some externs are needed to access members in paging.c...

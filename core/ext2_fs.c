@@ -27,6 +27,8 @@
 
 #define BLOCKS_TO_SECTORS(blocks)          ((blocks * EXT2_BLOCK_SZ) / SECTOR_SIZE)
 
+#define IS_CONS_BLOCKS(first, second)      (((second - first) / (EXT2_BLOCK_SZ / SECTOR_SIZE)) == 1 ? TRUE : FALSE)
+
 //the global path for the current directory
 char *ext2_path;
 u32int ext2_current_dir_inode = 0;
@@ -51,6 +53,17 @@ static char *__get_name_of_file__(ext2_inode_t *directory, ext2_inode_t *file);
 
 static struct ext2_dirent dirent;
 
+//The start of the open file linked list
+volatile ext2_open_files_t *ext2_open_queue;
+
+enum __block_types__
+{
+  EXT2_DIRECT,
+  EXT2_SINGLY,
+  EXT2_DOUBLY,
+  EXT2_TRIPLY
+};
+
 u32int ext2_read(ext2_inode_t *node, u32int offset, u32int size, u8int *buffer)
 {
   //if the user can read it
@@ -65,11 +78,11 @@ u32int ext2_read(ext2_inode_t *node, u32int offset, u32int size, u8int *buffer)
     if(size + offset > node->size)
       size = node->size - offset;
 
-    u32int blocks_to_read = (size - 1) / EXT2_BLOCK_SZ, i, out;
+    u32int blocks_to_read = ((size - 1) / EXT2_BLOCK_SZ) + 1, i, out;
 
     for(i = 0; i < blocks_to_read; i++)
     {
-      out = ext2_block_of_set(node, i, (u32int*)buffer + i * EXT2_BLOCK_SZ);
+      out = ext2_block_of_set(node, i, (u32int*)(buffer + i * EXT2_BLOCK_SZ));
 
       if(!out)
         return 1; //fail
@@ -106,8 +119,11 @@ u32int ext2_read_meta_data(ext2_superblock_t **sblock, ext2_group_descriptor_t *
   *gdesc = gdata;
 
   //TODO make this work with the mutltiple sblocks and gdescs due to possible multiple block groups
-  memcpy(ext2_g_sblock, sdata, sizeof(ext2_superblock_t));
-  memcpy(ext2_g_gdesc, gdata, sizeof(ext2_group_descriptor_t));
+  //~ memcpy(ext2_g_sblock, sdata, sizeof(ext2_superblock_t));
+  //~ memcpy(ext2_g_gdesc, gdata, sizeof(ext2_group_descriptor_t));
+
+  ext2_g_sblock = sdata;
+  ext2_g_gdesc = gdata;
 
   //Sucess!
   return 0;
@@ -121,9 +137,15 @@ u32int *ext2_format_block_bitmap(ext2_group_descriptor_t *gdesc, u32int blocks_u
   u32int begining_offset = gdesc->inode_table_id + BLOCKS_TO_SECTORS(gdesc->inode_table_size);
 
   u8int *block_bitmap;
-  block_bitmap = (u8int*)kmalloc(EXT2_BLOCK_SZ);
-  floppy_read(location, EXT2_BLOCK_SZ, (u32int*)block_bitmap);
-    
+
+  if(!ext2_g_bb)
+  {
+    block_bitmap = (u8int*)kmalloc(EXT2_BLOCK_SZ);
+    ext2_g_bb = block_bitmap;
+    floppy_read(location, EXT2_BLOCK_SZ, (u32int*)block_bitmap);
+  }else{
+    block_bitmap = ext2_g_bb;
+  }
   u32int *output;//, *test;
   output = (u32int*)kmalloc(blocks_used * sizeof(u32int));
 
@@ -133,6 +155,7 @@ u32int *ext2_format_block_bitmap(ext2_group_descriptor_t *gdesc, u32int blocks_u
   u32int consec_free = 0;
   s32int bit_off;
 
+  //TODO this loop looks for consecutive blocks, if none are found implement non-consecutive block allocation
   u32int off, bit_mask;
   for(off = 0; off < EXT2_BLOCK_SZ; off++)
   {
@@ -179,16 +202,16 @@ u32int *ext2_format_block_bitmap(ext2_group_descriptor_t *gdesc, u32int blocks_u
 
         floppy_write((u32int*)block_bitmap, EXT2_BLOCK_SZ, location);
 
-        kfree(block_bitmap);
+        //purposly not freeing since block_bitmap, regardless of update, is the global variable which should not be cleared
 
-        //TODO make this with a write chunck on floppy for optimizations
+        //TODO in the case of non-consecutive blocks, make this optimized and work
         u32int i, *clear;
-        clear = (u32int*)kmalloc(EXT2_BLOCK_SZ);
+        clear = (u32int*)kmalloc(EXT2_BLOCK_SZ * blocks_used);
 
-        memset(clear, 0x0, EXT2_BLOCK_SZ);
+        memset(clear, 0x0, EXT2_BLOCK_SZ * blocks_used);
 
-        for(i = 0; i < blocks_used; i++)
-          floppy_write(clear, EXT2_BLOCK_SZ, *(output + i));
+        //if we have exited, then all of the blocks are sequential, so write as one big chunk
+        floppy_write(clear, EXT2_BLOCK_SZ * blocks_used, *output);
 
         kfree(clear);
 
@@ -198,7 +221,8 @@ u32int *ext2_format_block_bitmap(ext2_group_descriptor_t *gdesc, u32int blocks_u
 
   }
 
-  kfree(block_bitmap);
+  //purposly not freeing since block_bitmap, regardless of update, is the global variable which should not be cleared
+  //~ kfree(block_bitmap);
   kfree(output);
 
   //if we did not exit yet, there must be no space
@@ -212,13 +236,14 @@ u32int ext2_singly_create(u32int *block_locations, u32int offset, u32int nblocks
 
   location = ext2_format_block_bitmap(gdesc, 1);
     
-  //write the locations of the singly indirect blocks
+  //write the locations of the singly indirect blocks in the singly block in the memory (block_data)
   for(blk = 0; blk < (nblocks < EXT2_NIND_BLOCK ? nblocks : EXT2_NIND_BLOCK); blk++)
     *(block_data + blk) = *(block_locations + offset + blk);
 
-  //write the singly block
+  //write the singly block to the physical floppy disk
   floppy_write(block_data, EXT2_BLOCK_SZ, *location);
 
+  //store the value of location in another place so we can free location and return its location
   value = *location;
 
   kfree(block_data);
@@ -240,7 +265,7 @@ u32int ext2_doubly_create(u32int *block_locaitions, u32int offset, u32int nblock
   //get a new location for the doubly block
   location = ext2_format_block_bitmap(gdesc, 1);
 
-  //write the locations of the singly indirect blocks to the doubly block
+  //write the locations of the singly indirect blocks to the doubly block in the tmp memory block (block_data)
   for(blk = 0; blk < (nblocks < EXT2_NDIND_BLOCK ? nblocks : EXT2_NDIND_BLOCK); blk += EXT2_NIND_BLOCK)
   {
     *(block_data + (blk / EXT2_NIND_BLOCK)) = ext2_singly_create(block_locaitions, offset + blk,
@@ -358,9 +383,20 @@ u32int ext2_inode_entry_blocks(ext2_inode_t *inode, ext2_group_descriptor_t *gde
 u32int ext2_data_to_inode_table(ext2_inode_t *data, ext2_group_descriptor_t *gdesc, ext2_superblock_t *sblock)
 {
   ext2_inode_t *buffer;
-  buffer = (ext2_inode_t*)kmalloc(gdesc->inode_table_size * EXT2_BLOCK_SZ);
+  //~ u32int update;
 
-  floppy_read(gdesc->inode_table_id, gdesc->inode_table_size * EXT2_BLOCK_SZ, (u32int*)buffer);
+  if(!ext2_g_inode_table)
+  {
+    buffer = (ext2_inode_t*)kmalloc(gdesc->inode_table_size * EXT2_BLOCK_SZ);
+    ext2_g_inode_table = buffer;
+
+    floppy_read(gdesc->inode_table_id, gdesc->inode_table_size * EXT2_BLOCK_SZ, (u32int*)buffer);
+
+    //~ update = TRUE;
+  }else{
+    buffer = ext2_g_inode_table;
+    //~ update = FALSE;
+  }
 
   //loop until a free space has opened up
   u32int off = 0;
@@ -372,18 +408,25 @@ u32int ext2_data_to_inode_table(ext2_inode_t *data, ext2_group_descriptor_t *gde
   //if we did not find enough space, return an error
   if(off == sblock->inodes_per_group)
   {
-    kfree(buffer);
+
+    //purposly not freeing since buffer, either way with update, is the global variable which should not be cleared
+    //~ if(update == TRUE)
+      //~ kfree(buffer);
 
     //error
     return 1;
   }
 
   memcpy((u8int*)buffer + sizeof(ext2_inode_t) * off, data, sizeof(ext2_inode_t));
+
+  //~ if(update == TRUE)
+    //~ memcpy((u8int*)ext2_g_inode_table + sizeof(ext2_inode_t) * off, data, sizeof(ext2_inode_t));
   
   //write the new inode table buffer
   floppy_write((u32int*)buffer, gdesc->inode_table_size * EXT2_BLOCK_SZ, gdesc->inode_table_id);
   
-  kfree(buffer);
+  //purposly not freeing since buffer, either way with update, is the global variable which should not be cleared
+  //~ kfree(buffer);
 
   //sucess!, return where we put it
   return off;
@@ -393,13 +436,18 @@ u32int ext2_data_to_inode_table(ext2_inode_t *data, ext2_group_descriptor_t *gde
 u32int ext2_inode_from_inode_table(u32int inode_number, ext2_inode_t *output, ext2_group_descriptor_t *gdesc)
 {
   ext2_inode_t *buffer;
-  buffer = (ext2_inode_t*)kmalloc(gdesc->inode_table_size * EXT2_BLOCK_SZ);
 
-  floppy_read(gdesc->inode_table_id, gdesc->inode_table_size * EXT2_BLOCK_SZ, (u32int*)buffer);
-
+  if(!ext2_g_inode_table)
+  {
+    buffer = ext2_get_inode_table(gdesc);
+    ext2_g_inode_table = buffer;
+  }else
+    buffer = ext2_g_inode_table;
+  
   memcpy(output, (u8int*)buffer + sizeof(ext2_inode_t) * inode_number, sizeof(ext2_inode_t));
 
-  kfree(buffer);
+  //purposly not freeing since buffer, either way with update, is the global variable which should not be cleared
+  //~ kfree(buffer);
 
   //sucess!
   return 0;
@@ -410,7 +458,14 @@ ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name, ext2_inode_t *in
   ext2_superblock_t *sblock;  
   ext2_group_descriptor_t *gdesc;
 
-  ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc);
+  if(!ext2_g_sblock || !ext2_g_gdesc)
+  {
+    if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
+      return 0; //error
+  }else{
+    sblock = ext2_g_sblock;
+    gdesc = ext2_g_gdesc;
+  }
 
   ext2_inode_t *inode;
   inode = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
@@ -450,6 +505,75 @@ ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name, ext2_inode_t *in
   kfree(gdesc);
   //no file found, error
   return 0;
+}
+
+struct ext2_dirent *ext2_dirent_from_dir_data(ext2_inode_t *dir, u32int index, u32int *data)
+{
+  if(dir->type == EXT2_DIR) //just to check if the input node is a directory
+  {
+
+    u32int i = 0;
+    u32int loop = 0, b = 0;
+
+    //this no data has been passed
+    if(!data)
+      return 0;
+
+    //loop forever, we will break when we find it or return and exit if we do not
+    for(;;)
+    {
+      //if the loop equals the index we are looking for
+      if(loop == index)
+      {
+        //if the rec_len of the direct has contents
+        if(*(u16int*)((u8int*)data + i + sizeof(dirent.ino)))
+        {
+
+          static struct ext2_dirent dirent2;
+
+          //extract the dirent information at the offset of i
+          dirent2.ino = *(u32int*)((u8int*)data + i);
+          dirent2.rec_len = *(u16int*)((u8int*)data + i + sizeof(dirent2.ino));
+          dirent2.name_len = *(u8int*)((u8int*)data + i + sizeof(dirent2.ino) + sizeof(dirent2.rec_len));
+          dirent2.file_type = *(u8int*)((u8int*)data + i + sizeof(dirent2.ino) + sizeof(dirent2.rec_len) + sizeof(dirent2.name_len));
+
+          //clears junk that may be contained in memory when kmallocing
+          dirent2.name = (char*)kmalloc(dirent2.name_len + 1);
+
+          //clears junk that may be contained in memory when kmallocing
+          memset(dirent2.name, 0, dirent2.name_len + 1);
+
+          //copies the name to dirent2.name
+          memcpy(dirent2.name, (char*)((u8int*)data + i + sizeof(dirent2.ino) + sizeof(dirent2.rec_len) + sizeof(dirent2.name_len) + sizeof(dirent2.file_type)), dirent2.name_len + 1);
+
+          *(dirent2.name + dirent2.name_len) = 0; //Adds terminating 0 to string
+
+          return &dirent2;
+
+        }else{
+          //error
+          return 0;
+        }
+
+      }else{
+
+        //this dirent is not the last one (there are more dirents after this one)
+        if(*(u16int*)((u8int*)data + i + sizeof(dirent.ino)))
+        {
+          //increase i with the rec_len that we get by moving fileheader sizeof(dirent.ino) (4 bytes) and reading its value
+          i += *(u16int*)((u8int*)data + i + sizeof(dirent.ino));
+          loop++;
+        }else //this is the last direct, if we have found nothing, exit
+            return 0;
+
+      }
+
+    }
+
+  }else{
+    return 0;
+  }
+
 }
 
 struct ext2_dirent *ext2_dirent_from_dir(ext2_inode_t *dir, u32int index)
@@ -988,7 +1112,14 @@ ext2_inode_t *ext2_create_dir(ext2_inode_t *parent_dir, char *name)
   ext2_superblock_t *sblock;  
   ext2_group_descriptor_t *gdesc; 
 
-  ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc);
+  if(!ext2_g_sblock || !ext2_g_gdesc)
+  {
+    if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
+      return 0; //error
+  }else{
+    sblock = ext2_g_sblock;
+    gdesc = ext2_g_gdesc;
+  }
 
   ext2_inode_t *dir;
   dir = __create_dir__(sblock, gdesc);
@@ -1007,9 +1138,7 @@ ext2_inode_t *ext2_create_dir(ext2_inode_t *parent_dir, char *name)
 
   }
 
-  // free all of the data
-  kfree(sblock);
-  kfree(gdesc);
+  //purposly not freeing since buffer, either way with update, is the global variable which should not be cleared
 
   return dir;
 }
@@ -1024,7 +1153,7 @@ static ext2_inode_t *__create_dir__(ext2_superblock_t *sblock, ext2_group_descri
   ext2_inode_t *data;
   data = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
 
-  data->inode = ext2_find_open_inode(gdesc);
+  data->inode = ext2_find_open_inode(sblock, gdesc);
   data->mode = EXT2_I_RUSR | EXT2_I_WUSR | EXT2_I_XUSR | EXT2_I_RGRP | EXT2_I_XGRP | EXT2_I_ROTH | EXT2_I_XOTH;
   data->type = EXT2_DIR;
   data->uid = 0;
@@ -1056,42 +1185,56 @@ static ext2_inode_t *__create_dir__(ext2_superblock_t *sblock, ext2_group_descri
 
   floppy_write((u32int*)gdesc, sizeof(ext2_group_descriptor_t), gdesc->gdesc_location);
 
-  u32int *test;
-  test = (u32int*)kmalloc(EXT2_BLOCK_SZ);
-  floppy_read(60, EXT2_BLOCK_SZ, test);
-
-
-  kfree(test);
   kfree(block_locations);
   
   return data;
 }
 
-u32int ext2_find_open_inode(ext2_group_descriptor_t *gdesc)
+u32int ext2_find_open_inode(ext2_superblock_t *sblock, ext2_group_descriptor_t *gdesc)
 {
-  u32int i = 0;
+  u8int *ib;
 
-  u32int inodes_per_block = EXT2_BLOCK_SZ / sizeof(ext2_inode_t);
+  if(!ext2_g_ib)
+  {    
+    ib = (u8int*)kmalloc(EXT2_BLOCK_SZ);
+    ext2_g_ib = ib;
 
-  ext2_inode_t *data;
-  data = (ext2_inode_t*)kmalloc(gdesc->inode_table_size * EXT2_BLOCK_SZ);
+    floppy_read(gdesc->inode_bitmap, EXT2_BLOCK_SZ, (u32int*)ib);
+  }else
+    ib = ext2_g_ib;
 
-  floppy_read(gdesc->inode_table_id, gdesc->inode_table_size * EXT2_BLOCK_SZ, (u32int*)data);
+  //start inode at 1 since 0 is automatically taken by the mother root
+  u32int bit = 0b10000000, byte = 0, inode = 1;
 
-  while(data[i].inode || data[i].nlinks)
+  while((*(ib + byte) & bit) && inode < sblock->total_inodes)
   {
-    i++;
+    inode++;
 
-    //we are out of inodes
-    if(i == gdesc->inode_table_size * inodes_per_block)
+    bit >>= 1;
+
+    //if we have reached the end of bit, reset it and increment byte
+    if(!bit)
     {
-      //we have found nothing
-      return -1;
+      bit = 0b10000000;
+     byte++;
     }
   }
 
-  //after we exit the while loop, 'i' is the open inode
-  return i;
+  //we are out of inodes
+  if(inode == sblock->total_inodes)
+  {
+    //we have found nothing
+    return -1;
+  }
+   
+  *(ib + byte) |= bit;
+
+  floppy_write((u32int*)ib, EXT2_BLOCK_SZ, gdesc->inode_bitmap);
+
+  //purposly not freeing since sblock and gdesc, regardless of update, is the global variable which should not be cleared
+
+  //after we exit the while loop, 'inode' is the open inode
+  return inode;
 
 }
 
@@ -1112,16 +1255,23 @@ static ext2_inode_t *__create_file__(u32int size)
    
   //the the number of blocks the initial size will take up
   u32int blocks_used = (u32int)((size - 1) / EXT2_BLOCK_SZ) + 1;
-  
-  ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc);
-  
+
+  if(!ext2_g_sblock || !ext2_g_gdesc)
+  {
+    if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
+      return 0; //error
+  }else{
+    sblock = ext2_g_sblock;
+    gdesc = ext2_g_gdesc;
+  }
+
   u32int *block_locations;
   block_locations = ext2_format_block_bitmap(gdesc, blocks_used);
 
   ext2_inode_t *data;
   data = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
   
-  data->inode = ext2_find_open_inode(gdesc);
+  data->inode = ext2_find_open_inode(sblock, gdesc);
   data->mode = EXT2_I_RUSR | EXT2_I_WUSR | EXT2_I_RGRP | EXT2_I_WGRP | EXT2_I_ROTH | EXT2_I_WOTH;
   data->type = EXT2_FILE;
   data->uid = 0;
@@ -1136,8 +1286,6 @@ static ext2_inode_t *__create_file__(u32int size)
   data->flags = 0;
   data->osd1 = EXT2_OS_JSOS;
   
-  //~ k_printf("INODE ENTRY BLOCKS\n");
-
   ext2_inode_entry_blocks(data, gdesc, block_locations, blocks_used);
   
   data->version = 0;
@@ -1145,8 +1293,6 @@ static ext2_inode_t *__create_file__(u32int size)
   data->dir_acl = 0;
   data->fragment_addr = 0;
   
-  //~ k_printf("INODE data to table\n");
-
   //add the inode data to the table
   ext2_data_to_inode_table(data, gdesc, sblock);
   
@@ -1155,10 +1301,8 @@ static ext2_inode_t *__create_file__(u32int size)
   gdesc->free_blocks -= blocks_used;
   
   floppy_write((u32int*)gdesc, sizeof(ext2_group_descriptor_t), gdesc->gdesc_location);
-    
-  // free all of the data
-  kfree(sblock);
-  kfree(gdesc);
+
+  //purposly not freeing since sblock and gdesc, regardless of update, is the global variable which should not be cleared    
 
   kfree(block_locations);
 
@@ -1179,11 +1323,11 @@ u32int ext2_write(ext2_inode_t *node, u32int offset, u32int size, u8int *buffer)
     if(size + offset > node->size)
       size = node->size - offset;
 
-    u32int blocks_to_write = (size - 1) / EXT2_BLOCK_SZ, i, out;
+    u32int blocks_to_write = ((size - 1) / EXT2_BLOCK_SZ) + 1, i, out;
 
     for(i = 0; i < blocks_to_write; i++)
     {
-      out = ext2_write_block_of_set(node, i, (u32int*)buffer + i * EXT2_BLOCK_SZ, size);
+      out = ext2_write_block_of_set(node, i, (u32int*)(buffer + i * EXT2_BLOCK_SZ), size);
 
       if(!out)
         return 1; //fail
@@ -1194,10 +1338,414 @@ u32int ext2_write(ext2_inode_t *node, u32int offset, u32int size, u8int *buffer)
   }
 }
 
-//TODO implement ext2_open
-void ext2_open(ext2_inode_t *node, u8int read, u8int write)
+u32int *ext2_get_singly(u32int location, u32int *nblocks)
+{
+  u32int i = 0, *singly, *locs;
+
+  singly = (u32int*)kmalloc(EXT2_BLOCK_SZ);
+  floppy_read(location, EXT2_BLOCK_SZ, singly);
+
+  //after this while exits, i will equal the number of real blocks there are
+  while(*(singly + i) && i < EXT2_NIND_BLOCK)
+    i++;
+     
+  locs = (u32int*)kmalloc(sizeof(u32int) * i);
+
+  //copies only the actual blocks, and not excessive 0's
+  memcpy(locs, singly, i);
+
+  *nblocks = i;
+
+  kfree(singly);
+
+  return locs;
+}
+
+u32int *ext2_get_doubly(u32int location, u32int *nblocks)
+{
+  u32int i = 0, a = 0, *doubly, *max_locs, *locs, *tmp_nblocks, total_blocks = 0;
+
+  doubly = (u32int*)kmalloc(EXT2_BLOCK_SZ);
+  floppy_read(location, EXT2_BLOCK_SZ, doubly);
+
+  //after this while exits, i will equal the number of real blocks there are in the doubly block
+  while(*(doubly + i) && i < EXT2_NIND_BLOCK) //we use EXT2_NIND_BLOCK, since there are 256 singly block locations in a doubly block
+    i++;
+     
+  //the maximum amout of blocks that the doubly block has
+  max_locs = (u32int*)kmalloc(EXT2_NIND_BLOCK * sizeof(u32int) * i);
+
+  tmp_nblocks = (u32int*)kmalloc(sizeof(u32int));
+
+  for(a = 0; a < i; a++)
+  {
+    locs = ext2_get_singly(*(doubly + a), tmp_nblocks);
+    memcpy(max_locs + a * EXT2_NIND_BLOCK, locs, *tmp_nblocks);
+    total_blocks += *tmp_nblocks;
+  }
+
+  kfree(locs);
+  //(a - 1) equals the number of full singly blocks there were, the last tmp_nblocks contains the last singly's size
+  locs = (u32int*)kmalloc((a - 1) * EXT2_NIND_BLOCK + *tmp_nblocks);
+
+  //copies only the actual blocks, and not excessive 0's
+  memcpy(locs, max_locs, (a - 1) * EXT2_NIND_BLOCK + *tmp_nblocks);
+
+  *nblocks = total_blocks;
+
+  kfree(tmp_nblocks);
+  kfree(max_locs);
+  kfree(doubly);
+
+  return locs;
+}
+
+u32int *ext2_get_triply(u32int location, u32int *nblocks)
+{
+  u32int i = 0, a = 0, *triply, *max_locs, *locs, *tmp_nblocks, total_blocks = 0;
+
+  triply = (u32int*)kmalloc(EXT2_BLOCK_SZ);
+  floppy_read(location, EXT2_BLOCK_SZ, triply);
+
+  //after this while exits, i will equal the number of real blocks there are in the doubly block
+  while(*(triply + i) && i < EXT2_NIND_BLOCK) //we use EXT2_NIND_BLOCK, since there are 256 doubly block locations in a triply block
+    i++;
+     
+  //the maximum amout of blocks that the triply block has
+  max_locs = (u32int*)kmalloc(EXT2_NDIND_BLOCK * sizeof(u32int) * i);
+
+  tmp_nblocks = (u32int*)kmalloc(sizeof(u32int));
+
+  for(a = 0; a < i; a++)
+  {
+    locs = ext2_get_doubly(*(triply + a), tmp_nblocks);
+    memcpy(max_locs + a * EXT2_NDIND_BLOCK, locs, *tmp_nblocks);
+    total_blocks += *tmp_nblocks;
+  }
+
+  kfree(locs);
+  //(a - 1) equals the number of full doubly blocks there were, the last tmp_nblocks contains the last doubly's size
+  locs = (u32int*)kmalloc((a - 1) * EXT2_NDIND_BLOCK + *tmp_nblocks);
+
+  //copies only the actual blocks, and not excessive 0's
+  memcpy(locs, max_locs, (a - 1) * EXT2_NDIND_BLOCK + *tmp_nblocks);
+
+  *nblocks = total_blocks;
+
+  kfree(tmp_nblocks);
+  kfree(max_locs);
+  kfree(triply);
+
+  return locs;
+}
+
+u32int *ext2_block_locs(ext2_inode_t *node)
+{
+  if(!node || !node->size)
+    return 0; //error
+
+  u32int *locs;
+  locs = (u32int*)kmalloc((((node->size - 1) / EXT2_BLOCK_SZ) + 1) * sizeof(u32int));
+
+  enum __block_types__ __block_types__;
+
+  //checks what is the max type of block the file has, used for optimizations
+  if(!*(node->blocks + EXT2_IND_BLOCK) && !*(node->blocks + EXT2_DIND_BLOCK) && !*(node->blocks + EXT2_TIND_BLOCK))
+    __block_types__ = EXT2_DIRECT;
+  if(*(node->blocks + EXT2_IND_BLOCK) && !*(node->blocks + EXT2_DIND_BLOCK) && !*(node->blocks + EXT2_TIND_BLOCK))
+    __block_types__ = EXT2_SINGLY;
+  if(*(node->blocks + EXT2_IND_BLOCK) && *(node->blocks + EXT2_DIND_BLOCK) && !*(node->blocks + EXT2_TIND_BLOCK))
+    __block_types__ = EXT2_DOUBLY;
+  if(*(node->blocks + EXT2_IND_BLOCK) && *(node->blocks + EXT2_DIND_BLOCK) && *(node->blocks + EXT2_TIND_BLOCK))
+    __block_types__ = EXT2_TRIPLY;
+
+  switch(__block_types__)
+  {
+    case EXT2_DIRECT:
+    {
+      u32int i = 0;
+      
+      //copy the direct blocks until they end
+      while(*(node->blocks + i))
+      {
+        *(locs + i) = *(node->blocks + i);
+        i++;
+      }
+      //exit
+      break;
+    }
+    case EXT2_SINGLY:
+    {
+      u32int i, *singly, *nblocks;
+
+      //copy all of the direct blocks
+      for(i = 0; i < EXT2_NDIR_BLOCKS; i++)
+        *(locs + i) = *(node->blocks + i);
+
+      nblocks = (u32int*)kmalloc(sizeof(u32int*));
+
+      singly = ext2_get_singly(*(node->blocks + EXT2_NDIR_BLOCKS), nblocks);
+
+      //reset i and then copy all of the singly blocks until they end
+      memcpy(locs + EXT2_NDIR_BLOCKS, singly, *nblocks), 
+      kfree(nblocks);
+      kfree(singly);
+
+      //exit
+      break;
+    }
+    case EXT2_DOUBLY:
+    {
+      u32int i, *singly, *doubly, *nblocks;
+
+      nblocks = (u32int*)kmalloc(sizeof(u32int*));
+
+      //copy all of the direct blocks
+      for(i = 0; i < EXT2_NDIR_BLOCKS; i++)
+        *(locs + i) = *(node->blocks + i);
+
+      singly = (u32int*)kmalloc(EXT2_BLOCK_SZ);
+      floppy_read(*(node->blocks + EXT2_IND_BLOCK), EXT2_BLOCK_SZ, singly);
+
+      //reset i and then copy all of the singly blocks until they end
+      for(i = 0; i < EXT2_NIND_BLOCK; i++)
+        *(locs + EXT2_NDIR_BLOCKS + i) = *(singly + i);        
+
+      doubly = ext2_get_doubly(*(node->blocks + EXT2_DIND_BLOCK), nblocks);
+      memcpy(locs + EXT2_NDIR_BLOCKS + EXT2_NIND_BLOCK, doubly, *nblocks);
+
+      kfree(singly);
+      kfree(doubly);
+      kfree(nblocks);
+      //exit
+      break;
+    }
+    case EXT2_TRIPLY:
+    {
+      u32int i, *singly, *doubly, *triply, *nblocks;
+
+      nblocks = (u32int*)kmalloc(sizeof(u32int*));
+
+      //copy all of the direct blocks
+      for(i = 0; i < EXT2_NDIR_BLOCKS; i++)
+        *(locs + i) = *(node->blocks + i);
+
+      singly = (u32int*)kmalloc(EXT2_BLOCK_SZ);
+      floppy_read(*(node->blocks + EXT2_IND_BLOCK), EXT2_BLOCK_SZ, singly);
+
+      //reset i and then copy all of the singly blocks until they end
+      for(i = 0; i < EXT2_NIND_BLOCK; i++)
+        *(locs + EXT2_NDIR_BLOCKS + i) = *(singly + i);        
+
+      doubly = ext2_get_doubly(*(node->blocks + EXT2_DIND_BLOCK), nblocks);
+      memcpy(locs + EXT2_NDIR_BLOCKS + EXT2_NIND_BLOCK, doubly, *nblocks);
+
+      triply = ext2_get_triply(*(node->blocks + EXT2_TIND_BLOCK), nblocks);
+      memcpy(locs + EXT2_NDIR_BLOCKS + EXT2_NIND_BLOCK + EXT2_NDIND_BLOCK, triply, *nblocks);
+
+      kfree(singly);
+      kfree(doubly);
+      kfree(triply);
+      kfree(nblocks);
+      //exit
+      break;
+    }
+    default:
+    {
+      //error
+      return 0;
+    }
+  }
+
+  return locs;
+}
+
+u32int *ext2_chunk_data(u32int *blocks, u32int nblocks, u32int chunk, u32int *out_chunk_size)
 {
 
+  //set the output chunk size to default
+  *out_chunk_size = 0;
+
+  //chunck cannot be greater or equal to the number of blocks there are (chunk starts from 0)
+  if(chunk >= nblocks)
+    return 0;
+
+  //if there are no blocks
+  if(!nblocks)
+    return 0; //error
+
+  //if there is only one block
+  if(nblocks == 1)
+  {
+    u32int *data;
+    data = (u32int*)kmalloc(EXT2_BLOCK_SZ);
+
+    floppy_read(*blocks, EXT2_BLOCK_SZ, data);
+
+    *out_chunk_size = EXT2_BLOCK_SZ;
+    return data;
+  }
+
+  //chunk_size is guaranteed to be atleast one block
+  u32int chunks = 0, chunk_size = EXT2_BLOCK_SZ, first, second, i = 0, exit = FALSE, start, *data;
+
+  //if we want to access the first chunk, then, we automatically want to exit at the beginning of the next chunk
+  if(!chunk)
+    exit = TRUE;
+
+  first = *blocks;
+  start = first;
+  second = *(blocks + 1);
+
+  //until we run out of blocks
+  while(i < nblocks)
+  {
+    if(IS_CONS_BLOCKS(first, second) == FALSE)
+    {
+      //if we want the read the first chunk and the two blocks are not consecutive, just simply read from the beginning to first
+      if(!chunk)
+      {
+        data = (u32int*)kmalloc(chunk_size);
+
+        floppy_read(*blocks, chunk_size, data);
+
+        *out_chunk_size = chunk_size;
+        return data;
+      }else{ //increment the first and second blocks, and the number of chunks, record where this chunk started
+        chunks++;
+        
+        //if exit was to be TRUE, we need the location of our chunk, so do not override it
+        if(exit == FALSE)
+           start = second;
+
+        i++;
+
+        //there is no more and we did not find out chunk
+        if((i + 1) == nblocks && chunks != chunk)
+          return 0;
+        else if((i + 1) == nblocks && chunks == chunk) //we found our chunk at the very end
+        {
+          //'second' is our chunk
+          data = (u32int*)kmalloc(EXT2_BLOCK_SZ);
+
+          floppy_read(second, EXT2_BLOCK_SZ, data);
+
+          *out_chunk_size = EXT2_BLOCK_SZ;
+          return data;
+        }else{
+          first = *(blocks + i);
+          second = *(blocks + i + 1);
+        }
+
+        /*exit will only get set if we have entered our wanted block, 
+         * once the program gets to this if statement, it is at the beginning
+         * of the next chunk, now we have the appropriot size for our chunk and 
+         * its initial location*/
+        if(exit == TRUE)
+        {
+          data = (u32int*)kmalloc(chunk_size);
+
+          floppy_read(start, chunk_size, data);
+
+          *out_chunk_size = chunk_size;
+          return data;
+        }
+      }
+
+    }else{ //increment the first and second blocks
+      i++;
+      chunk_size += EXT2_BLOCK_SZ;
+
+      //there is no more and we did not find out chunk
+      if((i + 1) == nblocks && chunks != chunk)
+        return 0;
+      else if((i + 1) == nblocks && chunks == chunk) //we found our chunk at the very end
+      {
+        //read the data of the chunk
+        data = (u32int*)kmalloc(chunk_size);
+
+        floppy_read(start, chunk_size, data);
+
+        *out_chunk_size = chunk_size;
+        return data;
+      }else{
+        first = *(blocks + i);
+        second = *(blocks + i + 1);
+      }
+
+    }
+
+    /*once the chunk we are at (chunks) and the chunk we want to return (chunk),
+     * we know that atleast one block must be in chunk_size, so set it to EXT2_BLOCK_SZ,
+     * set that we want to exit*/
+    if(chunks == chunk && exit == FALSE)
+    {
+      chunk_size = EXT2_BLOCK_SZ;
+
+      exit = TRUE;
+    }
+  }
+
+  //as a fail safe, if we exited the while loop that is an error.
+  return 0;
+
+}
+
+u32int *ext2_open(ext2_inode_t *node, u8int read, u8int write)
+{
+  u32int *block_locs, *data, *chunk_data, *chunk_size, offset = 0, i = 0, nblocks, permission = 0;
+
+  if(read && write)
+    permission = EXT2_OPEN_RW;
+  else if(read && !write)
+    permission = EXT2_OPEN_R;
+  else if(!read && write)
+    permission = EXT2_OPEN_W;
+  else //if we do not want to read nor write to it, what is the point?
+    return 0;
+
+  chunk_size = (u32int*)kmalloc(sizeof(u32int));
+  data = (u32int*)kmalloc(node->size);
+
+  //calculates the number of blocks in the file and also their locations
+  nblocks = ((node->size - 1) / EXT2_BLOCK_SZ) + 1;
+  block_locs = ext2_block_locs(node);
+
+  do
+  {
+    //gets chunk number 'i'
+    chunk_data = ext2_chunk_data(block_locs, nblocks, i, chunk_size);
+    i++;
+
+    //if there is data copy it over and increment offset by its size
+    if(chunk_data)
+    {
+      memcpy(data + offset, chunk_data, *chunk_size);
+
+      offset += *chunk_size;
+      kfree(chunk_data);
+    }
+  }while(chunk_data);
+
+  kfree(chunk_size);
+  kfree(block_locs);
+
+  ext2_open_files_t *file, *prev;
+  file = (ext2_open_files_t*)kmalloc(sizeof(ext2_open_files_t));
+
+  file->inode = node->inode;
+  file->permissions = permission;
+  file->data = data;
+  file->next = 0;
+  
+  //place the typedef 'file' at the very end of the list
+  prev = ext2_open_queue;
+  while(prev->next)
+    prev = prev->next;
+
+  prev->next = file;
+
+  return data;
 }
 
 //TODO implement ext2_close
@@ -1438,9 +1986,14 @@ ext2_inode_t *ext2_inode_from_offset(u32int inode_number, ext2_inode_t *inode_ta
 ext2_inode_t *ext2_get_inode_table(ext2_group_descriptor_t *gdesc)
 {
   ext2_inode_t *buffer;
-  buffer = (ext2_inode_t*)kmalloc(gdesc->inode_table_size * EXT2_BLOCK_SZ);
 
-  floppy_read(gdesc->inode_table_id, gdesc->inode_table_size * EXT2_BLOCK_SZ, (u32int*)buffer);
+  if(!ext2_g_inode_table)
+  {
+    buffer = (ext2_inode_t*)kmalloc(gdesc->inode_table_size * EXT2_BLOCK_SZ);
+    floppy_read(gdesc->inode_table_id, gdesc->inode_table_size * EXT2_BLOCK_SZ, (u32int*)buffer);
+    ext2_g_inode_table = buffer;
+  }else
+    buffer = ext2_g_inode_table;
 
   return buffer;
 }
@@ -1485,11 +2038,30 @@ static char *__get_name_of_dir__(ext2_inode_t *directory, ext2_inode_t *inode_ta
   ext2_inode_t *parent;
   parent = ext2_inode_from_offset(dirent->ino, inode_table);
 
-  u32int i = 0;
+  u32int i = 0, b = 0, *block;
+  block = (u32int*)kmalloc(EXT2_BLOCK_SZ);
+  if(!ext2_block_of_set(parent, b, block))
+  {
+    kfree(parent);
+    kfree(block);
+    return 0;
+  }
+
   do
   {
-    dirent = ext2_dirent_from_dir(parent, i);
+    dirent = ext2_dirent_from_dir_data(parent, i, block);
     i++;
+
+    if(!dirent)
+    {
+      b++;
+      if(!ext2_block_of_set(parent, b, block))
+      {
+        kfree(parent);
+        kfree(block);
+        return 0;
+      }
+    }
   }
   while(dirent->file_type != EXT2_DIR || dirent->ino != directory->inode);
 
@@ -1498,25 +2070,51 @@ static char *__get_name_of_dir__(ext2_inode_t *directory, ext2_inode_t *inode_ta
   //~ name = (char*)kmalloc(dirent->name_len + 1);
   //~ *(name + dirent->name_len) = 0;
 
+  kfree(block);
   kfree(parent);
 
   return name;
 }
 
-//TODO make set current directory work
 u32int ext2_set_current_dir(ext2_inode_t *directory)
 {
   kfree(ext2_path); //frees the contents of the char array pointer, ext2_path
   
   ext2_current_dir_inode = directory->inode; //sets the value of the dir inode to the cuurentDir_inode
 
+  //the root's inode is always 1, after the mother root's inode of 0
+  if(directory->inode == 1)
+  {
+    //keep it simple, if root is the only directory, copy its name manually
+    ext2_path = (char*)kmalloc(2); //2 chars beign "/" for root and \000
+  
+    *(ext2_path) = '/';
+    *(ext2_path + 1) = 0; //added \000 to the end
+    
+    //sucess!
+    return 0;
+  }
+
   ext2_superblock_t *sblock;  
   ext2_group_descriptor_t *gdesc;
-  
-  ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc);
+
+  if(!ext2_g_sblock || !ext2_g_gdesc)
+  {
+    if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
+      return 0; //error
+  }else{
+    sblock = ext2_g_sblock;
+    gdesc = ext2_g_gdesc;
+  }
 
   ext2_inode_t *inode_table;
-  inode_table = ext2_get_inode_table(gdesc);
+
+  if(!ext2_g_inode_table)
+  {
+    inode_table = ext2_get_inode_table(gdesc);
+    ext2_g_inode_table = inode_table;
+  }else
+    inode_table = ext2_g_inode_table;
   
   ext2_inode_t *node;
   node = directory;
@@ -1537,7 +2135,7 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
   do
   {
     copy = node;
-    //TODO seconde time around, this function enters a forever loop
+
     name = __get_name_of_dir__(copy, inode_table);
 
     if(copy)
@@ -1564,57 +2162,47 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
   }
   while(node->inode != copy->inode);
   
-  if(count > 1) //if we are in a directory other than root
+  /*we have the root dir
+   * that does not need a preceding "/" because we will get "//"
+   * which is ugly and not right. Also the "/" before the very first
+   * directory should not be there because it will look ugly with
+   * the root "/". So the total totalCharLen should be
+   * -2 to count for both of those instances*/
+  totalCharLen -= 2;
+  
+  ext2_path = (char*)kmalloc(totalCharLen + 1); //+1 is for the \000 NULL terminating 0
+  //~ strcpy(ext2_path, "/");
+  
+  //reset the copy back to the top (current directory)
+  copy = directory;
+  
+  u32int i, charsWritten = 0, nameLen;
+  for(i = 0; i < count; i++)
   {
-    /*we have the root dir
-     * that does not need a preceding "/" because we will get "//"
-     * which is ugly and not right. Also the "/" before the very first
-     * directory should not be there because it will look ugly with
-     * the root "/". So the total totalCharLen should be
-     * -2 to count for both of those instances*/
-    totalCharLen -= 2;
+    nameLen = strlen(*(name_locs + i));
   
-    ext2_path = (char*)kmalloc(totalCharLen + 1); //+1 is for the \000 NULL terminating 0
-    //~ strcpy(ext2_path, "/");
-  
-    //reset the copy back to the top (current directory)
-    copy = directory;
-  
-    u32int i, charsWritten = 0, nameLen;
-    for(i = 0; i < count; i++)
+    /* i < count - 2 is a protection from drawing the preceding "/"
+     * on the first two dirs in the ext2_path (root and one more). The first two dirs will
+     * allways be drawn the last two times (we write the dir names to ext2_path from
+     * current dir (top) to root (bottom)), thus if i is less
+     * than the count - 2, that means we are not yet at the last
+     * two drawing and it is ok to have a precedding "/" */
+    if(copy->inode != ext2_root->inode && i < count - 2)
     {
-      nameLen = strlen(*(name_locs + i));
-  
-      /* i < count - 2 is a protection from drawing the preceding "/"
-       * on the first two dirs in the ext2_path (root and one more). The first two dirs will
-       * allways be drawn the last two times (we write the dir names to ext2_path from
-       * current dir (top) to root (bottom)), thus if i is less
-       * than the count - 2, that means we are not yet at the last
-       * two drawing and it is ok to have a precedding "/" */
-      if(copy->inode != ext2_root->inode && i < count - 2)
-      {
-        memcpy(ext2_path + (totalCharLen - charsWritten - nameLen - 1), "/", 1);
-        memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), *(name_locs + i), nameLen);
-        charsWritten = charsWritten + nameLen + 1; //increment charsWritten with the "/<name>" string we just wrote, +1 is that "/"
-      }else{
-        memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), *(name_locs + i), nameLen);
-        charsWritten = charsWritten + nameLen; //increment charsWritten with the "/" string we just wrote
-      }
-  
-      //find the parent of copy
-      node = ext2_file_from_dir(copy, "..", inode_table);
-      copy = node;
+      memcpy(ext2_path + (totalCharLen - charsWritten - nameLen - 1), "/", 1);
+      memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), *(name_locs + i), nameLen);
+      charsWritten = charsWritten + nameLen + 1; //increment charsWritten with the "/<name>" string we just wrote, +1 is that "/"
+    }else{
+      memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), *(name_locs + i), nameLen);
+      charsWritten = charsWritten + nameLen; //increment charsWritten with the "/" string we just wrote
     }
   
-    *(ext2_path + totalCharLen) = 0; //added \000 to the end of ext2_path
-  
-  }else{
-    //keep it simple, if root is the only directory, copy its name manually
-    ext2_path = (char*)kmalloc(2); //2 chars beign "/" for root and \000
-  
-    *(ext2_path) = '/';
-    *(ext2_path + 1) = 0; //added \000 to the end
+    //find the parent of copy
+    node = ext2_file_from_dir(copy, "..", inode_table);
+    copy = node;
   }
+  
+  *(ext2_path + totalCharLen) = 0; //added \000 to the end of ext2_path
   
   //~ k_printf("\n\nEXT2_PATH is: %s\n", ext2_path);
   
@@ -1624,22 +2212,19 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
   return 0;
 }
 
-//TODO make this compatable with the cache
 static ext2_inode_t *__create_root__()
 {
   ext2_superblock_t *sblock;  
   ext2_group_descriptor_t *gdesc;
- 
-  u32int update;
 
   if(!ext2_g_sblock || !ext2_g_gdesc)
   {
-    ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc);
-    update = TRUE;
+    if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
+      return 0; //error
   }else{
     sblock = ext2_g_sblock;
     gdesc = ext2_g_gdesc;
-    update = FALSE;
+
   }
   
   ext2_inode_t *data;
@@ -1672,24 +2257,15 @@ static ext2_inode_t *__create_root__()
   data->dir_acl = 0;
   data->fragment_addr = 0;
 
-  //TODO make this work with cache
   //add the inode data to the table
   ext2_data_to_inode_table(data, gdesc, sblock);
 
-  //TODO check if decrementing this gdesc will also affect the ext2_g_gdesc, it should
   //decrement the number of free inodes and blocks there are
   gdesc->free_inodes--;
 
   floppy_write((u32int*)gdesc, sizeof(ext2_group_descriptor_t), gdesc->gdesc_location);
 
-  if(update == TRUE)
-  {
-    memcpy(ext2_g_gdesc, gdesc, sizeof(ext2_group_descriptor_t));
-
-    // free all of the data
-    kfree(sblock);
-    kfree(gdesc);
-  }
+  //purposly not freeing since sblock and gdesc, regardless of update, is the global variable which should not be cleared
 
   return data;
 }
@@ -1745,17 +2321,27 @@ u32int ext2_initialize(u32int size)
       return 1; //error
     k_printf("%cgdone%cw\n");
 
-    struct ext2_dirent *test;
-
     ext2_set_current_dir(root); 
+
+    //set up the initial queue for the open files list
+    ext2_open_queue->inode = 0;
+    ext2_open_queue->permissions = 0;
+    ext2_open_queue->data = 0;
+    ext2_open_queue->next = 0;
 
     //sucess!
     return 0;
   }else{
     k_printf("The floppy disk has preexisting data on it!\n");
-    
+
     ext2_inode_t *inode_table;
-    inode_table = ext2_get_inode_table(gdesc);
+
+    if(!ext2_g_inode_table)
+    {
+      inode_table = ext2_get_inode_table(gdesc);
+      ext2_g_inode_table = inode_table;
+    }else
+      inode_table = ext2_g_inode_table;
 
     k_printf("\tAcquiring preexisting root directory...");
     //get the root, it is always second after the 'mother root'
@@ -1766,6 +2352,12 @@ u32int ext2_initialize(u32int size)
       return 1; //error
 
     ext2_set_current_dir(ext2_root); 
+
+    //set up the initial queue for the open files list
+    ext2_open_queue->inode = 0;
+    ext2_open_queue->permissions = 0;
+    ext2_open_queue->data = 0;
+    ext2_open_queue->next = 0;
 
     //sucess!
     return 0;
