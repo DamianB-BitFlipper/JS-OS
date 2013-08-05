@@ -68,48 +68,48 @@ void initialise_tasking()
 
   nTasks++;
 
-	stack = (u32int*)task->stack;
+  stack = (u32int*)task->stack;
 
-	// processor data (iret)
-	*--stack = 0x202;	// EFLAGS
-	*--stack = 0x08;	// CS
-	//~ *--stack = (u32int)func;	// EIP
-	*--stack = 0;	// EIP
+  // processor data (iret)
+  *--stack = 0x202;	// EFLAGS
+  *--stack = 0x08;	// CS
+  //~ *--stack = (u32int)func;	// EIP
+  *--stack = 0;	// EIP
   task->eip = 0;
 
-	// pusha
-	*--stack = 0;		// EDI
-	*--stack = 0;		// ESI
-	*--stack = 0;		// EBP
+  // pusha
+  *--stack = 0;		// EDI
+  *--stack = 0;		// ESI
+  *--stack = 0;		// EBP
   task->ebp = 0;
   
-	*--stack = 0;		// NULL
-	*--stack = 0;		// EBX
-	*--stack = 0;		// EDX
-	*--stack = 0;		// ECX
-	*--stack = 0;		// EAX
+  *--stack = 0;		// NULL
+  *--stack = 0;		// EBX
+  *--stack = 0;		// EDX
+  *--stack = 0;		// ECX
+  *--stack = 0;		// EAX
 
-	// data segments
-	*--stack = 0x10;	// DS
-	*--stack = 0x10;	// ES
-	*--stack = 0x10;	// FS
-	*--stack = 0x10;	// GS
+  // data segments
+  *--stack = 0x10;	// DS
+  *--stack = 0x10;	// ES
+  *--stack = 0x10;	// FS
+  *--stack = 0x10;	// GS
 
-	task->id = next_pid++;
-	//~ task->id = 0;
-	task->stack = (u32int)stack;
-	task->thread = 0;
+  task->id = next_pid++;
+  //~ task->id = 0;
+  task->stack = (u32int)stack;
+  task->thread = 0;
   task->thread_flags = 0;
-	strcpy(task->name, "init");
+  strcpy(task->name, "init");
 
-	task->next = 0;
+  task->next = 0;
 
   /*set the scheduling algorithm to prioritized SJF
    * see the schedule.h for a table of contents for
    * what number represents what algorithm to use */
   set_scheduling_algorithm(1);
 	
-	asm volatile("sti");
+  asm volatile("sti");
 
 }
 

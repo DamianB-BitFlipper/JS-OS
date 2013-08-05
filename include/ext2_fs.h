@@ -244,7 +244,7 @@ typedef struct ext2_open_files
   u32int inode;
   u8int permissions;
   u32int *data;
-  u32int *next;
+  struct ext2_open_files *next;
 }ext2_open_files_t;
 
 //adding a hardlink to a directory is exactly the same as adding a file to a directory, so I just make an alias
@@ -273,7 +273,7 @@ ext2_inode_t *ext2_create_dir(ext2_inode_t *parentNode, char *name);
 u32int *ext2_format_block_bitmap(ext2_group_descriptor_t *gdesc, u32int blocks_used);
 
 /*writes the locations of the blocks to the inode entries blocks data*/
-u32int ext2_inode_entry_blocks(ext2_inode_t *inode, ext2_group_descriptor_t *gdesc, u32int *block_locations, u32int blocks_used);
+u32int ext2_inode_entry_blocks(ext2_inode_t *node, ext2_group_descriptor_t *gdesc, u32int *block_locations, u32int blocks_used);
 
 /*write an inode data to the inode table*/
 u32int ext2_data_to_inode_table(ext2_inode_t *data, ext2_group_descriptor_t *gdesc, ext2_superblock_t *sblock);
@@ -331,5 +331,17 @@ u32int *ext2_get_doubly(u32int location, u32int *nblocks);
 
 /*returns the blocks in a triply block*/
 u32int *ext2_get_triply(u32int location, u32int *nblocks);
+
+/*opens a file by returning its contents and placing it in the open files list*/
+u32int *ext2_open(ext2_inode_t *node, u8int read, u8int write);
+
+/*closes a file after it is done being used*/
+u32int ext2_close(ext2_inode_t *node);
+
+/*expand a nodes size*/
+u32int ext2_expand(ext2_inode_t *node, u32int increase_bytes);
+
+/*remove a list of blocks from the block bitmap*/
+u32int ext2_free_blocks(u32int *block_locs, u32int nblocks);
 
 #endif

@@ -146,6 +146,7 @@ u32int *ext2_format_block_bitmap(ext2_group_descriptor_t *gdesc, u32int blocks_u
   }else{
     block_bitmap = ext2_g_bb;
   }
+
   u32int *output;//, *test;
   output = (u32int*)kmalloc(blocks_used * sizeof(u32int));
 
@@ -285,17 +286,17 @@ u32int ext2_doubly_create(u32int *block_locaitions, u32int offset, u32int nblock
 
 }
 
-u32int ext2_inode_entry_blocks(ext2_inode_t *inode, ext2_group_descriptor_t *gdesc, u32int *block_locations, u32int blocks_used)
+u32int ext2_inode_entry_blocks(ext2_inode_t *node, ext2_group_descriptor_t *gdesc, u32int *block_locations, u32int blocks_used)
 {
   u32int blk;
 
   //to begin, write all of the blocks a 0, so that there is no accidental junk
   for(blk = 0; blk < EXT2_N_BLOCKS; blk++)
-    inode->blocks[blk] = 0;
+    node->blocks[blk] = 0;
 
   //write the locations of the direct blocks
   for(blk = 0; blk < (blocks_used < EXT2_NDIR_BLOCKS ? blocks_used : EXT2_NDIR_BLOCKS); blk++)
-    inode->blocks[blk] = *(block_locations + blk);
+    node->blocks[blk] = *(block_locations + blk);
 
   if(blocks_used < EXT2_NDIR_BLOCKS)
   {
@@ -320,7 +321,7 @@ u32int ext2_inode_entry_blocks(ext2_inode_t *inode, ext2_group_descriptor_t *gde
     floppy_write(block_data, EXT2_BLOCK_SZ, *location);
     
     //write the location of the singly block
-    inode->blocks[EXT2_NDIR_BLOCKS] = *location;
+    node->blocks[EXT2_NDIR_BLOCKS] = *location;
 
     //write the doubly blocks
     if(blocks_used > EXT2_NIND_BLOCK)
@@ -345,7 +346,7 @@ u32int ext2_inode_entry_blocks(ext2_inode_t *inode, ext2_group_descriptor_t *gde
       floppy_write(block_data, EXT2_BLOCK_SZ, *location);
 
       //write the location of the doubly block
-      inode->blocks[EXT2_NDIR_BLOCKS + 1] = *location;
+      node->blocks[EXT2_NDIR_BLOCKS + 1] = *location;
 
       //write the triply blocks
       if(blocks_used > EXT2_NDIND_BLOCK)
@@ -370,7 +371,7 @@ u32int ext2_inode_entry_blocks(ext2_inode_t *inode, ext2_group_descriptor_t *gde
         floppy_write(block_data, EXT2_BLOCK_SZ, *location);
 
         //write the location of the triply block
-        inode->blocks[EXT2_NDIR_BLOCKS + 2] = *location;
+        node->blocks[EXT2_NDIR_BLOCKS + 2] = *location;
       }
     }
 
@@ -1069,27 +1070,21 @@ u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, u32int
 
       //if the offset (i) + the length of the contents in the struct dirent is greater than what a block can hold, exit and go to new block
       if(i + dirent.rec_len >= EXT2_BLOCK_SZ)
-      {
         break;
-      }
 
       //if the offset (i) + the length of the contents in the struct dirent is greater than what a direcotory can hold, exit function before page fault happens
       if(b * EXT2_BLOCK_SZ + i + dirent.rec_len >= parent_dir->size)
       {
-        //As of now, return with an error, but eventually expand the file size
-        //TODO make expand file function
-
-        //failed, out of directory left over space
-        return 1;
+        //expand parent_dir by one block
+        if(ext2_expand(parent_dir, EXT2_BLOCK_SZ))
+          return 1; //failed, out of directory left over space
       }
 
     }
 
     //if i is a valid offset, do not go to a new block, just exit
     if(!*(u16int*)((u8int*)block + i + sizeof(dirent.ino)))
-    {
       break;
-    }
 
   }
 
@@ -1104,6 +1099,126 @@ u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, u32int
 
   kfree(dirent.name);
 
+  return 0;
+}
+
+u32int ext2_free_blocks(u32int *block_locs, u32int nblocks)
+{
+  ext2_superblock_t *sblock;  
+  ext2_group_descriptor_t *gdesc; 
+
+  if(!ext2_g_sblock || !ext2_g_gdesc)
+  {
+    if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
+      return 0; //error
+  }else{
+    sblock = ext2_g_sblock;
+    gdesc = ext2_g_gdesc;
+  }
+
+  u8int *block_bitmap;
+
+  if(!ext2_g_bb)
+  {
+    block_bitmap = (u8int*)kmalloc(EXT2_BLOCK_SZ);
+    ext2_g_bb = block_bitmap;
+    floppy_read(gdesc->block_bitmap, EXT2_BLOCK_SZ, (u32int*)block_bitmap);
+  }else{
+    block_bitmap = ext2_g_bb;
+  }
+
+  u32int byte = 0, bit = 0, i, error = 0, changes = FALSE;
+  for(i = 0; i < nblocks; i++)
+  {
+    //if the block location is 0, then move on to the next block location value
+    if(!*(block_locs + i))
+      continue;
+    
+    byte = *(block_locs + i) / 8;
+    bit = 0b10000000 >> ((*(block_locs + i) % 8) - 1);
+
+    //if byte is too large, continue on and set to return an error at the end
+    if(byte > EXT2_BLOCK_SZ)
+    {
+      error = 1;
+      continue;
+    }
+
+    //just checking so we do not xor a 0 (off) bit and make it 1 (on) accidentally
+    if(*(block_bitmap + byte) & bit)
+    {
+      *(block_bitmap + byte) ^= bit;
+      if(changes == FALSE)
+        changes = TRUE;
+    }
+  }
+
+  if(changes == TRUE)
+    floppy_write((u32int*)block_bitmap, EXT2_BLOCK_SZ, gdesc->block_bitmap);
+
+  return error;
+}
+
+u32int ext2_expand(ext2_inode_t *node, u32int increase_bytes)
+{
+  ext2_superblock_t *sblock;  
+  ext2_group_descriptor_t *gdesc; 
+
+  if(!ext2_g_sblock || !ext2_g_gdesc)
+  {
+    if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
+      return 0; //error
+  }else{
+    sblock = ext2_g_sblock;
+    gdesc = ext2_g_gdesc;
+  }
+
+  u32int *initial_locs, *all_locs, *added_locs, orig_nblocks, added_nblocks, all_nblocks;
+  
+  orig_nblocks = ((node->size - 1) / 1024) + 1;
+  added_nblocks = ((increase_bytes - 1) / 1024) + 1;
+  all_nblocks = orig_nblocks + added_nblocks;
+
+  all_locs = (u32int*)kmalloc(sizeof(u32int) * all_nblocks);
+
+  //retrieve the preexisting block locations
+  initial_locs = ext2_block_locs(node);
+
+  //retrieve the new block locations
+  added_locs = ext2_format_block_bitmap(gdesc, added_nblocks);
+
+  //concatonate all of the blocks into one array
+  memcpy(all_locs, initial_locs, sizeof(u32int) * orig_nblocks);
+  memcpy(all_locs + orig_nblocks, added_locs, sizeof(u32int) * added_nblocks);
+
+  //remove the singly, doubly, and triply blocks from the block bitmap
+  u32int *blocks_to_rm, i;
+  blocks_to_rm = (u32int*)kmalloc(sizeof(u32int) * (EXT2_N_BLOCKS - EXT2_NDIR_BLOCKS));
+  
+  for(i = 0; i < EXT2_N_BLOCKS - EXT2_NDIR_BLOCKS; i++)
+    *(blocks_to_rm + i) = *(node->blocks + EXT2_NDIR_BLOCKS + i);
+ 
+  //when the for loop exits, i will equal the number of blocks that have been saved in blocks_to_rm
+  if(ext2_free_blocks(blocks_to_rm, i))
+  {
+
+    kfree(initial_locs);
+    kfree(added_locs);
+    kfree(all_locs);
+    kfree(blocks_to_rm);
+
+    return 1; //there was some sort of error
+  }
+
+  //index the new blocks into the node's data
+  ext2_inode_entry_blocks(node, gdesc, all_locs, all_nblocks);
+
+  kfree(initial_locs);
+  kfree(added_locs);
+  kfree(all_locs);
+  kfree(blocks_to_rm);
+
+  //sucess!
   return 0;
 }
 
@@ -1704,54 +1819,77 @@ u32int *ext2_open(ext2_inode_t *node, u8int read, u8int write)
   else //if we do not want to read nor write to it, what is the point?
     return 0;
 
-  chunk_size = (u32int*)kmalloc(sizeof(u32int));
-  data = (u32int*)kmalloc(node->size);
-
-  //calculates the number of blocks in the file and also their locations
-  nblocks = ((node->size - 1) / EXT2_BLOCK_SZ) + 1;
-  block_locs = ext2_block_locs(node);
-
-  do
+  if(read)
   {
-    //gets chunk number 'i'
-    chunk_data = ext2_chunk_data(block_locs, nblocks, i, chunk_size);
-    i++;
+    chunk_size = (u32int*)kmalloc(sizeof(u32int));
+    data = (u32int*)kmalloc(node->size);
 
-    //if there is data copy it over and increment offset by its size
-    if(chunk_data)
+    //calculates the number of blocks in the file and also their locations
+    nblocks = ((node->size - 1) / EXT2_BLOCK_SZ) + 1;
+    block_locs = ext2_block_locs(node);
+
+    do
     {
-      memcpy(data + offset, chunk_data, *chunk_size);
+      //gets chunk number 'i'
+      chunk_data = ext2_chunk_data(block_locs, nblocks, i, chunk_size);
+      i++;
 
-      offset += *chunk_size;
-      kfree(chunk_data);
-    }
-  }while(chunk_data);
+      //if there is data copy it over and increment offset by its size
+      if(chunk_data)
+      {
+        memcpy(data + offset, chunk_data, *chunk_size);
 
-  kfree(chunk_size);
-  kfree(block_locs);
+        offset += *chunk_size;
+        kfree(chunk_data);
+      }
+    }while(chunk_data);
 
-  ext2_open_files_t *file, *prev;
-  file = (ext2_open_files_t*)kmalloc(sizeof(ext2_open_files_t));
+    kfree(chunk_size);
+    kfree(block_locs);
+  }else if(!read && write)
+    data = 0;
 
-  file->inode = node->inode;
-  file->permissions = permission;
-  file->data = data;
-  file->next = 0;
+  ext2_open_files_t *open_file, *prev;
+  open_file = (ext2_open_files_t*)kmalloc(sizeof(ext2_open_files_t));
+
+  open_file->inode = node->inode;
+  open_file->permissions = permission;
+  open_file->data = data;
+  open_file->next = 0;
   
-  //place the typedef 'file' at the very end of the list
-  prev = ext2_open_queue;
+  //place the typedef 'open_file' at the very end of the list
+  prev = (ext2_open_files_t*)ext2_open_queue;
   while(prev->next)
     prev = prev->next;
 
-  prev->next = file;
+  prev->next = open_file;
 
   return data;
 }
 
-//TODO implement ext2_close
-void ext2_close(ext2_inode_t *node)
+u32int ext2_close(ext2_inode_t *node)
 {
+  ext2_open_files_t *open_file, *prev;
+  
+  open_file = (ext2_open_files_t*)ext2_open_queue;
 
+  //finds the open node in the open files list
+  while(open_file->inode != node->inode && open_file)
+  {
+    prev = open_file;
+    open_file = open_file->next;
+  }
+  //the node must not be open, we did not find it
+  if(!open_file)
+    return 1; //error
+
+  //free the open file's data
+  kfree(open_file->data);
+
+  //remove the entry from the list
+  prev->next = open_file->next;
+
+  kfree(open_file);
 }
 
 void ext2_sblock_set_data(ext2_superblock_t *data, u32int reserved_blocks, u32int sblock_location,
@@ -2323,6 +2461,8 @@ u32int ext2_initialize(u32int size)
 
     ext2_set_current_dir(root); 
 
+    ext2_open_queue = (ext2_open_files_t*)kmalloc(sizeof(ext2_open_files_t));
+
     //set up the initial queue for the open files list
     ext2_open_queue->inode = 0;
     ext2_open_queue->permissions = 0;
@@ -2353,11 +2493,16 @@ u32int ext2_initialize(u32int size)
 
     ext2_set_current_dir(ext2_root); 
 
+    ext2_open_queue = (ext2_open_files_t*)kmalloc(sizeof(ext2_open_files_t));
+
     //set up the initial queue for the open files list
     ext2_open_queue->inode = 0;
     ext2_open_queue->permissions = 0;
     ext2_open_queue->data = 0;
     ext2_open_queue->next = 0;
+
+    kfree(file);
+    kfree(dr);
 
     //sucess!
     return 0;
