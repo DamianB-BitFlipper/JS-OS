@@ -65,8 +65,8 @@ typedef struct task
   void (*thread)();                        //thread entry point
   u32int thread_flags;                     //location of an array of thread arguments to go allong with that function
   
-  u32int stack;                            //kernel stack location.
-  u32int originalStack;                    //the original kernel stack location.
+  //~ u32int stack;                            //kernel stack location.
+  //~ u32int originalStack;                    //the original kernel stack location.
   
   struct task *next;                       //the next task in a linked list.
 }task_t;

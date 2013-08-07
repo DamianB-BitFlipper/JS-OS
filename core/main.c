@@ -128,7 +128,11 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   
   addShellIndent();
 
-  //~ __test__();
+  __test__();
+
+  mSleep(2000);
+
+  __test__();
 
   //sucess!
   return 0;
@@ -150,7 +154,7 @@ u32int test(char *test)
     return 0;
   }else if(!strcmp(test, "tasking"))
   {
-    start_task(PRIO_HIGH, PROC_SHORT, tasking_test, "tasking", "tasking_test");
+    //~ start_task(PRIO_HIGH, PROC_SHORT, tasking_test, "tasking", "tasking_test");
 
     //sucess
     return 0;

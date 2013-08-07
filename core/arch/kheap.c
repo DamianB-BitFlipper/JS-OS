@@ -42,7 +42,8 @@ u32int kmalloc_int(u32int sz, int align, u32int *phys)
     void *addr = alloc(sz, (u8int)align, kheap);
     if(phys)
     {
-      page_t *page = get_page((u32int)addr, 0, kernel_directory);
+      //~ page_t *page = get_page((u32int)addr, 0, kernel_directory);
+      page_t *page = get_page((u32int)addr, 0, current_directory == 0 ? kernel_directory : current_directory);
       *phys = page->frame * 0x1000 + ((u32int)addr & 0xFFF);
     }
     
@@ -301,30 +302,30 @@ void *alloc(u32int size, u8int page_align, heap_t *heap)
   // If we need to page-align the data, do it now and make a new hole in front of our block.
   if(page_align && orig_hole_pos & 0xFFFFF000)
   {
-    u32int new_location   = orig_hole_pos + 0x1000 /* page size */ - (orig_hole_pos&0xFFF) - sizeof(header_t);
+    u32int new_location   = orig_hole_pos + 0x1000 /* page size */ - (orig_hole_pos & 0xFFF) - sizeof(header_t);
     header_t *hole_header = (header_t *)orig_hole_pos;
-    hole_header->size     = 0x1000 /* page size */ - (orig_hole_pos&0xFFF) - sizeof(header_t);
-    hole_header->magic    = HEAP_MAGIC;
-    hole_header->is_hole  = 1;
+    hole_header->size     = 0x1000 /* page size */ - (orig_hole_pos & 0xFFF) - sizeof(header_t);
+    hole_header->magic = HEAP_MAGIC;
+    hole_header->is_hole = 1;
     footer_t *hole_footer = (footer_t *) ( (u32int)new_location - sizeof(footer_t) );
-    hole_footer->magic    = HEAP_MAGIC;
-    hole_footer->header   = hole_header;
-    orig_hole_pos         = new_location;
-    orig_hole_size        = orig_hole_size - hole_header->size;
+    hole_footer->magic = HEAP_MAGIC;
+    hole_footer->header = hole_header;
+    orig_hole_pos = new_location;
+    orig_hole_size = orig_hole_size - hole_header->size;
   }else{
     // Else we don't need this hole any more, delete it from the index.
     remove_ordered_array(iterator, &heap->index);
   }
 
   // Overwrite the original header...
-  header_t *block_header  = (header_t *)orig_hole_pos;
-  block_header->magic     = HEAP_MAGIC;
-  block_header->is_hole   = 0;
-  block_header->size      = new_size;
+  header_t *block_header = (header_t *)orig_hole_pos;
+  block_header->magic = HEAP_MAGIC;
+  block_header->is_hole = 0;
+  block_header->size = new_size;
   // ...And the footer
-  footer_t *block_footer  = (footer_t *) (orig_hole_pos + sizeof(header_t) + size);
-  block_footer->magic     = HEAP_MAGIC;
-  block_footer->header    = block_header;
+  footer_t *block_footer = (footer_t *) (orig_hole_pos + sizeof(header_t) + size);
+  block_footer->magic = HEAP_MAGIC;
+  block_footer->header = block_header;
 
   // We may need to write a new hole after the allocated block.
   // We do this only if the new hole would have positive size...

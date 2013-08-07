@@ -46,13 +46,17 @@ void initialise_tasking()
 
   move_stack((void*)0x10000000, 0x2000);
 
-  u32int *stack;
   task_t *task = (task_t*)kmalloc(sizeof(task_t));
   current_task = ready_queue = task;
-  task->stack = kmalloc(0x1000) + 0x1000;	// Allocate 4 kilobytes of space
-  task->esp = task->stack;
-  task->originalStack = task->stack - 0x1000; //set the originalStack to its starting location
 
+  task->id = next_pid++;
+  task->thread = 0;
+  task->thread_flags = 0;
+  strcpy(task->name, "init");
+
+  task->esp = task->ebp = 0;
+  task->eip = 0;
+  
   // Clone the address space.
   task->page_directory = current_directory;
 
@@ -66,43 +70,9 @@ void initialise_tasking()
   task->burst_time = 0;
   task->averaged_priority = 0;
 
-  nTasks++;
-
-  stack = (u32int*)task->stack;
-
-  // processor data (iret)
-  *--stack = 0x202;	// EFLAGS
-  *--stack = 0x08;	// CS
-  //~ *--stack = (u32int)func;	// EIP
-  *--stack = 0;	// EIP
-  task->eip = 0;
-
-  // pusha
-  *--stack = 0;		// EDI
-  *--stack = 0;		// ESI
-  *--stack = 0;		// EBP
-  task->ebp = 0;
-  
-  *--stack = 0;		// NULL
-  *--stack = 0;		// EBX
-  *--stack = 0;		// EDX
-  *--stack = 0;		// ECX
-  *--stack = 0;		// EAX
-
-  // data segments
-  *--stack = 0x10;	// DS
-  *--stack = 0x10;	// ES
-  *--stack = 0x10;	// FS
-  *--stack = 0x10;	// GS
-
-  task->id = next_pid++;
-  //~ task->id = 0;
-  task->stack = (u32int)stack;
-  task->thread = 0;
-  task->thread_flags = 0;
-  strcpy(task->name, "init");
-
   task->next = 0;
+
+  nTasks++;
 
   /*set the scheduling algorithm to prioritized SJF
    * see the schedule.h for a table of contents for
@@ -135,7 +105,7 @@ void move_stack(void *new_stack_start, u32int size)
   u32int old_base_pointer;  asm volatile("mov %%ebp, %0" : "=r" (old_base_pointer));
 
   // Offset to add to old stack addresses to get a new stack address.
-  u32int offset            = (u32int)new_stack_start - initial_esp;
+  u32int offset = (u32int)new_stack_start - initial_esp;
 
   // New ESP and EBP.
   u32int new_stack_pointer = old_stack_pointer + offset;
@@ -177,7 +147,6 @@ void set_current_task(task_t *task_to_set)
   if(!task_to_set)
   {
     asm volatile("sti");
-    
     return;
   }
 
@@ -221,7 +190,7 @@ void set_current_task(task_t *task_to_set)
   //~ k_printf("\nCurrent Process is: %d\n", getpid());
 
   // Change our kernel stack over.
-  //set_kernel_stack(current_task->kernel_stack+KERNEL_STACK_SIZE);
+  //~ set_kernel_stack(current_task->stack + KERNEL_STACK_SIZE);
 
   // Here we:
   // * Stop interrupts so we don't get interrupted.
@@ -286,9 +255,7 @@ void switch_task()
   
   // If we fell off the end of the linked list start again at the beginning.
   if(!current_task)
-  {
     current_task = ready_queue;
-  }
 
   eip = current_task->eip;
   esp = current_task->esp;
@@ -296,9 +263,10 @@ void switch_task()
 
   // Make sure the memory manager knows we've changed page directory.
   if(current_task->page_directory)
-  {
     current_directory = current_task->page_directory;
-  }
+
+    // Change our kernel stack over.
+    //~ set_kernel_stack(current_task->stack + KERNEL_STACK_SIZE);
 
   // Here we:
   // * Stop interrupts so we don't get interrupted.
@@ -327,20 +295,22 @@ void switch_task()
 
 s32int fork(u32int priority, u32int burst_time, char *task_Name)
 {
-
   asm volatile("cli");
 
   // Take a pointer to this process' task struct for later reference.
-  static task_t *parent_task;
+  task_t *parent_task;
   parent_task = (task_t*)current_task;
   
   u32int id = next_pid++;
 
-  u32int *stack;
   task_t *task = (task_t*)kmalloc(sizeof(task_t));
-  task->stack = kmalloc(0x1000) + 0x1000;	// Allocate 4 kilobytes of space
-  task->esp = task->stack;
-  task->originalStack = task->stack - 0x1000; //set the originalStack to its starting location
+
+  task->id = id;
+  task->esp = task->ebp = 0;
+  task->eip = 0;
+  task->thread = 0;
+  task->thread_flags = 0;
+  strcpy(task->name, task_Name);
 
   // Clone the address space.
   page_directory_t *directory = clone_directory(current_directory);
@@ -355,37 +325,6 @@ s32int fork(u32int priority, u32int burst_time, char *task_Name)
   task->averaged_priority = priority + burst_time;
 
   nTasks++;
-
-  stack = (u32int*)task->stack;
-
-  // processor data (iret)
-  *--stack = 0x202;	// EFLAGS
-  *--stack = 0x08;	// CS
-  *--stack = 0;	// EIP
-  task->eip = 0;
-
-  // pusha
-  *--stack = 0;		// EDI
-  *--stack = 0;		// ESI
-  *--stack = 0;		// EBP
-  task->ebp = 0;
-  *--stack = 0;		// NULL
-  *--stack = 0;		// EBX
-  *--stack = 0;		// EDX
-  *--stack = 0;		// ECX
-  *--stack = 0;		// EAX
-
-  // data segments
-  *--stack = 0x10;	// DS
-  *--stack = 0x10;	// ES
-  *--stack = 0x10;	// FS
-  *--stack = 0x10;	// GS
-
-  task->id = id;
-  task->stack = (u32int)stack;
-  task->thread = 0;
-  task->thread_flags = 0;
-  strcpy(task->name, task_Name);
 
   task->next = 0;
 
@@ -448,22 +387,20 @@ void exit()
   }
   
   //We didn't find the task and it is not the ready_queue
-  if(task_prev == 0 && current_task != ready_queue)
+  if(!task_prev && current_task != ready_queue)
     return;
 
   //if our current task is the ready_queue then set the starting task as the next task after current_task
   if(current_task == ready_queue)
-  {
     ready_queue = current_task->next;
-  }else{
+  else
     task_prev->next = current_task->next;
-  }
   
   nTasks--;
   
   //Free the memory
   kfree((void*)current_task);
-  kfree((void*)current_task->originalStack);
+  //~ kfree((void*)current_task->originalStack);
   //~ kfree((void*)current_task->stack);
   
   asm volatile("sti"); //Restart Interrupts before switching - stop CPU lockup
@@ -480,11 +417,15 @@ u32int start_task(u32int priority, u32int burst_time, void (*func)(), void *arg,
   
   u32int id = next_pid++;
 
-  u32int *stack;
   task_t *task = (task_t*)kmalloc(sizeof(task_t));
-  task->stack = kmalloc(0x1000) + 0x1000;	// Allocate 4 kilobytes of space
-  task->esp = task->stack;
-  task->originalStack = task->stack - 0x1000; //set the originalStack to its starting location
+
+  task->id = id;
+  task->thread = func;
+  task->thread_flags = (u32int)arg;
+  strcpy(task->name, task_Name);
+
+  task->esp = task->ebp = 0;
+  task->eip = 0;
 
   // Clone the address space.
   //page_directory_t *directory = clone_directory(current_directory);
@@ -502,37 +443,6 @@ u32int start_task(u32int priority, u32int burst_time, void (*func)(), void *arg,
   task->averaged_priority = priority + burst_time;
 
   nTasks++;
-
-  stack = (u32int*)task->stack;
-
-  // processor data (iret)
-  *--stack = 0x202;	// EFLAGS
-  *--stack = 0x08;	// CS
-  *--stack = (u32int)func;	// EIP
-  task->eip = (u32int)func;
-
-  // pusha
-  *--stack = 0;		// EDI
-  *--stack = 0;		// ESI
-  *--stack = 0;		// EBP
-  task->ebp = 0;
-  *--stack = 0;		// NULL
-  *--stack = 0;		// EBX
-  *--stack = 0;		// EDX
-  *--stack = 0;		// ECX
-  *--stack = 0;		// EAX
-
-  // data segments
-  *--stack = 0x10;	// DS
-  *--stack = 0x10;	// ES
-  *--stack = 0x10;	// FS
-  *--stack = 0x10;	// GS
-
-  task->id = id;
-  task->stack = (u32int)stack;
-  task->thread = func;
-  task->thread_flags = (u32int)arg;
-  strcpy(task->name, task_Name);
 
   task->next = 0;
 

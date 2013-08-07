@@ -208,12 +208,9 @@ void preempt_task(task_t *task_to_preempt)
       // Find the end of the ready queue...
       task_t *tmp_task;
       tmp_task = (task_t*)ready_queue;
-      while(tmp_task->next != 0)
-      {
+      while(tmp_task->next)
         tmp_task = tmp_task->next;
-    
-      }
-      
+
       // ...And extend it.
       tmp_task->next = task_to_preempt;
     
@@ -232,6 +229,9 @@ void preempt_task(task_t *task_to_preempt)
           task_to_preempt->next = (task_t*)current_task;
           ready_queue = task_to_preempt;
           set_current_task(task_to_preempt);
+
+          k_printf("TASK HAS BEEN SET!!!!!!!!!!!!!!!!!!!\n");
+          for(;;);
 
         }else if(cur_parent != 0) //if the current task was not the ready queue, then we must have a parent
         {

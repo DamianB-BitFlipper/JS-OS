@@ -388,9 +388,7 @@ page_directory_t *clone_directory(page_directory_t *src)
         // It's in the kernel, so just use the same pointer.
         dir->tables[i] = src->tables[i];
         dir->tablesPhysical[i] = src->tablesPhysical[i];
-      }
-      else
-      {
+      }else{
         // Copy the table.
         u32int phys;
         dir->tables[i] = clone_table(src->tables[i], &phys);
