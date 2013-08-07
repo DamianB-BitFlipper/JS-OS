@@ -23,11 +23,12 @@
 
 #include <system.h>
 
-#define TO_U32INT(bytes)                   (bytes / sizeof(u32int)) 
+#define TO_U32INT(bytes)                   ((bytes) / sizeof(u32int)) 
 
-#define BLOCKS_TO_SECTORS(blocks)          ((blocks * EXT2_BLOCK_SZ) / SECTOR_SIZE)
+#define BLOCKS_TO_SECTORS(blocks)          (((blocks) * EXT2_BLOCK_SZ) / SECTOR_SIZE)
+#define SECTORS_TO_BLOCKS(sectors)         (((sectors) * SECTOR_SIZE) / EXT2_BLOCK_SZ)
 
-#define IS_CONS_BLOCKS(first, second)      (((second - first) / (EXT2_BLOCK_SZ / SECTOR_SIZE)) == 1 ? TRUE : FALSE)
+#define IS_CONS_BLOCKS(first, second)      ((((second) - (first)) / (EXT2_BLOCK_SZ / SECTOR_SIZE)) == 1 ? TRUE : FALSE)
 
 //the global path for the current directory
 char *ext2_path;
@@ -408,15 +409,7 @@ u32int ext2_data_to_inode_table(ext2_inode_t *data, ext2_group_descriptor_t *gde
 
   //if we did not find enough space, return an error
   if(off == sblock->inodes_per_group)
-  {
-
-    //purposly not freeing since buffer, either way with update, is the global variable which should not be cleared
-    //~ if(update == TRUE)
-      //~ kfree(buffer);
-
-    //error
-    return 1;
-  }
+    return 1; //error
 
   memcpy((u8int*)buffer + sizeof(ext2_inode_t) * off, data, sizeof(ext2_inode_t));
 
@@ -1039,6 +1032,7 @@ u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, u32int
 
   u32int i, b, *block, location;
 
+  //TODO make this search by chunk not block
   block = (u32int*)kmalloc(EXT2_BLOCK_SZ);
 
   /*In this section, we find a valid offset (i) and block number (b)
@@ -1127,6 +1121,11 @@ u32int ext2_free_blocks(u32int *block_locs, u32int nblocks)
     block_bitmap = ext2_g_bb;
   }
 
+  //the offset from the beginning of the file (the end of the inode table)
+  //- the extra BLOCKS_TO_SECTORS(1), is to offset this to the begining of the last block
+  u32int begining_offset = gdesc->inode_table_id + BLOCKS_TO_SECTORS(gdesc->inode_table_size) - 
+    BLOCKS_TO_SECTORS(1);
+
   u32int byte = 0, bit = 0, i, error = 0, changes = FALSE;
   for(i = 0; i < nblocks; i++)
   {
@@ -1134,8 +1133,8 @@ u32int ext2_free_blocks(u32int *block_locs, u32int nblocks)
     if(!*(block_locs + i))
       continue;
     
-    byte = *(block_locs + i) / 8;
-    bit = 0b10000000 >> ((*(block_locs + i) % 8) - 1);
+    byte = SECTORS_TO_BLOCKS(*(block_locs + i) - begining_offset) / 8;
+    bit = 0b10000000 >> ((SECTORS_TO_BLOCKS(*(block_locs + i) - begining_offset) % 8) - 1);
 
     //if byte is too large, continue on and set to return an error at the end
     if(byte > EXT2_BLOCK_SZ)
@@ -1216,6 +1215,201 @@ u32int ext2_expand(ext2_inode_t *node, u32int increase_bytes)
   kfree(initial_locs);
   kfree(added_locs);
   kfree(all_locs);
+  kfree(blocks_to_rm);
+
+  //sucess!
+  return 0;
+}
+
+u32int ext2_remove_inode_entry(ext2_inode_t *node)
+{
+  ext2_inode_t *buffer;
+  u8int *ib;
+
+  ext2_superblock_t *sblock;  
+  ext2_group_descriptor_t *gdesc; 
+
+  if(!ext2_g_sblock || !ext2_g_gdesc)
+  {
+    if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
+      return 0; //error
+  }else{
+    sblock = ext2_g_sblock;
+    gdesc = ext2_g_gdesc;
+  }
+
+  if(!ext2_g_inode_table)
+  {
+    buffer = (ext2_inode_t*)kmalloc(gdesc->inode_table_size * EXT2_BLOCK_SZ);
+    ext2_g_inode_table = buffer;
+
+    floppy_read(gdesc->inode_table_id, gdesc->inode_table_size * EXT2_BLOCK_SZ, (u32int*)buffer);
+
+  }else
+    buffer = ext2_g_inode_table;
+
+  if(!ext2_g_ib)
+  {    
+    ib = (u8int*)kmalloc(EXT2_BLOCK_SZ);
+    ext2_g_ib = ib;
+
+    floppy_read(gdesc->inode_bitmap, EXT2_BLOCK_SZ, (u32int*)ib);
+  }else
+    ib = ext2_g_ib;
+
+  //loop until we found out inode entry
+  u32int off = 0;
+  while(buffer[off].inode != node->inode && off < sblock->inodes_per_group)
+    off++;
+
+  //we did not find out inode entry
+  if(off == sblock->inodes_per_group)
+    return 1; //error
+
+  //flip the inode bitmap bit
+  u32int byte, bit;
+  byte = off / 8;
+  bit = 0b10000000 >> ((off % 8) - 1);
+
+  //check if the bit is 1, so we do not accidentally change a 0 to a 1
+  if(*(ib + byte) & bit)
+     *(ib + byte) ^= bit;
+  else
+    return 1; //there was no trace of the inode in the inode bitmap, error
+
+  //clear the inode entry
+  memset(&buffer[off], 0x0, sizeof(ext2_inode_t));
+
+  //write our changes
+  floppy_write((u32int*)buffer, gdesc->inode_table_size * EXT2_BLOCK_SZ, gdesc->inode_table_id);
+  floppy_write((u32int*)ib, EXT2_BLOCK_SZ, gdesc->inode_bitmap);
+
+  //sucess!
+  return 0;
+}
+
+//TODO, when deleting, everything works, make it remove dirent from parent dir
+u32int ext2_delete(ext2_inode_t *parent_dir, ext2_inode_t *node)
+{
+  ext2_superblock_t *sblock;  
+  ext2_group_descriptor_t *gdesc; 
+
+  if(!ext2_g_sblock || !ext2_g_gdesc)
+  {
+    if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
+      return 1; //error
+  }else{
+    sblock = ext2_g_sblock;
+    gdesc = ext2_g_gdesc;
+  }
+
+  //remove the inode entry from the inode table and the inode bitmap
+  ext2_remove_inode_entry(node);
+
+  //remove the singly, doubly, and triply block locations from the block bitmap, allong with the block_locs
+  u32int *block_locs, nblocks, *blocks_to_rm, i;
+  nblocks = ((node->size - 1) / EXT2_BLOCK_SZ) + 1;
+
+  block_locs = ext2_block_locs(node);
+
+  /*(EXT2_N_BLOCKS - EXT2_NDIR_BLOCKS) are the singly, doubly, and triply block locations in the
+   * inode structure, nblocks are the data blocks that must be freed, we compress these two block
+   * block locations into one for efficientcy*/
+  blocks_to_rm = (u32int*)kmalloc(sizeof(u32int) * ((EXT2_N_BLOCKS - EXT2_NDIR_BLOCKS) + nblocks));
+  
+  for(i = 0; i < EXT2_N_BLOCKS - EXT2_NDIR_BLOCKS; i++)
+    *(blocks_to_rm + i) = *(node->blocks + EXT2_NDIR_BLOCKS + i);
+ 
+  memcpy(blocks_to_rm + i, block_locs, sizeof(u32int) * nblocks);
+
+  //when the for loop exits, i + nblocks will equal the number of blocks that have been saved in blocks_to_rm
+  if(ext2_free_blocks(blocks_to_rm, i + nblocks))
+  {
+    kfree(block_locs);
+    kfree(blocks_to_rm);
+
+    return 1; //there was some sort of error
+  }
+
+  //increment the number of free inodes and blocks freed
+  gdesc->free_inodes++;
+  gdesc->free_blocks += nblocks;
+
+  floppy_write((u32int*)gdesc, sizeof(ext2_group_descriptor_t), gdesc->gdesc_location);
+
+  //remove the file's dirent in the parent directory
+  u32int b, *block, location;
+
+  //TODO make this search by chunk not block
+  block = (u32int*)kmalloc(EXT2_BLOCK_SZ);
+
+  /*In this section, we find a valid offset (i) and block number (b)
+   * to an open dirent space
+   *
+   * length - 1 because if length == EXT2_BLOCK_SZ, there should be only one
+   * block checked, but w/o that -1, 2 will be checked */
+  for(b = 0; b <= (u32int)((parent_dir->size - 1) / EXT2_BLOCK_SZ); b++)
+  {
+    //reset i
+    i = 0;
+    location = ext2_block_of_set(parent_dir, b, block);
+
+    if(!location)
+    {
+      kfree(block_locs);
+      kfree(blocks_to_rm);
+      return 1; //error
+    }
+    
+    //this dir has not blocks assigned
+    if(!block)
+    {
+
+      kfree(block);
+      kfree(block_locs);
+      kfree(blocks_to_rm);
+      return 1; //error
+    }
+
+    //loop until we hit the end of the current block or get an our dirent
+    while(*(u32int*)((u8int*)block + i) != node->inode && 
+          *(u8int*)((u8int*)block + i + sizeof(dirent.ino) + sizeof(dirent.rec_len) + sizeof(dirent.name_len)) != node->type)
+    {
+      //increase i with the rec_len that we get by moving fileheader sizeof(dirent.ino) (4 bytes) and reading its value
+      i += *(u16int*)((u8int*)block + i + sizeof(dirent.ino));
+
+      //if the offset (i) + the length of the contents in the struct dirent is greater than what a block can hold, exit and go to new block
+      if(i + dirent.rec_len >= EXT2_BLOCK_SZ)
+        break;
+
+      //if the offset (i) + the length of the contents in the struct dirent is greater than what a direcotory can hold, exit function before page fault happens
+      if(b * EXT2_BLOCK_SZ + i + dirent.rec_len >= parent_dir->size)
+      {
+        //expand parent_dir by one block
+        if(ext2_expand(parent_dir, EXT2_BLOCK_SZ))
+          return 1; //failed, out of directory left over space
+      }
+
+    }
+
+    //if i is a valid offset, do not go to a new block, just exit
+    if(*(u32int*)((u8int*)block + i) == node->inode && 
+       *(u8int*)((u8int*)block + i + sizeof(dirent.ino) + sizeof(dirent.rec_len) + sizeof(dirent.name_len)) == node->type)
+      break;
+
+  }
+
+  u32int rec_len = *(u16int*)((u8int*)block + i + sizeof(dirent.ino));
+
+  /*shifts the dirent data in the directory over the one we want to delete, thus deleting its trails
+   * the "-1 *" is used to show shift to the left */
+  shiftData((u8int*)block + i + rec_len, -1 * rec_len, EXT2_BLOCK_SZ - i - rec_len);
+
+  //write the changed block
+  floppy_write(block, EXT2_BLOCK_SZ, location);
+
+  kfree(block);
+  kfree(block_locs);
   kfree(blocks_to_rm);
 
   //sucess!
@@ -2500,9 +2694,6 @@ u32int ext2_initialize(u32int size)
     ext2_open_queue->permissions = 0;
     ext2_open_queue->data = 0;
     ext2_open_queue->next = 0;
-
-    kfree(file);
-    kfree(dr);
 
     //sucess!
     return 0;

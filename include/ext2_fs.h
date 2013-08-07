@@ -344,4 +344,10 @@ u32int ext2_expand(ext2_inode_t *node, u32int increase_bytes);
 /*remove a list of blocks from the block bitmap*/
 u32int ext2_free_blocks(u32int *block_locs, u32int nblocks);
 
+/*deletes a file/directory node*/
+u32int ext2_delete(ext2_inode_t *parent_dir, ext2_inode_t *node);
+
+/*removes an inode entry in the inode table and flips the bit in the inode bitmap*/
+u32int ext2_remove_inode_entry(ext2_inode_t *node);
+
 #endif

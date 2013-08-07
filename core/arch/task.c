@@ -46,11 +46,11 @@ void initialise_tasking()
 
   move_stack((void*)0x10000000, 0x2000);
 
-	u32int *stack;
-	task_t *task = (task_t*)kmalloc(sizeof(task_t));
+  u32int *stack;
+  task_t *task = (task_t*)kmalloc(sizeof(task_t));
   current_task = ready_queue = task;
-	task->stack = kmalloc(0x1000) + 0x1000;	// Allocate 4 kilobytes of space
-	task->esp = task->stack;
+  task->stack = kmalloc(0x1000) + 0x1000;	// Allocate 4 kilobytes of space
+  task->esp = task->stack;
   task->originalStack = task->stack - 0x1000; //set the originalStack to its starting location
 
   // Clone the address space.
@@ -118,8 +118,8 @@ void move_stack(void *new_stack_start, u32int size)
   u32int i;
   // Allocate some space for the new stack.
   for(i = (u32int)new_stack_start;
-    i >= ((u32int)new_stack_start - size);
-    i -= 0x1000)
+      i >= ((u32int)new_stack_start - size);
+      i -= 0x1000)
   {
     // General-purpose stack is in user-mode.
     alloc_frame( get_page(i, 1, current_directory), 0 /* User mode */, 1 /* Is writable */ );
@@ -168,7 +168,7 @@ void move_stack(void *new_stack_start, u32int size)
 void set_current_task(task_t *task_to_set)
 {
   // If we haven't initialised tasking yet, just return.
-  if (current_task == 0)
+  if(!current_task)
     return;
 
   asm volatile("cli");
@@ -198,10 +198,11 @@ void set_current_task(task_t *task_to_set)
   eip = read_eip();
 
   // Have we just switched tasks?
-  if (eip == 0x12345)
+  if(eip == 0x12345)
     return;
 
   // No, we didn't switch tasks. Let's save some register values and switch.
+  //saving the old processes register values
   current_task->eip = eip;
   current_task->esp = esp;
   current_task->ebp = ebp;
@@ -215,9 +216,7 @@ void set_current_task(task_t *task_to_set)
 
   // Make sure the memory manager knows we've changed page directory.
   if(current_task->page_directory)
-  {
     current_directory = current_task->page_directory;
-  }
 
   //~ k_printf("\nCurrent Process is: %d\n", getpid());
 
@@ -326,7 +325,7 @@ void switch_task()
 
 }
 
-u32int fork(u32int priority, u32int burst_time, char *task_Name)
+s32int fork(u32int priority, u32int burst_time, char *task_Name)
 {
   //// We are modifying kernel structures, and so cannot be interrupted.
   //asm volatile("cli");
@@ -360,20 +359,20 @@ u32int fork(u32int priority, u32int burst_time, char *task_Name)
   ////~ tmp_task->next = ready_queue->next;
   //while(tmp_task->next != 0)
   //{
-    //tmp_task = tmp_task->next;
+  //tmp_task = tmp_task->next;
     
-    ////tmp_task->id = tmp_task->next->id;
-    ////strcpy(tmp_task->name, tmp_task->next->name);
-    //////~ tmp_task->name = tmp_task->next->name;
-    ////tmp_task->esp = tmp_task->next->esp;
-    ////tmp_task->ebp = tmp_task->next->ebp;
-    ////tmp_task->eip = tmp_task->next->eip;
-    ////tmp_task->priority = tmp_task->next->priority;
-    ////tmp_task->time_to_run = tmp_task->next->time_to_run;
-    ////tmp_task->time_running = tmp_task->next->time_running;
-    ////tmp_task->ready_to_run = tmp_task->next->ready_to_run;
-    ////tmp_task->page_directory = tmp_task->next->page_directory;
-    ////tmp_task->next = tmp_task->next->next;
+  ////tmp_task->id = tmp_task->next->id;
+  ////strcpy(tmp_task->name, tmp_task->next->name);
+  //////~ tmp_task->name = tmp_task->next->name;
+  ////tmp_task->esp = tmp_task->next->esp;
+  ////tmp_task->ebp = tmp_task->next->ebp;
+  ////tmp_task->eip = tmp_task->next->eip;
+  ////tmp_task->priority = tmp_task->next->priority;
+  ////tmp_task->time_to_run = tmp_task->next->time_to_run;
+  ////tmp_task->time_running = tmp_task->next->time_running;
+  ////tmp_task->ready_to_run = tmp_task->next->ready_to_run;
+  ////tmp_task->page_directory = tmp_task->next->page_directory;
+  ////tmp_task->next = tmp_task->next->next;
   //}
 
   ////Find last task
@@ -381,12 +380,12 @@ u32int fork(u32int priority, u32int burst_time, char *task_Name)
   ////task_t *tmp_task = (task_t*)ready_queue;
   ////for(;tmp_task->next != 0; tmp_task = tmp_task->next)
   ////{
-    ////if(tmp_task->next == current_task)
-    ////{
-      //////We got the previous task
-      ////task_prev = tmp_task;
-      ////break; //Don't bother with the rest of the list
-    ////}
+  ////if(tmp_task->next == current_task)
+  ////{
+  //////We got the previous task
+  ////task_prev = tmp_task;
+  ////break; //Don't bother with the rest of the list
+  ////}
   ////}  
   
   //// ...And extend it.
@@ -399,22 +398,22 @@ u32int fork(u32int priority, u32int burst_time, char *task_Name)
   //// We could be the parent or the child here - check.
   //if(current_task == parent_task) //we are the child
   //{
-    //// We are the parent, so set up the esp/ebp/eip for our child.
-    //u32int esp; asm volatile("mov %%esp, %0" : "=r"(esp));
-    //u32int ebp; asm volatile("mov %%ebp, %0" : "=r"(ebp));
-    //new_task->esp = esp;
-    //new_task->ebp = ebp;
-    //new_task->eip = eip;
-    //// All finished: Reenable interrupts.
-    //asm volatile("sti");
+  //// We are the parent, so set up the esp/ebp/eip for our child.
+  //u32int esp; asm volatile("mov %%esp, %0" : "=r"(esp));
+  //u32int ebp; asm volatile("mov %%ebp, %0" : "=r"(ebp));
+  //new_task->esp = esp;
+  //new_task->ebp = ebp;
+  //new_task->eip = eip;
+  //// All finished: Reenable interrupts.
+  //asm volatile("sti");
 
-    //// And by convention return the PID of the child.
-    //return new_task->id;
+  //// And by convention return the PID of the child.
+  //return new_task->id;
   //}else{ //we are the parent
-    ////~ k_printf("\nPID %d\n", getpid());
+  ////~ k_printf("\nPID %d\n", getpid());
     
-    //// We are the child - by convention return 0.
-    //return 0;
+  //// We are the child - by convention return 0.
+  //return 0;
   //}
 
   asm volatile("cli");
@@ -423,12 +422,12 @@ u32int fork(u32int priority, u32int burst_time, char *task_Name)
   static task_t *parent_task;
   parent_task = (task_t*)current_task;
   
-	u32int id = next_pid++;
+  u32int id = next_pid++;
 
-	u32int *stack;
-	task_t *task = (task_t*)kmalloc(sizeof(task_t));
-	task->stack = kmalloc(0x1000) + 0x1000;	// Allocate 4 kilobytes of space
-	task->esp = task->stack;
+  u32int *stack;
+  task_t *task = (task_t*)kmalloc(sizeof(task_t));
+  task->stack = kmalloc(0x1000) + 0x1000;	// Allocate 4 kilobytes of space
+  task->esp = task->stack;
   task->originalStack = task->stack - 0x1000; //set the originalStack to its starting location
 
   // Clone the address space.
@@ -483,7 +482,7 @@ u32int fork(u32int priority, u32int burst_time, char *task_Name)
   //task_t *tmp_task = (task_t*)ready_queue;
   //while(tmp_task->next != 0)
   //{
-    //tmp_task = tmp_task->next;
+  //tmp_task = tmp_task->next;
 
   //}
   
@@ -673,11 +672,11 @@ int kill_task(u32int pid)
 
 void switch_to_user_mode()
 {
-    // Set up our kernel stack.
-    //set_kernel_stack(current_task->kernel_stack+KERNEL_STACK_SIZE);
+  // Set up our kernel stack.
+  //set_kernel_stack(current_task->kernel_stack+KERNEL_STACK_SIZE);
 
-    // Set up a stack structure for switching to user mode.
-    asm volatile("  \
+  // Set up a stack structure for switching to user mode.
+  asm volatile("  \
       cli; \
       mov $0x23, %ax; \
       mov %ax, %ds; \

@@ -84,7 +84,7 @@ void switch_task();
 void set_current_task(task_t *task_to_set);
 
 /*Forks the current process, spawning a new one with a different memory space*/
-u32int fork(u32int priority, u32int burst_time, char *task_Name);
+s32int fork(u32int priority, u32int burst_time, char *task_Name);
 
 /*Causes the current process' stack to be forcibly moved to a new location*/
 void move_stack(void *new_stack_start, u32int size);
