@@ -40,87 +40,111 @@ extern u32int nroot_nodes;
  * add initial run function of that program into k_programs.h
  * make the function that will be run in the case stement below, nomenclature-> program_<command name> **/
 
-void runShellFunction(u32int runFunction, char *arguements, u32int priority, u32int burst_time)
+void runShellFunction(u32int runFunction, char *arguements, u32int priority, u32int burst_time, u8int multitask)
 {
 
   switch(runFunction)
   {
-    case 0:
-      //~ start_task(priority, program_ascii, arguements);
-      program_ascii(arguements);
-      break;
-    case 1:
+  case 0:
+    //~ start_task(priority, program_ascii, arguements);
+    program_ascii(arguements);
+    break;
+  case 1:
+  {
 
-      //~ start_task(priority, burst_time, program_echo, arguements, "echo");
-      program_echo(arguements);
-      break;
-    case 2:
-      program_tinytext(arguements);
-      break;
-    case 3:
-      program_GUI_pong(arguements);
-      break;
-    case 4:
+    if(multitask == TRUE)
     {
-      //multitasking enabled program
-      //~ start_task(priority, burst_time, program_song, arguements, "song");
-      s32int pid = fork(priority, burst_time, "song");
-      
-      if(!pid)
+      s32int pid = fork(priority, burst_time, "echo");
+
+      /*echo is usually a small and fast program, when it prints what it has to print,
+       * it exits quickly. Since it is so fast, we do not want it to unnecessarily print
+       * like this (->text), i.e. print of the shell indent itself. When we switch task,
+       * if the multitasking is preemptive, the echo should be called and print before
+       * the new shell indent is added*/
+      if(pid)
       {
-        program_song(arguements);
-        //~ exit();
+        task_t *cur;
+        cur = (task_t*)ready_queue;
+
+        while(cur && cur->id != pid)
+          cur = cur->next;
+
+        //something wrong happened, we did not find our task in the task list
+        if(!cur)
+        {
+          k_printf("Multitasking: echo command multitasking failed\n");
+          kill_task(pid);
+          return;
+        }
+
+        set_current_task(cur);
+      }else if(!pid)
+      {
+        program_echo(arguements);
+        exit();
       }
+    }else if(multitask == FALSE)
+      program_echo(arguements);
 
-      break;
-    }
-    case 5:
-      program_JS_viewer(arguements);
-      break;
-    case 6:
-    {
-      program_start(arguements);
-      //~ start_task(priority, burst_time, program_start, arguements, "start");
+    break;
+  }
+  case 2:
+    program_tinytext(arguements);
+    break;
+  case 3:
+    program_GUI_pong(arguements);
+    break;
+  case 4:
+    program_song(arguements);
 
-      break;
-    }
-    case 7:
-      program_ls(arguements);
-      break;
-    case 8:
-      program_cd(arguements);
-      break;
-    case 9:
-      program_now(arguements);
-      break;
-    case 10:
-      program_mkdir(arguements);
-      break;
-    case 11:
-      program_cp(arguements);
-      break;
-    case 12:
-      program_cat(arguements);
-      break;
-    case 13:
-      program_rm(arguements);
-      break;
-    case 14:
-      program_pwd(arguements);
-      break;
-    case 15:
-      program_help(arguements);
-      break;
-    case 16:
-      program_mv(arguements);
-      break;
-    case 17:
-      find_set_current_dir();
-      program_find(arguements);
-      break;
-    case 18:
-      program_about(arguements);
-      break;
+    break;
+  case 5:
+    program_JS_viewer(arguements);
+    break;
+  case 6:
+  {
+    program_start(arguements);
+    //~ start_task(priority, burst_time, program_start, arguements, "start");
+
+    break;
+  }
+  case 7:
+    program_ls(arguements);
+    break;
+  case 8:
+    program_cd(arguements);
+    break;
+  case 9:
+    program_now(arguements);
+    break;
+  case 10:
+    program_mkdir(arguements);
+    break;
+  case 11:
+    program_cp(arguements);
+    break;
+  case 12:
+    program_cat(arguements);
+    break;
+  case 13:
+    program_rm(arguements);
+    break;
+  case 14:
+    program_pwd(arguements);
+    break;
+  case 15:
+    program_help(arguements);
+    break;
+  case 16:
+    program_mv(arguements);
+    break;
+  case 17:
+    find_set_current_dir();
+    program_find(arguements);
+    break;
+  case 18:
+    program_about(arguements);
+    break;
   }
 
 }
@@ -198,43 +222,21 @@ void program_ascii(char *arguements)
     k_printf("\t %cbr\\__:_.=%cw   /\n");
     k_printf("\t       |  |    ");
 
-    //the original skverl with out the added coloration
-    //~ k_printf("\t  .  _  |  |  _\n");
-    //~ k_printf("\t  )\\|';| @| //\n");
-    //~ k_printf("\t / (/ \\=  |//\n");
-    //~ k_printf("\t \\__:_.=   /\n");
-    //~ k_printf("\t       |  |    ");
   }else{
     k_printf("Arguement: %s not found\n", arguements);
     k_printf("Usage: ascii -<animal>\nType ascii -list to see list of animals");
   }
 
-  //~ k_printf("\n%d\n", k_strcmp(arguements, "-duck"));
 }
 
 void program_echo(char *arguements)
 {
-  //asm volatile("sti");
-  //init_timer(globalFreq); // Initialise timer to globalFreq-Hz
 
-  ////if there is an arg tied to the current_task, set it to arguements
-  //asm volatile("cli");
-  //if(current_task->thread_flags)
-  //{
-    //arguements = (char*)current_task->thread_flags;
-  //}
-  //asm volatile("sti");
+  k_printf("%s\n", arguements);
 
-  //u32int i;
-  //for(i = 0; i < 6000; i++)
-  //{
-    k_printf("%s\n", arguements);
-  //}
-
-  //delete the process from the multitasking
-  //exit();
 }
 
+//TODO make this decent
 void program_tinytext(char *arguements)
 {
   k_save(); //save screen to char array
@@ -244,45 +246,24 @@ void program_tinytext(char *arguements)
   int yHolder = cursor_y; //store y position
 
   /*Add program name and title*/
-  //cursor_y = 0; //set y position to top so message can be printed there
-  //~ k_printf("%Cw%cbk  JS - tinytext 0.0.1%Cbk%cw");
-  //~ k_printf("%Cw%cbk  JS - tinytext 0.0.1                New Buffer                                 %Cbk%cw ");
   k_setprintf(0, 0, "%Cw%cbk  JS - tinytext 0.0.1                New Buffer                                 %Cbk%cw ", 0, 0, 0);
-  //~ k_printf("  JS - tinytext 0.0.1                New Buffer                                 ");
-  //~ k_printf("POOP");
-  //cursor_y = yHolder; //restore cursor_y position
-  //cursor_x = 0;
-
   setScreenYMinMax(1, 22); //reserve 3 rows at the bottom of the screen for mesages and 1 row at the top for program name
   turnShellInputOnOff(OFF); //turn shell indents off
 
   arrowKeyFunction("write", "left", &normalHCursor); //sets left and write to use a different function
   arrowKeyFunction("write", "up", &normalVCursor); //sets left and write to use a different function
 
-  //~ k_printf("writing");
 }
 
 void program_song(char *arguements)
 {
   asm volatile("sti");
   init_timer(globalFreq); // Initialise timer to globalFreq-Hz
-//~ 
-  //~ //if there is an arg tied to the current_task, set it to arguements
-  //~ asm volatile("cli");
-  //~ if(current_task->thread_flags)
-  //~ {
-//~ 
-    //~ arguements = (char*)current_task->thread_flags;
-  //~ }
-  //~ asm volatile("sti");
 
   if(k_strcmp(arguements, "-pacman") == 0)
   {
     song_pacman();
   }
-
-  //delete the process from the multitasking queue
-  //~ exit();
 }
 
 ///**************************LS function*****************************///
@@ -330,7 +311,7 @@ static int ls_file_interesting(struct dirent *entry)
 {
 
   if(really_all_files == TRUE || entry->name[0] != '.' ||
-  (all_files == TRUE && entry->name[1] != 0 && (entry->name[1] != '.' || entry->name[2] != 0)))
+     (all_files == TRUE && entry->name[1] != 0 && (entry->name[1] != '.' || entry->name[2] != 0)))
   {
     return TRUE;
   }
@@ -355,30 +336,30 @@ void ls_print_permissions(u32int inode)
   {
     switch(p % 3) //case for every three, itterate between r, w, and, x
     {
-      case 0:
-        if(root_nodes[inode].mask & binPer) //there is a 1 (TRUE) for the specific location
-        {
-          k_printf("r");
-        }else{
-          k_printf("-"); //if the location is 0 (FALSE), just have a slash
-        }
-        break;
-      case 1:
-        if(root_nodes[inode].mask & binPer) //there is a 1 (TRUE) for the specific location
-        {
-          k_printf("w");
-        }else{
-          k_printf("-"); //if the location is 0 (FALSE), just have a slash
-        }
-        break;
-      case 2:
-        if(root_nodes[inode].mask & binPer) //there is a 1 (TRUE) for the specific location
-        {
-          k_printf("x");
-        }else{
-          k_printf("-"); //if the location is 0 (FALSE), just have a slash
-        }
-        break;
+    case 0:
+      if(root_nodes[inode].mask & binPer) //there is a 1 (TRUE) for the specific location
+      {
+        k_printf("r");
+      }else{
+        k_printf("-"); //if the location is 0 (FALSE), just have a slash
+      }
+      break;
+    case 1:
+      if(root_nodes[inode].mask & binPer) //there is a 1 (TRUE) for the specific location
+      {
+        k_printf("w");
+      }else{
+        k_printf("-"); //if the location is 0 (FALSE), just have a slash
+      }
+      break;
+    case 2:
+      if(root_nodes[inode].mask & binPer) //there is a 1 (TRUE) for the specific location
+      {
+        k_printf("x");
+      }else{
+        k_printf("-"); //if the location is 0 (FALSE), just have a slash
+      }
+      break;
     }
 
     //decrement out mask, move the 1 bit that is on to the right one
@@ -399,18 +380,18 @@ void ls_sort_name()
   //u8int one, two;
   ////~ for(i = 0; i < ls_files_indexed - 1; i++)
   ////~ {
-    //for(a = 0; a < (ls_files_indexed - 1) * (ls_files_indexed - 1); a++)
-    //{
-      //one = *(ls_files[a].name + i);
-      //two = *(ls_files[a + 1].name + i);
+  //for(a = 0; a < (ls_files_indexed - 1) * (ls_files_indexed - 1); a++)
+  //{
+  //one = *(ls_files[a].name + i);
+  //two = *(ls_files[a + 1].name + i);
 
-      //if(one > two)
-      //{
-        //address = ls_files[a + 1].name
-        //array[a] = two;
-        //array[a + 1] = one;
-      //}
-    //}
+  //if(one > two)
+  //{
+  //address = ls_files[a + 1].name
+  //array[a] = two;
+  //array[a + 1] = one;
+  //}
+  //}
   ////~ }
 }
 
@@ -419,15 +400,15 @@ void ls_sort_files()
 
   switch(sort_type)
   {
-    case sort_none:
-      //do not sort, do nothing and exit
-      return;
-    case sort_name:
-      ls_sort_name();
-      break;
-    default:
-      //error!
-      return;
+  case sort_none:
+    //do not sort, do nothing and exit
+    return;
+  case sort_name:
+    ls_sort_name();
+    break;
+  default:
+    //error!
+    return;
   }
 
 }
@@ -538,18 +519,18 @@ void ls_print_format()
 
   switch(format)
   {
-    case one_per_line:
-      ls_print_one_per_line();
-      break;
-    case with_commas:
-      ls_print_with_commas();
-      break;
-    case long_format:
-      ls_long_format();
-      break;
-    default:
-      //error!
-      return;
+  case one_per_line:
+    ls_print_one_per_line();
+    break;
+  case with_commas:
+    ls_print_with_commas();
+    break;
+  case long_format:
+    ls_long_format();
+    break;
+  default:
+    //error!
+    return;
   }
 
 }
@@ -591,32 +572,32 @@ static int ls_decode_flags(int nArgs, char **args)
   {
     switch(i)
     {
-      case 0:
-        //do nothing
-        break;
-      case 'a': //flag 'a' all
-        all_files = TRUE;
-        really_all_files = TRUE;
-        break;
-      case 'i': //flag 'a' all
-        ls_print_inode = TRUE;
-        break;
-      case 'l': //flag 'l' lengthy
-        format = long_format;
-        break;
-      case 'm': //flag 'l' lengthy
-        format = with_commas;
-        break;
-      case 'A': //flag 'A' almost all
-        all_files = TRUE;
-        really_all_files = FALSE;
-        break;
-      case 'U': //flag 'A' almost all
-        sort_type = sort_none;
-        break;
-      default: //a legal flag was not found, so print and error and exit
-        //error!
-        return 1;
+    case 0:
+      //do nothing
+      break;
+    case 'a': //flag 'a' all
+      all_files = TRUE;
+      really_all_files = TRUE;
+      break;
+    case 'i': //flag 'a' all
+      ls_print_inode = TRUE;
+      break;
+    case 'l': //flag 'l' lengthy
+      format = long_format;
+      break;
+    case 'm': //flag 'l' lengthy
+      format = with_commas;
+      break;
+    case 'A': //flag 'A' almost all
+      all_files = TRUE;
+      really_all_files = FALSE;
+      break;
+    case 'U': //flag 'A' almost all
+      sort_type = sort_none;
+      break;
+    default: //a legal flag was not found, so print and error and exit
+      //error!
+      return 1;
     }
 
     flagRep++;
@@ -749,18 +730,18 @@ void program_ls(char *arguements)
     }
 
     ///*if there are contents in filePath, but nothing was gobbled, then that
-     //* file the user wanted to print did not exist
-     //*
-     //*also, there must be a list path specified, if dirPathArg == nArgs,
-     //* then there was no list path specified, so ignore this and use regular routine*/
+    //* file the user wanted to print did not exist
+    //*
+    //*also, there must be a list path specified, if dirPathArg == nArgs,
+    //* then there was no list path specified, so ignore this and use regular routine*/
     //if(*filePath && gobbled_something == FALSE && dirPathArg != nArgs)
     //{
-      //k_printf("filePath: %h\n", *filePath);
-      //k_printf("In \"%s%s\", \"%s\" does not exist\n", dirPath, filePath, filePath);
+    //k_printf("filePath: %h\n", *filePath);
+    //k_printf("In \"%s%s\", \"%s\" does not exist\n", dirPath, filePath, filePath);
     //}else{
   
-      //print the files that we added in the print file buffer
-      ls_print_format();
+    //print the files that we added in the print file buffer
+    ls_print_format();
     //~ }
 
   }else if(work == 1)
@@ -849,10 +830,10 @@ int program_cd(char *arguements)
     {
       //if(dir == fs_root) //if the dir is root, increment originalI by strlen so next dir doesn't end up "/dir" istead of "dir"
       //{
-        ////~ i++;
-        ////~ originalI = originalI + strlen(dir->name);
+      ////~ i++;
+      ////~ originalI = originalI + strlen(dir->name);
       //}else{
-        //originalI = i;
+      //originalI = i;
 
       //}
 
@@ -865,7 +846,7 @@ int program_cd(char *arguements)
         k_printf("In \"%s\", \"%s\" is not a directory\n", arguements, cd);
       }
       //~ }else{
-        //~ k_printf("In \"%s\", \"%s\" is not a directory\n", arguements, arguements);
+      //~ k_printf("In \"%s\", \"%s\" is not a directory\n", arguements, arguements);
 
       //~ }
       kfree(cd);
@@ -887,16 +868,16 @@ int program_cd(char *arguements)
 
 }
 
-void program_cp(char *arguments)
+u32int program_cp(char *arguments)
 {
-  int currentIno = currentDir_inode;
+  u32int currentIno = currentDir_inode, error = FALSE;
 
-  int nArgs = countArgs(arguments);
+  u32int nArgs = countArgs(arguments);
 
   char *args[nArgs];
   getArgs(arguments, args);
 
-  int dirCount, fileCount;
+  u32int dirCount, fileCount;
 
   dirFilePathCount(args[0], &dirCount, &fileCount);
 
@@ -911,7 +892,7 @@ void program_cp(char *arguments)
 
   src = finddir_fs(&root_nodes[currentDir_inode], filePath); //gets the structure of the first argument input
 
-  if(src != 0) //if there is a file with the name of the first argument
+  if(src) //if there is a file with the name of the first argument
   {
     setCurrentDir(&root_nodes[currentIno]); //sets the current dir back to the original
 
@@ -928,11 +909,13 @@ void program_cp(char *arguments)
       }
     }
 
-    char destPath[count + 2]; //the extra +1 is for the \000 and the other 1 is because i, and thus count start from 0 on the first element
+    //~ char destPath[count + 2]; //the extra +1 is for the \000 and the other 1 is because i, and thus count start from 0 on the first element
+    char *destPath = (char*)kmalloc(count + 2); //the extra +1 is for the \000 and the other 1 is because i, and thus count start from 0 on the first element
     memcpy(destPath, args[1], count + 1);
     *(destPath + count + 1) = 0; //add \000 to the end
 
-    char restPath[length - count];
+    //~ char restPath[length - count];
+    char *restPath = (char*)kmalloc(length - count);
     memcpy(restPath, args[1] + count + 1, length - count - 1);
     *(restPath + length - count - 1) = 0; //add the \000 to the end
 
@@ -940,10 +923,8 @@ void program_cp(char *arguments)
     u32int work = 1;
 
     //if there is something in the destPath
-    if(*(destPath) != 0)
-    {
+    if(*(destPath))
       work = program_cd(destPath);
-    }
 
     u32int b;
 
@@ -952,7 +933,7 @@ void program_cp(char *arguments)
 
     /*if the rest of the user text after the final "/" is a directory,
      * go to that directory and then create the file */
-    if(restSrc != 0 && restSrc->flags == FS_DIRECTORY)
+    if(restSrc && restSrc->flags == FS_DIRECTORY)
     {
       program_cd(restPath);
 
@@ -960,6 +941,7 @@ void program_cp(char *arguments)
       fs_node_t *copiedFile;
       copiedFile = createFile(&root_nodes[currentDir_inode], src->name, src->length);
 
+      //copy the data
       for(b = 0; b < (u32int)((src->length - 1) / BLOCK_SIZE) + 1; b++)
       {
         src_block = (u32int)block_of_set(src, b);
@@ -968,7 +950,7 @@ void program_cp(char *arguments)
         memcpy(*(u32int*)copied_block, *(u32int*)src_block, BLOCK_SIZE);
       }
 
-    }else if(*restPath != 0) //if there is contents after the last "/", make the file with that name
+    }else if(*restPath) //if there is contents after the last "/", make the file with that name
     {
       u32int src_block, copied_block;
       fs_node_t *copiedFile;
@@ -984,7 +966,7 @@ void program_cp(char *arguments)
       }
 
 
-    }else if(work == 0) //if the cd function above did not fail, i.e., we should still copy the file, but with its original name
+    }else if(!work) //if the cd function above did not fail, i.e., we should still copy the file, but with its original name
     {
       u32int src_block, copied_block;
       fs_node_t *copiedFile;
@@ -1002,6 +984,12 @@ void program_cp(char *arguments)
 
     setCurrentDir(&root_nodes[currentIno]); //sets the current dir back to the original
 
+    kfree(destPath);
+    kfree(restPath);
+  }else{
+    setCurrentDir(&root_nodes[currentIno]); //sets the current dir back to the original    
+    error = TRUE;
+    k_printf("%s: No such file or directory\n", args[0]);
   }
 
   u32int i;
@@ -1013,6 +1001,8 @@ void program_cp(char *arguments)
   kfree(dirPath);
   kfree(filePath);
 
+  //return either true or false, depending on what u32int error is set to
+  return error;
 }
 
 void program_mv(char *arguements)
@@ -1022,7 +1012,9 @@ void program_mv(char *arguements)
   char *args[nArgs];
   getArgs(arguements, args);
 
-  program_cp(arguements); //copy the source to the dest
+  if(program_cp(arguements) == TRUE) //copy the source to the dest
+    return; //if the cp function returned TRUE, something went wrong
+
   program_rm(args[0]);
 }
 
@@ -1132,7 +1124,7 @@ void program_find(char *arguments)
   u32int argLen = strlen(arguments);
   for(i = argLen - 1; i >= strlen(arguments) - fileCount; i--)
   {
-     //there is an asterisc, so cd would have not found the file, but still let it pass
+    //there is an asterisc, so cd would have not found the file, but still let it pass
     if(*(arguments + i) == '*')
     {
       work = 0; //correct error
@@ -1170,9 +1162,9 @@ void program_find(char *arguments)
          * the dirPath is the current directory, so print a "./" before
          * the actual node->name*/
         //~ if(!*dirPath)
-          //~ k_printf("./%s\n", node->name);
+        //~ k_printf("./%s\n", node->name);
         //~ else //print the dirPath and then the node->name of the file
-          //~ k_printf("%s%s\n", dirPath, node->name);
+        //~ k_printf("%s%s\n", dirPath, node->name);
         find_print_format(dirPath, node);
       }
 
@@ -1180,11 +1172,11 @@ void program_find(char *arguments)
        * it also makes sure that the supposed directory is not the "." or ".."
        * directories, if that was not acounted for, this function would loop forever */
 
-       //TODO make recursive find store inodes so it does not repeat inode searches, avoids hard link problems
-       //TODO remove this "brute force" meathod and apply the technique above
+      //TODO make recursive find store inodes so it does not repeat inode searches, avoids hard link problems
+      //TODO remove this "brute force" meathod and apply the technique above
       if(root_nodes[node->ino].flags == FS_DIRECTORY &&
-          strcmp(node->name, ".") &&
-          strcmp(node->name, ".."))
+         strcmp(node->name, ".") &&
+         strcmp(node->name, ".."))
       {
         char *recurse_str;
         
@@ -1565,29 +1557,15 @@ void program_about(char *arguements)
 
 void program_start(char *arguements)
 {
-  //if there is an arg tied to the current_task, set it to arguements
-  //asm volatile("cli");
-  //if(current_task->thread_flags)
-  //{
-
-    //arguements = (char*)current_task->thread_flags;
-  //}
-  //asm volatile("sti");
-
   if(!k_strcmp(arguements, "x"))
-  {
-
     xServer();
-  }
-
-  //delete the process from the multitasking
-  //exit();
 }
 
 //~ objects arrayOfObjects[5]; //make array of the 5 attributes of the 2 objects
 static int images = 2;
 objects arrayOfImages[2]; //make array of the 5 attributes of the 2 objects
 
+//TODO make js_viewer work
 void program_JS_viewer(char *arguements)
 {
   //~ k_printf("\n\nPOOP\n");
@@ -1611,14 +1589,14 @@ void program_JS_viewer(char *arguements)
 
   //~ for(x = 0; x < 300; x++)
   //~ {
-    //~ for(y = 0; y < 300; y++)
-    //~ {
+  //~ for(y = 0; y < 300; y++)
+  //~ {
 
-      putRect(0, 0, 400, 400, 0xbf2bc4);
+  putRect(0, 0, 400, 400, 0xbf2bc4);
 
-      mSleep(10);
-      //~ y++;
-    //~ }
+  mSleep(10);
+  //~ y++;
+  //~ }
   //~ }
 
   //~ VGA_init(640, 480, 16); //initialize the gui
@@ -1639,22 +1617,13 @@ void program_JS_viewer(char *arguements)
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
 
-
-
 //~ objects arrayOfObjects[5]; //make array of the 5 attributes of the 5 objects
 static int numberOfObjects = 5;
 objects arrayOfObjects[5]; //make array of the 5 attributes of the 5 objects
 
 int upDown = 0, pongPlay = ON;
 
-//~ static double directionLR = 1; //Left right direction (1 is up, -1 is down)
-//~ static double directionUD = 1; //up down direction (1 is left, -1 is right)
-  //~
-//~ static int xCoord = 150; //default x for ball
-//~ static int yCoord = 100; //default y for ball
-
 void moveLeftPong()
-//~ void moveLeftPong(int movement)
 {
 
   static int yCoord = 70;
@@ -1713,31 +1682,22 @@ void moveRightPong()
 
   if(pongPlay == ON)
   {
-    //~ yCoord = yCoord - 5 * movement;
-    //~ yCoord = yCoord - 5 * upDown;
-    //~ tmpY = arrayOfObjects[3].y - 15; //follows the y coordinate of the ball
+
     tmpY = arrayOfObjects[3].y - (arrayOfObjects[2].height / 2); //follows the y coordinate of the ball
 
     if(tmpY < 0)
-    {
       yCoord = 0;
-    }else if(tmpY + arrayOfObjects[2].height > VGA_height)
-    {
+    else if(tmpY + arrayOfObjects[2].height > VGA_height)
       yCoord = VGA_height - arrayOfObjects[2].height;
-    }else{
+    else
       yCoord = arrayOfObjects[3].y - (arrayOfObjects[2].height / 2);
-    }
 
     putRect(arrayOfObjects[2].x, yCoord, arrayOfObjects[2].width, arrayOfObjects[2].height, arrayOfObjects[2].color);
-    //~ putRect(arrayOfObjects[1].x, yCoord, arrayOfObjects[1].width, arrayOfObjects[1].height, arrayOfObjects[1].color);
 
     arrayOfObjects[2].y = yCoord;
-    //~ arrayOfObjects[1].y = yCoord;
 
     refreshObjects(&arrayOfObjects[0], numberOfObjects, 2, 1, 6, 0); //refresh 2rd object, right paddle
-    //~ refreshObjects(&arrayOfObjects[0], numberOfObjects, 1, 1, 6); //refresh 2rd object, right paddle
 
-    //~ upDown = 0;
   }else if(pongPlay == OFF) //if movePongBall has signalled that the ball has hit the left/right edge
   {
     /*retores defaults*/
@@ -1756,93 +1716,55 @@ void pongMove(int movement)
 {
 
   if(movement == 1) //up arrow
-  {
     moveLeftPong(movement);
-
-  }else if(movement == -1) //down arrow
-  {
+  else if(movement == -1) //down arrow
     moveLeftPong(movement);
-
-  }
 
 }
 
 void pongRun()
 {
   int firstTime, secondTime, totalTime;
+  unsigned char scancode;
 
   while(pongPlay < 2)
-  //~ while(1)
   {
-    //~ c++;
-    //~
-    //~ if(c % 5 == 0 && c!= 0)
-    //~ {
     firstTime = getSystemUpTime();
 
     keyboardInput_handler();
-      //~ c = 0;
-    //~ }
-
 
     // /* Read from the keyboard's data buffer */
-    //scancode = inb(0x60);
-
-    //speciaKeyNumber = isSpecialKey(scancode);
-
-    //if(speciaKeyNumber == 3) //up
-    //{
-      //upDown++;
-    //}else if(speciaKeyNumber == 4) //down
-    //{
-      //upDown--;
-    //}
-
-    movePongBall();
-
-    if(upDown != 0)
+    scancode = inb(0x60);
+    
+    //TODO make this, when the user presses 'q', quit the game and return to the shell
+    if(lowerCaseKbdus[scancode] == 'q')
     {
+      //go back to the terminal text view, without high resolution text
+      set_text_mode(FALSE);
+      k_printf("\nexiting...");
+
+      //reset the board for a possible next game to start frin the beginning
+      movePongBall(TRUE);
       moveLeftPong();
+
+      //exit from pong
+      return;
     }
+
+    movePongBall(FALSE);
+
+    if(upDown)
+      moveLeftPong();
 
     secondTime = getSystemUpTime();
     totalTime = secondTime - firstTime;
-
 
     mSleep(20 - totalTime);
 
   }
 }
 
-//void pongRestart()
-//{
-  //pongPlay = 0;
-  //pongRun();
-
-  //arrayOfObjects[1].x = 15; //Left Pong
-  //arrayOfObjects[1].y = 70;
-  //arrayOfObjects[2].x = 305; //Right Pong
-  //arrayOfObjects[2].y = 70;
-  //arrayOfObjects[3].x = 150; //Ball
-  //arrayOfObjects[3].y = 100;
-
-  ////~ directionLR = 1;
-  ////~ directionUD = 1;
-  ////~ xCoord = 1;
-  ////~ yCoord = 1;
-
-  //putRect(arrayOfObjects[1].x, arrayOfObjects[1].y, arrayOfObjects[1].width, arrayOfObjects[1].height, arrayOfObjects[1].color);
-  //putRect(arrayOfObjects[2].x, arrayOfObjects[2].y, arrayOfObjects[2].width, arrayOfObjects[2].height, arrayOfObjects[2].color);
-  //putRect(arrayOfObjects[3].x, arrayOfObjects[3].y, arrayOfObjects[3].width, arrayOfObjects[3].height, arrayOfObjects[3].color);
-
-  //refreshScreen(&arrayOfObjects[0], numberOfObjects);
-  ////~ refreshObjects(&arrayOfObjects[0], numberOfObjects, 3, 0, 0);
-
-  //pongPlay = 1;
-  //pongRun();
-//}
-
-void movePongBall()
+void movePongBall(u32int reset)
 {
   static double directionLR = 1; //Left right direction (1 is up, -1 is down)
   static double directionUD = 1; //up down direction (1 is left, -1 is right)
@@ -1850,17 +1772,18 @@ void movePongBall()
   static int xCoord = 150; //default x for ball
   static int yCoord = 100; //default y for ball
 
-  //~ xCoord = xCoord - 5 * directionLR;
-  //~ yCoord = yCoord - 5 * directionUD;
   int speed = 3;
 
   xCoord = xCoord - speed * directionLR;
   yCoord = yCoord - speed * directionUD;
 
+  //we want to purposly reset the board, clean it up with an emulated loss
+  if(reset == TRUE)
+    xCoord = 0;
+
   /*If the ball hits the left or right of the screen*/
   if(xCoord <= 0) //if the ball hits the left side
   {
-    //~ pongRestart();
 
     /*restore defaults*/
     directionLR = 1;
@@ -1868,21 +1791,23 @@ void movePongBall()
 
     xCoord = 150; //default x for ball
     yCoord = 100; //default y for ball
-//~
-    //~ refreshScreen(&arrayOfObjects[0], numberOfObjects);
 
-    int repeat;
-    for(repeat = 0; repeat < 11; repeat++)
+    if(reset == FALSE)
     {
-    playNote("D4", 10);
-    //~ mSleep(10);
-    playNote("E4", 10);
+      //play a sound when the ball goes out
+      int repeat;
+      for(repeat = 0; repeat < 11; repeat++)
+      {
+        playNote("D4", 10);
+        playNote("E4", 10);
+
+      }
 
     }
 
-    pongPlay = OFF; /** sets the pongPlay to OFF which is used to signal that the ball has hit the left edge*/
+    //sets the pongPlay to OFF which is used to signal that the ball has hit the left edge
+    pongPlay = OFF;
 
-    //~ directionLR = -1;
   }else if(xCoord >= VGA_width - (arrayOfObjects[3].height + 2)) //height being the height of the ball
   {
     directionLR = 1;
@@ -1921,13 +1846,6 @@ void movePongBall()
   arrayOfObjects[3].y = yCoord;
 
   refreshObjects(&arrayOfObjects[0], numberOfObjects, 3, 6, 6, 0);
-  //~ refreshScreen(&arrayOfObjects[0], 4);
-
-  //if(objectsCollision(&arrayOfObjects[0], 4, 3, speed, speed) == TRUE) //if object 4 -center line and 3 - ball collide
-  //{
-    //refreshObjects(&arrayOfObjects[0], numberOfObjects, 4, speed, 0); //refresh 4th object, center line if ball passes over it
-    ////~ refreshObjects(&arrayOfObjects[0], numberOfObjects, 3, speed, speed); //refresh 4th object, center line if ball passes over it
-  //}
 
   /*Computer AI -ish*/
   moveRightPong();
@@ -1944,102 +1862,70 @@ void flagUpDown(int movement)
 
 void program_GUI_pong(char *arguements)
 {
-  asm volatile("sti");
-  init_timer(globalFreq); // Initialise timer to globalFreq-Hz
 
-  /*initialize the objects attributes*/
-  arrayOfObjects[0].x = 0; //Background
-  arrayOfObjects[0].y = 0;
-  //~ arrayOfObjects[0].width = VGA_width;
-  arrayOfObjects[0].width = 320;
-  //~ arrayOfObjects[0].height = VGA_height;
-  arrayOfObjects[0].height = 200;
-  //~ arrayOfObjects[0].color = 0xffffff;
-  arrayOfObjects[0].color = 15;
-  arrayOfObjects[0].priority = 0;
-
-  arrayOfObjects[1].x = 15; //Left paddle
-  arrayOfObjects[1].y = 70;
-  //~ arrayOfObjects[1].width = 5;
-  arrayOfObjects[1].width = 2;
-  //~ arrayOfObjects[1].height = 30;
-  arrayOfObjects[1].height = 15;
-  //~ arrayOfObjects[1].color = 0x000000;
-  arrayOfObjects[1].color = 0;
-  //~ arrayOfObjects[1].priority = 2;
-  arrayOfObjects[1].priority = 3;
-
-  //~ arrayOfObjects[2].x = VGA_width - 15; //Right paddle
-  arrayOfObjects[2].x = 305; //Right paddle
-  arrayOfObjects[2].y = 70;
-  //~ arrayOfObjects[2].width = 5;
-  arrayOfObjects[2].width = 2;
-  //~ arrayOfObjects[2].height = 30;
-  arrayOfObjects[2].height = 15;
-  //~ arrayOfObjects[2].color = 0x000000;
-  arrayOfObjects[2].color = 0;
-  //~ arrayOfObjects[2].priority = 2;
-  arrayOfObjects[2].priority = 3;
-
-  arrayOfObjects[3].x = 150; //Ball
-  arrayOfObjects[3].y = 100;
-  arrayOfObjects[3].width = 3;
-  arrayOfObjects[3].height = 3;
-  //~ arrayOfObjects[3].color = 0xff0000;
-  arrayOfObjects[3].color = 4;
-  //~ arrayOfObjects[3].priority = 1;
-  arrayOfObjects[3].priority = 2;
-
-  arrayOfObjects[4].x = 160; //Line in the middle
-  arrayOfObjects[4].y = 0;
-  arrayOfObjects[4].width = 1;
-  //~ arrayOfObjects[4].width = 1;
-  arrayOfObjects[4].height = 200;
-  //~ arrayOfObjects[4].color = 0xffff55;
-  arrayOfObjects[4].color = 14;
-  arrayOfObjects[4].priority = 1;
-
-  if(k_strcmp(arguements, "-gui") == 0)
+  if(!k_strcmp(arguements, "-gui"))
   {
-    VGA_init(320, 200, 256); //initialize the gui
+    //initialise timer to globalFreq-Hz
+    asm volatile("sti");
+    init_timer(globalFreq);
 
-    //~ int rightPongY = 70, leftPongY = 70, ballX, ballY;
+    /*initialize the objects attributes*/
 
-    //Nomenclature, {top left x, top left y, width, height, color}
-    //~ int objects[4][5]= //make array of the 5 attributes of the 4 objects
-    //~ {
-      //~ {0, 0, 320, 200, 15}, //white background
-      //~ {15, leftPongY, 5, 30, 0}, //left pong
-      //~ {305, rightPongY, 5, 30, 0}, //right pong
-      //~ {ballX, ballY, 3, 3, 4}, //ball
-    //~ };
+    //the background
+    arrayOfObjects[0].x = 0;
+    arrayOfObjects[0].y = 0;
+    arrayOfObjects[0].width = 320;
+    arrayOfObjects[0].height = 200;
+    arrayOfObjects[0].color = 15;
+    arrayOfObjects[0].priority = 0;
 
-    //~ putRect(
+    //the left paddle
+    arrayOfObjects[1].x = 15;
+    arrayOfObjects[1].y = 70;
+    arrayOfObjects[1].width = 2;
+    arrayOfObjects[1].height = 15;
+    arrayOfObjects[1].color = 0;
+    arrayOfObjects[1].priority = 3;
+
+    //the right paddle
+    arrayOfObjects[2].x = 305;
+    arrayOfObjects[2].y = 70;
+    arrayOfObjects[2].width = 2;
+    arrayOfObjects[2].height = 15;
+    arrayOfObjects[2].color = 0;
+    arrayOfObjects[2].priority = 3;
+
+    //the ball
+    arrayOfObjects[3].x = 150;
+    arrayOfObjects[3].y = 100;
+    arrayOfObjects[3].width = 3;
+    arrayOfObjects[3].height = 3;
+    arrayOfObjects[3].color = 4;
+    arrayOfObjects[3].priority = 2;
+
+    //line in the middle
+    arrayOfObjects[4].x = 160;
+    arrayOfObjects[4].y = 0;
+    arrayOfObjects[4].width = 1;;
+    arrayOfObjects[4].height = 200;
+    arrayOfObjects[4].color = 14;
+    arrayOfObjects[4].priority = 1;
+
+    //show the player a message on how to exit
+    k_printf("Pong: press 'q' to exit the game, starts in ");
+    count_down(3);
+    k_printf("\n");
+    
+    //initialize the gui environment
+    VGA_init(320, 200, 256);
+
     putRect(arrayOfObjects[0].x, arrayOfObjects[0].y, arrayOfObjects[0].width, arrayOfObjects[0].height, arrayOfObjects[0].color);
     putRect(arrayOfObjects[1].x, arrayOfObjects[1].y, arrayOfObjects[1].width, arrayOfObjects[1].height, arrayOfObjects[1].color);
     putRect(arrayOfObjects[2].x, arrayOfObjects[2].y, arrayOfObjects[2].width, arrayOfObjects[2].height, arrayOfObjects[2].color);
     putRect(arrayOfObjects[3].x, arrayOfObjects[3].y, arrayOfObjects[3].width, arrayOfObjects[3].height, arrayOfObjects[3].color);
     putRect(arrayOfObjects[4].x, arrayOfObjects[4].y, arrayOfObjects[4].width, arrayOfObjects[4].height, arrayOfObjects[4].color);
 
-    //~ refreshObjects(&arrayOfObjects[0], numberOfObjects, 0, 0, 0, 0); //refresh 4th object, center line if ball passes over it
-
-    //~ while(1);
-    //~ refreshScreen(&arrayOfObjects[0], numberOfObjects);
-    //~ int i;
-    //~
-    //~ for(i = 0; i < VGA_height + 1; i++)
-    //~ {
-      //~ putPixel(VGA_width / 2, i, 14);
-    //~ }
-    //~ putRect(arrayOfObjects[1][0], arrayOfObjects[1][1], arrayOfObjects[1][2], arrayOfObjects[1][3], arrayOfObjects[1][4]);
-    //~ putRect(arrayOfObjects[2][0], arrayOfObjects[2][1], arrayOfObjects[2][2], arrayOfObjects[2][3], arrayOfObjects[2][4]);
-
-    //~ mSleep(5000);
-    //~ k_printf("\nRUNNING\n");
-
-    //~ arrowKeyFunction("write", "up", &pongMove); //sets left and write to use a different function
-    arrowKeyFunction("write", "up", &flagUpDown); //sets left and write to use a different function
-
+    arrowKeyFunction("write", "up", &flagUpDown); //sets up and down buttons to use a different function
 
     /*sleeps 1 second (1000 milliseconds) so player can get ready*/
     mSleep(1000);
@@ -2047,7 +1933,24 @@ void program_GUI_pong(char *arguements)
     /*starts pong Main loop*/
     pongRun();
 
-
   }
 
+}
+
+u32int count_down(u32int seconds)
+{
+  //initialise timer to globalFreq-Hz
+  asm volatile("sti");
+  init_timer(globalFreq);
+
+  for(; seconds > 0; seconds--)
+  {
+    k_printf("%d", seconds);
+    
+    //sleep for 1 second
+    mSleep(1000);
+
+    //remove the last printed letter
+    k_printf("\b");
+  }
 }

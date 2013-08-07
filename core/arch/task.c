@@ -100,7 +100,14 @@ void initialise_tasking()
   task->stack = (u32int)stack;
   task->thread = 0;
   task->thread_flags = 0;
-  strcpy(task->name, "init");
+
+  //TODO FIX THIS NAME STUFF
+  //~ u32int name_len = strlen("init");
+  //~ task->name = kmalloc(name_len + 1); //+1 for the \000
+  //~ strcpy((u8int*)task->name, "init");
+  //~ *((u8int*)task->name + name_len) = 0;
+
+  //~ strcpy(task->name, "init");
 
   task->next = 0;
 
@@ -326,7 +333,7 @@ jmp *%%ecx "
 
 }
 
-u32int fork(u32int priority, u32int burst_time, char *task_Name)
+s32int fork(u32int priority, u32int burst_time, char *task_Name)
 {
 
   asm volatile("cli");
@@ -386,7 +393,12 @@ u32int fork(u32int priority, u32int burst_time, char *task_Name)
   task->stack = (u32int)stack;
   task->thread = 0;
   task->thread_flags = 0;
-  strcpy(task->name, task_Name);
+
+  //TODO this name stuff is still a problem
+  //~ u32int name_len = strlen(task_Name);
+  //~ task->name = kmalloc(name_len + 1); //+1 for the \000
+  //~ strcpy((u8int*)task->name, task_Name);
+  //~ *((u8int*)task->name + name_len) = 0;
 
   task->next = 0;
 
@@ -533,7 +545,7 @@ u32int start_task(u32int priority, u32int burst_time, void (*func)(), void *arg,
   task->stack = (u32int)stack;
   task->thread = func;
   task->thread_flags = (u32int)arg;
-  strcpy(task->name, task_Name);
+  //~ strcpy(task->name, task_Name);
 
   task->next = 0;
 

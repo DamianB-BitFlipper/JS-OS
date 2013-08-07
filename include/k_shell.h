@@ -88,5 +88,8 @@ int getopt(int argIndex, int nArgs, char **args, const char *optString);
 /*for multitaksing, gets the args allong with a process thread in a task*/
 void get_task_args(char *arguements);
 
- 
+/*checks if the user want the shell command to be multasking enabled,
+ * that is checked by looking to see if the user put an '&' at the end of the input*/
+u8int is_enable_multitask(char *arguements);
+
 #endif

@@ -255,9 +255,9 @@ fs_node_t *initrd_finddir(fs_node_t *dirNode, char *name)
           kfree(dirent2->name);
           return &root_nodes[dirent2->ino];
         }
-      }
 
-      kfree(dirent2->name);
+        kfree(dirent2->name);
+      }
     }
 
   }

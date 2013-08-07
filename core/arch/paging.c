@@ -185,8 +185,6 @@ void initialise_paging(u32int memorySize)
   frames = (u32int*)kmalloc(INDEX_FROM_BIT(nframes));
   memset(frames, 0, INDEX_FROM_BIT(nframes));
 
-  //~ k_printf("\nPlacement address = %h", placement_address);
-
   // Let's make a page directory.
   //u32int phys;
   //kernel_directory = (page_directory_t*)kmalloc_a(sizeof(page_directory_t));
@@ -197,14 +195,10 @@ void initialise_paging(u32int memorySize)
   memset((u8int*)kernel_directory, 0, sizeof(page_directory_t));
   kernel_directory->physicalAddr = (u32int)kernel_directory->tablesPhysical;
 
-  //k_printf("\nkernel_dir: %h", (u32int*)kernel_directory);
-
   //~ This is for our VESA LFB
-  u32int lfb_address = 0xFD000000; //replace me with a routine
-  //~ double_buffer = (u8int*)kmalloc((1024 * 768) * (24 / 8)); //replace me with a routine
+  u32int vga_mem_addr = 0xE0000000; //replace me with a routine
 
-  pageMem(lfb_address);
-  //~ pageMem((u32int)double_buffer);
+  pageMem(vga_mem_addr);
 
   // Map some pages in the kernel heap area.
   // Here we call get_page but not alloc_frame. This causes page_table_t's

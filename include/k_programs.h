@@ -26,8 +26,11 @@
 
 #include <system.h>
 
+extern unsigned char lowerCaseKbdus[128];
+extern unsigned char upperCaseKbdus[128];
+
 /*function that gets input index and runs corresponding function*/
-void runShellFunction(u32int runFunction, char *arguements, u32int priority, u32int burst_time);
+void runShellFunction(u32int runFunction, char *arguements, u32int priority, u32int burst_time, u8int multitask);
 
 /*program list starts here*/
 void program_ascii(char *arguements); //0 index --prints ascii animals
@@ -38,7 +41,7 @@ void program_tinytext(char *arguements); //2 index --very simple text editor
 
 //PONG//
 void program_GUI_pong(char *arguements); //3 index --play pong
-void movePongBall();
+void movePongBall(u32int reset);
 void pongRestart();
 //PONG//
 
@@ -56,7 +59,7 @@ void program_now(char *arguements); //9 index --gives the current hr:min:sec mon
 
 void program_mkdir(char *arguements); //10 index --creates a directory
 
-void program_cp(char *arguements); //11 index --copies a file to dest (2 argument)
+u32int program_cp(char *arguements); //11 index --copies a file to dest (2 argument)
 
 void program_cat(char *arguements); //12 index --prints the contents of a file, byte by byte
 
@@ -72,6 +75,9 @@ void program_find(char *arguments); //17 index --find a file in a directory
 void find_set_current_dir(); //sets the initial dir for the find command, used with recursion within command
 
 void program_about(char *arguements); //18 index --print information about the project
+
+/*a count down timer that displays numbers and counts down every second, ie: 3, 2, 1,*/
+u32int count_down(u32int seconds);
 
 #endif //PROGRAMS_H
 

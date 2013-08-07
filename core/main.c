@@ -126,11 +126,7 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   
   addShellIndent();
 
-  __test__();
-
-  //~ mSleep(2000);
-
-  __test__();
+  //~ __test__();
 
   //sucess!
   return 0;
@@ -153,6 +149,18 @@ u32int test(char *test)
   }else if(!strcmp(test, "tasking"))
   {
     //~ start_task(PRIO_HIGH, PROC_SHORT, tasking_test, "tasking", "tasking_test");
+
+    s32int pid = fork(PRIO_LOW, PROC_SHORT, "test");
+
+    k_printf("Testing multitasking...\n");
+
+    if(!pid)
+    {
+      k_printf("\tMultitasking is operational with task PID: %h\n", getpid());
+      exit();
+    }
+
+    //we have no error since if pid never equals 0, then something with assert, page fault etc.
 
     //sucess
     return 0;

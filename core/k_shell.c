@@ -429,53 +429,64 @@ typedef struct
   char name[16];
   u32int priority;
   u32int burst_time;
-} programs_list_t;
+  u8int own_multiask;
+}programs_list_t;
 
 #define PROGRAM_LIST_NUMBER    19
 
 programs_list_t programsList[PROGRAM_LIST_NUMBER]=
 {
   /*program names go here*/
-  "ascii", PRIO_LOW, PROC_VERY_SHORT,
-  "echo", PRIO_LOW, PROC_SHORT,
-  "tinytext", PRIO_LOW, PROC_MED,
-  "pong", PRIO_MED, PROC_MED,
-  "song", PRIO_LOW, PROC_LONG,
-  "viewer", PRIO_MED, PROC_LONG,
-  "start", PRIO_LOW, PROC_VERY_LONG,
-  "ls", PRIO_LOW, PROC_VERY_SHORT,
-  "cd", PRIO_LOW, PROC_VERY_SHORT,
-  "now", PRIO_LOW, PROC_VERY_SHORT,
-  "mkdir", PRIO_LOW, PROC_VERY_SHORT,
-  "cp", PRIO_LOW, PROC_VERY_SHORT,
-  "cat", PRIO_LOW, PROC_VERY_SHORT,
-  "rm", PRIO_LOW, PROC_VERY_SHORT,
-  "pwd", PRIO_LOW, PROC_VERY_SHORT,
-  "help", PRIO_LOW, PROC_VERY_SHORT,
-  "mv", PRIO_LOW, PROC_VERY_SHORT,
-  "find", PRIO_LOW, PROC_VERY_SHORT,
-  "about", PRIO_LOW, PROC_VERY_SHORT
+  "ascii", PRIO_LOW, PROC_VERY_SHORT, FALSE,
+  "echo", PRIO_IDLE, PROC_VERY_SHORT, TRUE,
+  "tinytext", PRIO_LOW, PROC_MED, FALSE,
+  "pong", PRIO_MED, PROC_MED, FALSE,
+  "song", PRIO_LOW, PROC_LONG, FALSE,
+  "viewer", PRIO_MED, PROC_LONG, FALSE,
+  "start", PRIO_LOW, PROC_VERY_LONG, FALSE,
+  "ls", PRIO_LOW, PROC_VERY_SHORT, FALSE,
+  "cd", PRIO_LOW, PROC_VERY_SHORT, FALSE,
+  "now", PRIO_LOW, PROC_VERY_SHORT, FALSE,
+  "mkdir", PRIO_LOW, PROC_VERY_SHORT, FALSE,
+  "cp", PRIO_LOW, PROC_VERY_SHORT, FALSE,
+  "cat", PRIO_LOW, PROC_VERY_SHORT, FALSE,
+  "rm", PRIO_LOW, PROC_VERY_SHORT, FALSE,
+  "pwd", PRIO_LOW, PROC_VERY_SHORT, FALSE,
+  "help", PRIO_LOW, PROC_VERY_SHORT, FALSE,
+  "mv", PRIO_LOW, PROC_VERY_SHORT, FALSE,
+  "find", PRIO_LOW, PROC_VERY_SHORT, FALSE,
+  "about", PRIO_LOW, PROC_VERY_SHORT, FALSE
 };
 
 void executeInput(char *input, char *arguements)
 {
   if(shellInput == ON)
   {
-    //~ int spacesRemoved = removeTrailingSpaces(input); //removes trailing space
-
-    //~ int items = 2; //number of programs in programsList
-    //~ int items = k_elemInCharArray(*programsList); //number of programs in programsList
-    //~ k_printf("\n%d", items);
 
     int x;
 
     for(x = 0; x < PROGRAM_LIST_NUMBER; x++)
     {
-      if(k_strcmp(input, programsList[x].name) == 0)
+      if(!k_strcmp(input, programsList[x].name))
       {
 
-        runShellFunction(x, arguements, programsList[x].priority, programsList[x].burst_time);
-
+        //checks if the user wants this command to bu multitask enabled, by added a '&' at the end of the input
+        u8int multitask = is_enable_multitask(arguements);
+        
+        //if the user wants to multitask and the program does not have its own routine for multitasking
+        //TODO multitasking, any of the vfs commands do not work if passed with & and data is lost
+        if(multitask == TRUE && programsList[x].own_multiask == FALSE)
+        {
+          s32int pid = fork(programsList[x].priority, programsList[x].burst_time, programsList[x].name);
+          
+          if(!pid)
+          {
+            runShellFunction(x, arguements, programsList[x].priority, programsList[x].burst_time, multitask);
+            exit();
+          }
+        }else
+          runShellFunction(x, arguements, programsList[x].priority, programsList[x].burst_time, multitask);
+          
         //exit
         return;
       }
@@ -485,10 +496,10 @@ void executeInput(char *input, char *arguements)
     //if we did not exit above, i.e., there was no function with the input name
     int length = k_strlen(input);
 
-    if(length != 0)
+    if(length)
     {
       /*error command not found*/
-      k_printf("%s: command not found. Type 'help' for a list\n", input);
+      k_printf("%s: command not found. Type 'help' for a list of commands\n", input);
     }
   }
 
@@ -520,6 +531,22 @@ void formatInput(char *input, char *arguements)
     //~ k_printf("\n\t%s\n", input);
     //~ k_printf("\n\t%s\n", arguements);
   }
+}
+
+u8int is_enable_multitask(char *arguements)
+{
+  u32int len = strlen(arguements);
+
+  if(*(arguements + len - 2) == ' ' &&
+     *(arguements + len - 1) == '&' &&
+     *(arguements + len) == 0)
+  {
+    //remove the now unnessesary " &" at the end of the input
+    *(arguements + len - 2) = 0;
+    *(arguements + len - 1) = 0;
+    return TRUE;
+  }else
+    return FALSE;
 }
 
 int removeTrailingSpaces(char *string)

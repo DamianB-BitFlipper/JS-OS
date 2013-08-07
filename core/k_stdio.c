@@ -39,7 +39,7 @@ u8int foreColour = 15;
 int charCount = 0, charPosition = 0, lineCount = 0, startingYPos = 0;
 
 int yMin = 0, yMax = 25;
-char screen[8000]; //char array to hold screen characters when k_save() is called
+u32int screen[25 * 80]; //char array to hold screen characters when k_save() is called
 
 // Updates the hardware cursor.
 static void move_cursor()
@@ -90,21 +90,21 @@ void k_putChar(char c)
   // The attribute byte is made up of two nibbles - the lower being the
   // foreground colour, and the upper the background colour.
   u8int  attributeByte = (backColour << 4) | (foreColour & 0x0F);
-  //~ u8int  attributeByte = (foreColour << 4) | (backColour & 0x0F);
+
   // The attribute byte is the top 8 bits of the word we have to send to the
   // VGA board.
   u16int attribute = attributeByte << 8;
   u16int *location;
 
   // Handle a backspace, by moving the cursor back one space
-  if (c == '\b')
+  if(c == '\b')
   {
     int x;
 
     if(charPosition > 0)
     {
 
-      if(cursor_x == 0) //move one back and x_cursor to end
+      if(!cursor_x) //move one back and x_cursor to end
       {
         cursor_y--;
         cursor_x = 80;
@@ -133,7 +133,7 @@ void k_putChar(char c)
     charCount = charCount + 5;
     charPosition = charPosition + 5;
 
-  }else if (c == '\r')  // Handle carriage return "Enter Key"
+  }else if(c == '\r')  // Handle carriage return "Enter Key"
   {
     //~ asm volatile("cli");
     //~ char *input, *split;
@@ -191,17 +191,17 @@ void k_putChar(char c)
     location = video_memory + (cursor_y * 80 + cursor_x);
     *location = c | attribute;
     cursor_x++;
-    
+
+    //if we are adding a char at the end of our text
     if(charPosition == charCount)
-    {
       charCount++;
-    }
+
     charPosition++;
   }
 
   // Check if we need to insert a new line because we have reached the end
   // of the screen.
-  if (cursor_x >= 80)
+  if(cursor_x >= 80)
   {
     lineCount++;
     cursor_x = 0;
@@ -741,25 +741,19 @@ void k_strcpy(char *input, char *output)
 
 void k_save()
 {
-  int i;
+  u32int i;
 
-  for (i = 0*80; i < 25*80 + 1; i++)
-  {
-    screen[i] = video_memory[i];
-  }
+  for(i = 0; i < 25 * 80 + 1; i++)
+    screen[i] = *((u32int*)video_memory + i);
 
 }
 
 void k_restore()
 {
-  int i;
+  u32int i;
 
   for(i = 0; i < 25 * 80 + 1; i++)
-  {
-    //~ screen[i] = video_memory[i];
-    video_memory[i] = 3840 + screen[i];
-    //~ k_putChar(screen[i]);
-  }
+    *((u32int*)video_memory + i) = screen[i];
 
 }
 

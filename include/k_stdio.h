@@ -46,6 +46,8 @@
 
 /*a few simple defines*/
 
+extern u16int *video_memory;
+
 /*String Manipulation*/
 
 /*Write a single character out to the screen.*/

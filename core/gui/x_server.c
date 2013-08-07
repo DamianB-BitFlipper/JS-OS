@@ -37,11 +37,8 @@ extern volatile window_t *window_list;
 #define hVESA     768
 #define dVESA     32
 
-//~ static int numberOfObjects = 5;
 #define numberOfObjects  5
 objects arrayOfObjects[numberOfObjects]; //make array of the 5 attributes of the 4 objects
-
-//~ int mouseID;
 
 ///*WIDGETS*/
 window_t mouse, js_panel, desktop;
@@ -101,49 +98,19 @@ long int startMenuPixbuf[400] = //defines the mouse pixbuf
 
 };
 
-
-//long int mousePixbuf[400] = //defines the mouse pixbuf
-//{
-  
-  //0x000000, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0x2e2e2e, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0xffffff, 0x2e2e2e, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0xffffff, 0xffffff, 0x2e2e2e, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0xffffff, 0xffffff, 0xffffff, 0x2e2e2e, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0x2e2e2e, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0x2e2e2e, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0x2e2e2e, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0x2e2e2e, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0x2e2e2e, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  
-  //0x000000, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0x2e2e2e, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0x2e2e2e, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0xffffff, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0xffffff, 0xffffff, 0xffffff, 0x000000, 0xffffff, 0xffffff, 0x000000, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0xffffff, 0xffffff, 0x000000, -2, 0x000000, 0xffffff, 0xffffff, 0x000000, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0xffffff, 0x000000, -2, -2, 0x000000, 0xffffff, 0xffffff, 0x000000, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //0x000000, 0x000000, -2, -2, -2, -2, 0x000000, 0xffffff, 0xffffff, 0x000000, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //-2, -2, -2, -2, -2, -2, 0x000000, 0xffffff, 0xffffff, 0x000000, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //-2, -2, -2, -2, -2, -2, -2, 0x000000, 0x000000, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-  //-2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2, -2
-
-//};
-
 void moveMouse(int x, int y)
 {
   static int firstTime, secondTime, rep = 0, runningX = 0, runningY = 0;
 
   rep = (rep + 1) % 2;
-  if(rep == 0)
-  {
-    firstTime = getSystemUpTime();
-  }else if(rep == 1)
-  {
-    secondTime = getSystemUpTime();
-  }
 
-  if((math_abs(secondTime - firstTime) > 10 || math_abs(runningX) > 40 || math_abs(runningY) > 40) && (x != 0 || y != 0))
-  //~ if((math_abs(secondTime - firstTime) > 10))
+  if(!rep)
+    firstTime = getSystemUpTime();
+  else if(rep)
+    secondTime = getSystemUpTime();
+
+  if((math_abs(secondTime - firstTime) > 10 || math_abs(runningX) > 40 || 
+      math_abs(runningY) > 40) && (x != 0 || y != 0))
   {
   
     int xMovement = math_abs(x) + math_abs(runningX), yMovement = math_abs(y) + math_abs(runningY);
@@ -163,8 +130,6 @@ void xLeftClick() //mouse left click call back
 {
   static long long int timePassed, secondTime, timeSwitcher = 0;
 
-  //~ disableMousePackets(); //disables the mouse from sending packets of information to not interfere
-
   timeSwitcher = (timeSwitcher + 1) % 2;
 
   int index = highestWindowAbovePoint(window_list[mouse.id].x, window_list[mouse.id].y, mouse.id); //finds the top window just below the mouse
@@ -173,44 +138,35 @@ void xLeftClick() //mouse left click call back
   asm volatile("sti");
   init_timer(globalFreq); // Initialise timer to globalFreq-Hz
 
-  if(timeSwitcher == 0)
-  {
+  if(!timeSwitcher)
     timePassed = getSystemUpTime();
-  }else if(timeSwitcher == 1)
-  {
+  else if(timeSwitcher)
     secondTime = getSystemUpTime();
-  }
-    //~ playNote("C5", 250);
 
-
-  if(buttonIndex != -1 && *window_list[index].buttons[buttonIndex].onMouseLeftClick != 0 && math_abs(secondTime - timePassed) >= 75) //if function is not NULL and the time between clicks is > 100 milliseconds to prevent any acidental double clicks
-  {
+  //if function is not NULL and the time between clicks is > 100 milliseconds to prevent any acidental double clicks
+  if(buttonIndex != -1 && *window_list[index].buttons[buttonIndex].onMouseLeftClick != 0 && 
+     math_abs(secondTime - timePassed) >= 75) 
     window_list[index].buttons[buttonIndex].onMouseLeftClick(window_list[index]);
-  }
 
-  //~ enableMousePackets();
 }
 
 void xMiddleClick() //mouse middle click call back
 {
   int index = indexOfHighestObjectAbovePoint(arrayOfObjects[1].x, arrayOfObjects[1].y, &arrayOfObjects[0], numberOfObjects);
   
-  if(*arrayOfObjects[index].onMiddleClick != 0) //if function is not NULL
-  {
+  if(*(arrayOfObjects[index].onMiddleClick)) //if function is not NULL
     arrayOfObjects[index].onMiddleClick();
-  }
 }
 
 void xRightClick() //mouse right click call back
 {
   int index = indexOfHighestObjectAbovePoint(arrayOfObjects[1].x, arrayOfObjects[1].y, &arrayOfObjects[0], numberOfObjects);
   
-  if(*arrayOfObjects[index].onRightClick != 0) //if function is not NULL
-  {
+  if(*(arrayOfObjects[index].onRightClick)) //if function is not NULL
     arrayOfObjects[index].onRightClick();
-  }
 }
 
+//TODO make this work
 void jsViewer()
 {
   window_t jsViewerWindow;
@@ -222,7 +178,6 @@ void jsViewer()
 
 void jsStartMenu()
 {
-  //~ putRect(0, 0, 100, 100, 5);
   static int repeat = 0;
   static window_t js_panelStartMenu;
 
@@ -234,11 +189,8 @@ void jsStartMenu()
     addButtonToObject(0, 0, 20, 20, startMenuPixbuf, &jsViewer, js_panelStartMenu);
   
   }else if(repeat == OFF)
-  {
     destroyWindow(js_panelStartMenu);
-  }
 }
-
 
 int fpsTEST()
 {
@@ -264,7 +216,6 @@ int fpsTEST()
   return count;
 }
 
-
 void xServer()
 {
   asm volatile("sti");
@@ -277,7 +228,6 @@ void xServer()
 
   asm volatile("cli"); //disables intterpts so mouse does not do anything funky while drawing starting windows
 
-  //~ createWindow("POOP", 0, 0, 1, 1024, 768, 0);
   firstWindow = createWindow("TEST", 20, 20, 1, 200, 200, desktop);
   js_panel = createObject("JSPANEL", 0, hVESA - 20, 2, wVESA, 20, 0xFFC100, desktop);
   addButtonToObject(0, 0, 20, 20, startMenuPixbuf, &jsStartMenu, js_panel);
@@ -286,7 +236,6 @@ void xServer()
 
   
   mouse = createPixbufObject("MOUSE", mousePixbuf, wVESA / 2, hVESA / 2, MAX_PRIORITY, 20, 20, desktop);
-  //~ mouseID = window_list[wid].id;
 
   thirdWindow = createWindow("TEST", 300, 100, 4, 500, 500, desktop);
 
@@ -296,21 +245,8 @@ void xServer()
   mouseClickFunctions("write", "middle", &xMiddleClick);
   mouseClickFunctions("write", "right", &xRightClick);
   
-  //~ int a;
-  //~ for
   refresh_BufScreen();
 
   asm volatile("sti"); //reenables those interupts
 
-
-  //int count = fpsTEST(), f;
-
-  //for(f = 0; f < count; f++)
-  //{
-    //playNote("C5", 250);
-    //playNote("C6", 250);
-  //}
-  
-  //~ createPixbufObject(
-  //~ kmalloc(120000);
 }

@@ -138,9 +138,9 @@ void setVesa(u32int mode)
   memcpy(&info, buffer, sizeof(VESA_INFO)); //copies info from the buffer to the info typedef struct
 
   //print VESA information
-  k_printf("\n\nVesa Signature: %s\n", info.VESASignature);
-  k_printf("\n\nVesa Version: %h\n", info.VESAVersion);
-  k_printf("\n\nVesa Video Modes: %h\n", info.VideoModePtr);
+  //~ k_printf("\n\nVesa Signature: %s\n", info.VESASignature);
+  //~ k_printf("\n\nVesa Version: %h\n", info.VESAVersion);
+  //~ k_printf("\n\nVesa Video Modes: %h\n", info.VideoModePtr);
 
   /**Gests VESA mode information**/
 
@@ -161,11 +161,11 @@ void setVesa(u32int mode)
   depthVESA = vbeModeInfo.BitsPerPixel;
 
   //print VESA mode information
-  k_printf("\nBase Pointer: %h\n", (u32int)vbeModeInfo.PhysBasePtr);
-  k_printf("\nXRes: %d\n", (u32int)vbeModeInfo.XResolution);
-  k_printf("\nYRes: %d\n", (u32int)vbeModeInfo.YResolution);
-  k_printf("\nBits per pixel: %d\n", (u32int)vbeModeInfo.BitsPerPixel);
-  k_printf("\nExits status: %h\n", (u32int)regs.ax);
+  //~ k_printf("\nBase Pointer: %h\n", (u32int)vbeModeInfo.PhysBasePtr);
+  //~ k_printf("\nXRes: %d\n", (u32int)vbeModeInfo.XResolution);
+  //~ k_printf("\nYRes: %d\n", (u32int)vbeModeInfo.YResolution);
+  //~ k_printf("\nBits per pixel: %d\n", (u32int)vbeModeInfo.BitsPerPixel);
+  //~ k_printf("\nExits status: %h\n", (u32int)regs.ax);
 
   /*Sets the Linear Frame Buffer address tp vga_mem and lfb variables*/
   vga_mem = (u8int*)vbeModeInfo.PhysBasePtr;
@@ -235,7 +235,6 @@ long int minimizeButton[81] = //defines the mouse pixbuf
   0x007400, 0x007400, 0x007400, 0x007400, -3, -3, -3, -3, -3
 };
 
-
 void init_window_manager()
 {
   //We need to initialise the Desktop
@@ -248,41 +247,14 @@ void init_window_manager()
   window.height = hVESA;
   window.parentid = 0;
   window.id = 0;
-  //~ window.data = (unsigned long*)double_buffer;
-
-  //~ u32int tester = (u32int)kmalloc(1024 * 768 * 3);
-  //~ memset(tester, 0xff, 1024 * 768 * 3);
-//~ 
-  //~ k_printf("tester = %h", tester);
-//~ 
-  //~ for(;;);
   
   window.data = (u32int*)kmalloc((wVESA * hVESA) * (dVESA / 8)); //Creates buffer for window
 
   memset(window.data, 0xff, (wVESA * hVESA) * (dVESA / 8));
 
-  //~ unsigned int i;
-  //~ for(i = 0; i < (wVESA * hVESA) * (dVESA / 8); i++)
-  //~ {
-    //~ *(window.data + i) = 0xff;
-  //~ }
-
-  k_printf("\n background data address: %h", window.data);
-
-  //~ int a;
-  //~ for(a = 0; a < (wVESA * hVESA) * (dVESA / 8); a++)
-  //~ {
-    //~ *(window.data + a) = 0xff;
-  //~ }
-
-  //~ while(1);
-
-
-  //~ plot_BufRect(0, 0, 1024, 768, FALSE, 0, 0xffffff, 1024, (u32int*)window.data);
-//~
+  //~ k_printf("\n background data address: %h", window.data);
   write_buffer(0, 0, 1024, 768, (u32int*)window.data);
   refreshScreen_VESA();
-  //~ while(1);
 
   current_window = window;
 
@@ -314,12 +286,8 @@ void currentWindow(window_t object)
   int windowWithHighestPriority = 0;
 
   for(rep = 0; rep < wid + 1; rep++)
-  {
     if(window_list[rep].z < MAX_PRIORITY && window_list[rep].z > windowWithHighestPriority)
-    {
       windowWithHighestPriority = window_list[rep].z;
-    }
-  }
 
   object.z = windowWithHighestPriority + 1;
   updateWindowListData(object);
@@ -339,13 +307,11 @@ static int getnewwid()
     int run;
 
     for(run = 0; run < MAX_WINDOWS; run++)
-    {
       if(*window_list[run].data == 0)
       {
         break;
         return run;
       }
-    }
   }
 }
 
@@ -365,7 +331,6 @@ void addButtonToObject(int x, int y, int width, int height, long int *pixBuf, vo
 
   if(assigned == TRUE)
   {
-    //~ window_list[windowID].buttons[buttonNumber].onMouseLeftClick = call_back;
     window_list[parent.id].buttons[buttonNumber] = createButton(x, y, width, height, pixBuf, call_back, window_list[parent.id]);
     refresh_BufArea(window_list[parent.id].x + x, window_list[parent.id].y + y, width, height, TRUE);
   }
@@ -397,11 +362,6 @@ window_t createObject(char *windowname, int x, int y, int priority, int width, i
   ///* Fill */
   plot_BufRect(0, 0, width, height, FALSE, 0, fill, width, (u32int *)window.data);
 
-  //window.buttons[0] = *createButton(1, 1, 9, 9, closeButton, &destroyWindow, window);
-  //window.buttons[1] = *createButton(10, 1, 9, 9, maximizeButton, &maximizeWindow, window);
-  //window.buttons[2] = *createButton(19, 1, 9, 9, minimizeButton, &minimizeWindow, window);
-
-
   /*writes window.data to the double buffer*/
   write_buffer(x, y, width, height, (u32int*)window.data);
   //~ write_buffer(x, y, 200, 200, (u32int*)window.data);
@@ -424,11 +384,9 @@ window_t createWindow(char *windowname, int x, int y, int priority, int width, i
   window.y = y;
 
   if(parent.id != desktop.id) //if the parent is not the desktop, ie:user wants to create a new object not a sub object
-  {
     window.z = parent.z + ((float)priority / MAX_CHILDREN);
-  }else{
+  else
     window.z = priority;
-  }
 
   window.width = width;
   window.height = height;
@@ -448,14 +406,10 @@ window_t createWindow(char *windowname, int x, int y, int priority, int width, i
   ///* Border */
   int i;
   for(i = 0; i <= width; i++)
-  {
     plot_BufPixel(i, 0, WINDOW_COLOUR_BORDER, width, (u32int*)window.data); //Top
-  }
 
   for(i = 0; i <= width; i++)
-  {
     plot_BufPixel(i, height - 1, WINDOW_COLOUR_BORDER, width, (u32int*)window.data); //Bottom
-  }
 
   for(i = 0; i <= height; i++)
   {
@@ -467,7 +421,6 @@ window_t createWindow(char *windowname, int x, int y, int priority, int width, i
   int windowNameLength = 8 * k_strlen(windowname); //8 * len since letters are 8 pixels wide
   int titlePos = ((window.width) / 2) - (windowNameLength / 2);
 
-
   plot_BufString(1 + titlePos, 2, windowname, WINDOW_COLOUR_TOPBAR_TEXT, width, (u32int*)window.data);
 
   ///* Top Buttons*/
@@ -476,10 +429,8 @@ window_t createWindow(char *windowname, int x, int y, int priority, int width, i
   window.buttons[2] = createButton(19, 1, 9, 9, minimizeButton, &minimizeWindow, window); //minimize button
   window.buttons[3] = createInvisibleButton(28, 1, width - 28, 9, &topBarMoveWindow); //topbar for moving the window
 
-
   /*writes window.data to the double buffer*/
   write_buffer(x, y, width, height, (u32int*)window.data);
-  //~ write_buffer(x, y, 200, 200, (u32int*)window.data);
 
   refreshScreen_VESA();
 
@@ -498,11 +449,9 @@ window_t createPixbufObject(char *windowname, unsigned long *pixbuf, int x, int 
   window.y = y;
 
   if(parent.id != desktop.id) //if the parent is not the desktop, ie:user wants to create a new object not a sub object
-  {
     window.z = parent.z + ((float)priority / MAX_CHILDREN);
-  }else{
+  else
     window.z = priority;
-  }
 
   window.width = width;
   window.height = height;
@@ -529,8 +478,6 @@ window_t createPixbufObject(char *windowname, unsigned long *pixbuf, int x, int 
 
 void destroyWindow(window_t windowToDestroy)
 {
-  //~ kfree(window_list[id].data);
-
   int x, y, w, h;
 
   x = window_list[windowToDestroy.id].x;
@@ -549,10 +496,6 @@ void destroyWindow(window_t windowToDestroy)
   window_list[windowToDestroy.id].parentid = 0;
 
   refresh_BufArea(x - 3, y - 3, w + 3, h + 3, TRUE);
-
-  //~ write_buffer(window_list[0].x, window_list[0].y, window_list[0].width, window_list[0].height, (u32int*)window_list[0].data);
-  //~ refreshArea_VESA(x, y, w, h);
-
 
 }
 
@@ -592,15 +535,13 @@ void minimizeWindow(window_t windowToMinimize)
 int isWindowAbovePoint(int x, int y, int index)
 {
   if(window_list[index].x > x || window_list[index].y > y)
-  {
     return FALSE; //window_list is not over point (x,y)
-  //~ }else if(window_list[index].x <= x && window_list[index].y <= y && (window_list[index].x + window_list[index].width) >= x && (window_list[index].y + window_list[index].height) >= y)
-  }else if(window_list[index].x <= x && window_list[index].y <= y && (window_list[index].x + window_list[index].width) > x && (window_list[index].y + window_list[index].height) > y)
-  {
+  else if(window_list[index].x <= x && window_list[index].y <= y &&
+          (window_list[index].x + window_list[index].width) > x &&
+          (window_list[index].y + window_list[index].height) > y)
     return TRUE; //window_list is over point (x,y)
-  }else{
+  else
     return FALSE; //window_list is not over point (x,y)
-  }
 
 }
 
@@ -616,26 +557,27 @@ unsigned long int getPixelColorOfObject(int xFromTopLeft, int yFromTopLeft, int 
 
 int buttonOnWindow(int x, int y, int indexOfWindow)
 {
-  int rep, ifHasReturned = FALSE;
+  int rep;
 
   for(rep = 0; rep < MAX_BUTTONS; rep++)
   {
-    if(window_list[indexOfWindow].x + window_list[indexOfWindow].buttons[rep].x <= x && window_list[indexOfWindow].y + window_list[indexOfWindow].buttons[rep].y <= y &&
-    (window_list[indexOfWindow].x + window_list[indexOfWindow].buttons[rep].x + window_list[indexOfWindow].buttons[rep].width) > x &&
-    (window_list[indexOfWindow].y + window_list[indexOfWindow].buttons[rep].y + window_list[indexOfWindow].buttons[rep].height) > y)
+    //checks to see if the coordinate (x,y) is ontop of a window's button
+    if(window_list[indexOfWindow].x + window_list[indexOfWindow].buttons[rep].x <= x &&
+       window_list[indexOfWindow].y + window_list[indexOfWindow].buttons[rep].y <= y &&
+       (window_list[indexOfWindow].x + window_list[indexOfWindow].buttons[rep].x +
+        window_list[indexOfWindow].buttons[rep].width) > x &&
+       (window_list[indexOfWindow].y + window_list[indexOfWindow].buttons[rep].y + 
+        window_list[indexOfWindow].buttons[rep].height) > y)
     {
-      ifHasReturned = TRUE;
-      return rep; //button in window_list is over point (x,y)
+      //return the index of the button
+      return rep;
 
-      break;
     }
 
   }
 
-  if(ifHasReturned == FALSE)
-  {
-    return -1;
-  }
+  //if we have not exited yet, return an error
+  return -1;
 
 }
 
@@ -645,16 +587,12 @@ int highestWindowAbovePoint(int x, int y, int ignoreObject)
   float highestPriority = 0.0;
 
   for(rep = 0; rep < wid + 1; rep++)
-  {
     if(rep != ignoreObject) //ignores the mouse as we want windows not the index of the mouse to always come up
-    {
       if(isWindowAbovePoint(x, y, rep) == TRUE && highestPriority <= window_list[rep].z)
       {
         returnIndex = rep;
         highestPriority = window_list[rep].z;
       }
-    }
-  }
 
   return returnIndex;
 
@@ -669,21 +607,19 @@ int pixelsNextObjectDown(int x, int y, int index)
   {
     if(a != index)
     {
-      if(window_list[a].z >= objectPriority && window_list[a].x <= x && window_list[a].y >= y && //if object has higher priority, x-coord is less than given x and y-coord is less than given y
+      if(window_list[a].z >= objectPriority && window_list[a].x <= x && window_list[a].y >= y && //if object has higher priority, x-coord is less than given x, and y-coord is less than given y, respectivly
         window_list[a].x + window_list[a].width > x) //and if the top rightmost x-coord is greater than the given x
       {
         if(steps > window_list[a].y - y) //if the steps is smaller, then return a smaller step
-        {
           steps = window_list[a].y - y;
-        }
       }
     }
   }
 
-  if((y - window_list[index].y) + steps > window_list[index].height) //if the steps + starting y is greater than the height of the window
-  {
-    steps = window_list[index].height - (y - window_list[index].y); //cap that to the height of the window - original y (amount of pixels untill bottom of window)
-  }
+  //if the steps + starting y is greater than the height of the window
+  if((y - window_list[index].y) + steps > window_list[index].height) 
+    //cap that to the height of the window - original y (amount of pixels untill bottom of window)
+    steps = window_list[index].height - (y - window_list[index].y); 
 
   return steps;
 
@@ -699,175 +635,97 @@ void refresh_BufArea(int xLoc, int yLoc, int width, int height, int updateScreen
 
   int lowX = xLoc;
   if(lowX < 0)
-  {
     lowX = 0;
-  }else if(lowX > wVESA)
-  {
+  else if(lowX > wVESA)
     lowX = wVESA;
-  }
 
   int highX = xLoc + width;
   if(highX < 0)
-  {
     highX = 0;
-  }else if(highX > wVESA)
-  {
+  else if(highX > wVESA)
     highX = wVESA;
-  }
 
   int lowY = yLoc;
   if(lowY < 0)
-  {
     lowY = 0;
-  }else if(lowY > hVESA)
-  {
+  else if(lowY > hVESA)
     lowY = hVESA;
-  }
 
   int highY = yLoc + height;
   if(highY < 0)
-  {
     highY = 0;
-  }else if(highY > hVESA)
-  {
+  else if(highY > hVESA)
     highY = hVESA;
-  }
 
   int index, oldIndex, pixelsDown = 0; // = highestWindowAbovePoint(lowX, lowY);
-  //~ for(a = 0; a < wid + 1; a++)
-  //~ {
     for(x = lowX; x < highX; x++)
     {
 
       for(y = lowY; y < highY; y++)
       {
 
-        //~ if(highestPriority <= window_list[index].z)
-        //~ {
-            //~ previousPriority = highestPriority;
-            //~ highestPriority = window_list[index].z;
+        if(!pixelsDown)
+        {
+          index = highestWindowAbovePoint(x, y, -1);
+          
+          pixelsDown = pixelsNextObjectDown(x, y, index);
+        }
 
-            //~ if(previousPriority != highestPriority) //there was a change in priorities, new object just came up
-            //~ {
-              if(pixelsDown == 0)
-              {
-                index = highestWindowAbovePoint(x, y, -1);
+        color = getPixelColorOfObject(x - window_list[index].x, y - window_list[index].y, index);
 
-                pixelsDown = pixelsNextObjectDown(x, y, index);
-              }
-            //~ }
+        //TODO this set up for updating area only works with one alpha layer, if there are two alpha layers above each other, this will not work
+        while(color == ALPHA)
+        {
+          oldIndex = index;
+          index = highestWindowAbovePoint(x, y, index);
+          color = getPixelColorOfObject(x - window_list[index].x, y - window_list[index].y, index);
+          index = oldIndex;
+        }
+        writePixelToDoubleBuffer(x, y, color);
 
-            color = getPixelColorOfObject(x - window_list[index].x, y - window_list[index].y, index);
-
-            //TODO this set up for updating area only works with one alpha layer, if there are two alpha layers above each other, this will not work
-            while(color == ALPHA)
-            {
-              oldIndex = index;
-              index = highestWindowAbovePoint(x, y, index);
-              color = getPixelColorOfObject(x - window_list[index].x, y - window_list[index].y, index);
-              index = oldIndex;
-            }
-            //~ plot_BufPixel(x - window_list[a].x, y - window_list[a].y, color, window_list[a].width, (u32int*)window_list[a].data);
-            writePixelToDoubleBuffer(x, y, color);
-
-            pixelsDown--; //subtracts one for every y pixel increased as the number of pixels to the next object gets smaller
-          //~ }
-        //~ }
+        pixelsDown--; //subtracts one for every y pixel increased as the number of pixels to the next object gets smaller
 
       }
       pixelsDown = 0; //reset pixelsDown
 
     }
-  //~ }
 
-  //~ write_buffer(window_list[object].x, window_list[object].y, window_list[object].width, window_list[object].height, (u32int*)window_list[object].data);
   if(updateScreen == TRUE)
-  {
     refreshArea_VESA(lowX, lowY, highX - lowX, highY - lowY);
-  }
-  //~ refreshScreen_VESA();
 }
 
 void refresh_BufObject(window_t object, int xBuffer, int yBuffer)
 {
-  //~ int array[wid + 1];
-//~
-  //~ objectsUnderObject(array, object);
-
   int a, x, y, indexWithHighestPriority = 0;
   float highestPriority = 0.0;
   unsigned long int color;
 
   int lowX = object.x - xBuffer;
   if(lowX < 0)
-  {
     lowX = 0;
-  }else if(lowX > wVESA)
-  {
+  else if(lowX > wVESA)
     lowX = wVESA;
-  }
 
-  //~ int highX = window_list[object].x + window_list[object].width + xBuffer;
   int highX = object.width + 2 * xBuffer;
   if(highX < 0)
-  {
     highX = 0;
-  }else if(highX > wVESA)
-  {
+  else if(highX > wVESA)
     highX = wVESA;
-  }
 
   int lowY = object.y - yBuffer;
   if(lowY < 0)
-  {
     lowY = 0;
-  }else if(lowY > hVESA)
-  {
+  else if(lowY > hVESA)
     lowY = hVESA;
-  }
 
-  //~ int highY = window_list[object].y + window_list[object].height + yBuffer;
   int highY = object.height + 2 * yBuffer;
   if(highY < 0)
-  {
     highY = 0;
-  }else if(highY > hVESA)
-  {
+  else if(highY > hVESA)
     highY = hVESA;
-  }
 
   refresh_BufArea(lowX, lowY, highX, highY, TRUE);
-
-  //int index;
-  ////~ for(a = 0; a < wid + 1; a++)
-  ////~ {
-    //for(x = lowX; x < highX; x++)
-    //{
-
-      //for(y = lowY; y < highY; y++)
-      //{
-        ////~ if(highestPriority <= window_list[a].z)
-        ////~ {
-          ////~ if(isWindowAbovePoint(x, y, a) == TRUE)
-          ////~ {
-            //index = highestWindowAbovePoint(x, y, -1);
-            //color = getPixelColorOfObject(x - window_list[index].x, y - window_list[index].y, index);
-            ////~ plot_BufPixel(x - window_list[a].x, y - window_list[a].y, color, window_list[a].width, (u32int*)window_list[a].data);
-            //writePixelToDoubleBuffer(x, y, color);
-            ////~ highestPriority = window_list[a].z;
-          ////~ }
-        ////~ }
-
-      //}
-
-    //}
-  ////~ }
-
-  //refreshArea_VESA(lowX, lowY, highX - lowX, highY - lowY);
-
-  //~ refreshScreen_VESA();
 }
-
 
 void translateObject(int index, int xMovement, int yMovement)
 {
@@ -877,36 +735,23 @@ void translateObject(int index, int xMovement, int yMovement)
 
     int lowX = window_list[index].x + xMovement;
     if(lowX < 0)
-    {
       lowX = 0;
-    }else if(lowX > wVESA)
-    {
+    else if(lowX > wVESA)
       lowX = wVESA;
-    }
 
     int lowY = window_list[index].y - yMovement;
     if(lowY < 0)
-    {
       lowY = 0;
-    }else if(lowY > hVESA)
-    {
+    else if(lowY > hVESA)
       lowY = hVESA;
-    }
 
-
-    //~ window_list[index].x = window_list[index].x + xMovement;
-    //~ window_list[index].y = window_list[index].y - yMovement;
     int oldX = window_list[index].x, oldY = window_list[index].y;
 
     window_list[index].x = lowX;
     window_list[index].y = lowY;
 
-    //~ refresh_BufScreen();
-    //~ refresh_BufObject(index, math_abs((int)(xMovement * 1.5)), math_abs((int)(yMovement * 1.5)));
-    //~ refresh_BufObject(index, math_abs(xMovement) + 5, math_abs(yMovement) + 5);
     refresh_BufArea(oldX - 5, oldY - 5, window_list[index].width + 10, window_list[index].height + 10, TRUE);
     refresh_BufArea(lowX - 5, lowY - 5, window_list[index].width + 10, window_list[index].height + 10, TRUE);
-    //~ refresh_BufObject(index, 5, 5);
 
   }
 
@@ -923,8 +768,6 @@ component_t createButton(int x, int y, int width, int height, long int *buttonPi
 {
   component_t button;
 
-  //~ plot_BufRect(x, y, w, h, FALSE, 0, 0x000000, window_list[indexOfWindow].width, (u32int*)window_list[indexOfWindow].data);
-  //~ plot_BufRect(x, y, w, h, FALSE, 0, 0x000000, window.width, (u32int*)window.data);
   plot_BufRect(x, y, width, height, TRUE, buttonPixBuf, 0x000000, window.width, (u32int*)window.data);
 
   button.x = x;
