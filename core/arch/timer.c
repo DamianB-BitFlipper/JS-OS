@@ -82,7 +82,9 @@ void timer_callback()
   }else{
     schedule(); //No time left, reschedule tasks
   }
-  
+
+  /* if(systemTimePassed % 1000)
+   *   switch_task(); */
 }
 
 void init_timer(u32int frequency)

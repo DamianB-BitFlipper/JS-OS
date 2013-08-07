@@ -69,7 +69,7 @@ void runShellFunction(u32int runFunction, char *arguements, u32int priority, u32
       if(!pid)
       {
         program_song(arguements);
-        exit();
+        //~ exit();
       }
 
       break;

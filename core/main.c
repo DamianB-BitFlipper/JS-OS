@@ -115,11 +115,9 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   program_cat("./direct/test_file");
 
   if(ext2_initialize(FLOPPY_SIZE - EXT2_SBLOCK_OFF))
-  {
     k_printf("%crFailed to Initialize the EXT2 file system%cw\n");
-  }else{
+  else
     k_printf("Initialized the EXT2 file system!\n");
-  }
 
   datetime_t n = getDatetime();
   k_printf("The CMOS time is:\n\t%d:%d:%d %d/%d/%d\n",n.hour, n.min, n.sec, n.month, n.day, n.year);
@@ -130,8 +128,8 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
 
   __test__();
 
-  mSleep(2000);
-
+  //~ mSleep(2000);
+//~ 
   __test__();
 
   //sucess!
