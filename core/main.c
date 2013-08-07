@@ -129,7 +129,7 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   __test__();
 
   //~ mSleep(2000);
-//~ 
+
   __test__();
 
   //sucess!

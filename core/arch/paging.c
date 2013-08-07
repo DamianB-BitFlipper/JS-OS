@@ -156,12 +156,12 @@ void pageMem(u32int location)
 {
   u32int j = location;
   while (j < location + (1024*768*4))
-  //~ while (j < location+(1024*768*24))
+    //~ while (j < location+(1024*768*24))
   {
     //If frame is valid...
     //~ if(j+location+(1024*768*24) < memsize)
     if(j + location + (1024*768*4) < memsize)
-        set_frame(j); // Tell the frame bitmap that this frame is now used!
+      set_frame(j); // Tell the frame bitmap that this frame is now used!
     //Get the page
     page_t *page = get_page(j, TRUE, kernel_directory);
     //And fill it
@@ -254,12 +254,12 @@ void initialise_paging(u32int memorySize)
 
 void switch_page_directory(page_directory_t *dir)
 {
-    current_directory = dir;
-    asm volatile("mov %0, %%cr3":: "r"(dir->physicalAddr));
-    u32int cr0;
-    asm volatile("mov %%cr0, %0": "=r"(cr0));
-    cr0 |= 0x80000000; // Enable paging!
-    asm volatile("mov %0, %%cr0":: "r"(cr0));
+  current_directory = dir;
+  asm volatile("mov %0, %%cr3":: "r"(dir->physicalAddr));
+  u32int cr0;
+  asm volatile("mov %%cr0, %0": "=r"(cr0));
+  cr0 |= 0x80000000; // Enable paging!
+  asm volatile("mov %0, %%cr0":: "r"(cr0));
 }
 
 page_t *get_page(u32int address, u32int make, page_directory_t *dir)
@@ -337,7 +337,7 @@ static page_table_t *clone_table(page_table_t *src, u32int *physAddr)
   // Make a new page table, which is page aligned.
   page_table_t *table = (page_table_t*)kmalloc_ap(sizeof(page_table_t), physAddr);
   // Ensure that the new table is blank.
-  memset((u8int*)table, 0, sizeof(page_directory_t));
+  memset((u8int*)table, 0, sizeof(page_table_t));
 
   // For every entry in the table...
   int i;
@@ -363,37 +363,37 @@ static page_table_t *clone_table(page_table_t *src, u32int *physAddr)
 
 page_directory_t *clone_directory(page_directory_t *src)
 {
-    u32int phys;
-    // Make a new page directory and obtain its physical address.
-    page_directory_t *dir = (page_directory_t*)kmalloc_ap(sizeof(page_directory_t), &phys);
-    // Ensure that it is blank.
-    memset((u8int*)dir, 0, sizeof(page_directory_t));
+  u32int phys;
+  // Make a new page directory and obtain its physical address.
+  page_directory_t *dir = (page_directory_t*)kmalloc_ap(sizeof(page_directory_t), &phys);
+  // Ensure that it is blank.
+  memset((u8int*)dir, 0, sizeof(page_directory_t));
 
-    // Get the offset of tablesPhysical from the start of the page_directory_t structure.
-    u32int offset = (u32int)dir->tablesPhysical - (u32int)dir;
+  // Get the offset of tablesPhysical from the start of the page_directory_t structure.
+  u32int offset = (u32int)dir->tablesPhysical - (u32int)dir;
 
-    // Then the physical address of dir->tablesPhysical is:
-    dir->physicalAddr = phys + offset;
+  // Then the physical address of dir->tablesPhysical is:
+  dir->physicalAddr = phys + offset;
 
-    // Go through each page table. If the page table is in the kernel directory, do not make a new copy.
-    int i;
-    for(i = 0; i < 1024; i++)
-    //~ for (i = 0; i < 512; i++)
+  // Go through each page table. If the page table is in the kernel directory, do not make a new copy.
+  int i;
+  for(i = 0; i < 1024; i++)
+  {
+    if(!src->tables[i])
+      continue;
+
+    if(kernel_directory->tables[i] == src->tables[i])
+    //~ if((current_directory == 0 ? kernel_directory : current_directory)->tables[i] == src->tables[i])
     {
-      if(!src->tables[i])
-        continue;
-
-      if(kernel_directory->tables[i] == src->tables[i])
-      {
-        // It's in the kernel, so just use the same pointer.
-        dir->tables[i] = src->tables[i];
-        dir->tablesPhysical[i] = src->tablesPhysical[i];
-      }else{
-        // Copy the table.
-        u32int phys;
-        dir->tables[i] = clone_table(src->tables[i], &phys);
-        dir->tablesPhysical[i] = phys | 0x07;
-      }
+      // It's in the kernel, so just use the same pointer.
+      dir->tables[i] = src->tables[i];
+      dir->tablesPhysical[i] = src->tablesPhysical[i];
+    }else{
+      // Copy the table.
+      u32int phys;
+      dir->tables[i] = clone_table(src->tables[i], &phys);
+      dir->tablesPhysical[i] = phys | 0x07;
     }
-    return dir;
+  }
+  return dir;
 }
