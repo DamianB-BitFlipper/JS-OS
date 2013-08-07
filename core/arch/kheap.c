@@ -245,7 +245,6 @@ void *alloc(u32int size, u8int page_align, heap_t *heap)
 
     // We need to allocate some more space.
     expand(old_length + new_size, heap);
-    //~ expand(0x4000000, heap);
     u32int new_length = heap->end_address - heap->start_address;
 
     // Find the endmost header. (Not endmost in size, but in location).
@@ -431,4 +430,10 @@ void free(void *p, heap_t *heap)
   if (do_add == 1)
     insert_ordered_array((void*)header, &heap->index);
 
+}
+
+u32int size_of_alloc(u32int *alloc)
+{
+  //the u32int before the start of the actual data holds the size of the whole alloc, including headers and footers
+  return *(alloc - 1) -  (sizeof(header_t) + sizeof(footer_t));
 }

@@ -36,6 +36,7 @@
 //All of the include for this OS
 #include "arch/common.h"
 #include "arch/cpu.h"
+#include "crypt.h"
 #include "arch/descriptor_tables.h"
 #include "elf.h"
 #include "ext2_fs.h"

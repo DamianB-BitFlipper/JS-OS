@@ -1741,6 +1741,11 @@ void pongRun()
     {
       //go back to the terminal text view, without high resolution text
       set_text_mode(FALSE);
+
+      //restore the functions of the arrow keys
+      arrowKeyFunction("write", "left", &shiftCursor);
+      arrowKeyFunction("write", "up", &printInputBuffer); 
+
       k_printf("\nexiting...");
 
       //reset the board for a possible next game to start frin the beginning

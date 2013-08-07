@@ -126,7 +126,19 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   
   addShellIndent();
 
-  //~ __test__();
+  u8int *wow, *dec;
+
+  wow = en_vigenere_cipher("This Test Took Tom", 18, "alphe");
+  dec = de_ceaser_shift(wow, 'a');
+
+  u32int i;
+  for(i = 0; i < 26; i++)
+    k_putChar(*(wow + i));
+
+  k_printf("\n");
+
+  for(i = 0; i < 26; i++)
+    k_putChar(*(dec + i));
 
   //sucess!
   return 0;

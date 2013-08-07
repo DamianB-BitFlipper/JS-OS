@@ -40,7 +40,7 @@ $(C_OBJ_DIR)/graphics.o $(C_OBJ_DIR)/x_server.o \
 \
 $(C_OBJ_DIR)/k_math.o \
 \
-$(C_OBJ_DIR)/elf.o $(C_OBJ_DIR)/ext2_fs.o $(C_OBJ_DIR)/initrd.o $(C_OBJ_DIR)/keyboard.o \
+$(C_OBJ_DIR)/crypt.o $(C_OBJ_DIR)/elf.o $(C_OBJ_DIR)/ext2_fs.o $(C_OBJ_DIR)/initrd.o $(C_OBJ_DIR)/keyboard.o \
 $(C_OBJ_DIR)/k_programs.o $(C_OBJ_DIR)/k_shell.o $(C_OBJ_DIR)/k_stdio.o $(C_OBJ_DIR)/main.o \
 $(C_OBJ_DIR)/mouse.o $(C_OBJ_DIR)/ordered_array.o $(C_OBJ_DIR)/schedule.o $(C_OBJ_DIR)/sound.o \
 $(C_OBJ_DIR)/syscall.o $(C_OBJ_DIR)/vfs.o \
@@ -185,6 +185,11 @@ $(C_OBJ_DIR)/k_math.o: core/math/k_math.c
 ###********core/math/_C********###
 
 ###********core/_C********###
+$(C_OBJ_DIR)/crypt.o: core/crypt.c
+				$(MESSAGE_PRINTER) "[$(CC_MESAGE) ] $^"
+				$(CC) $(C_FLAGS) -o $@ -c $^ $(C_FINAL_FLAGS) $(C_INCLUDES)
+				$(MESSAGE_PRINTER) "$(DONE)"
+
 $(C_OBJ_DIR)/elf.o: core/elf.c
 				$(MESSAGE_PRINTER) "[$(CC_MESAGE) ] $^"
 				$(CC) $(C_FLAGS) -o $@ -c $^ $(C_FINAL_FLAGS) $(C_INCLUDES)
