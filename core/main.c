@@ -128,6 +128,8 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   
   addShellIndent();
 
+  //~ __test__();
+
   //sucess!
   return 0;
 }

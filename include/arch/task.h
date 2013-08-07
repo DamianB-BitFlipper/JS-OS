@@ -104,4 +104,6 @@ void tasking_test();
 /*end the current task*/
 void exit();
 
+u32int __test__();
+
 #endif

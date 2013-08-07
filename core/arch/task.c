@@ -327,94 +327,6 @@ void switch_task()
 
 s32int fork(u32int priority, u32int burst_time, char *task_Name)
 {
-  //// We are modifying kernel structures, and so cannot be interrupted.
-  //asm volatile("cli");
-
-  //// Take a pointer to this process' task struct for later reference.
-  //task_t *parent_task = (task_t*)current_task;
-
-  //// Clone the address space.
-  //page_directory_t *directory = clone_directory(current_directory);
-
-  //// Create a new process.
-  //task_t *new_task = (task_t*)kmalloc(sizeof(task_t));
-  //new_task->id = next_pid++;
-  //new_task->esp = new_task->ebp = 0;
-  //new_task->eip = 0;
-
-  //new_task->priority = priority;
-  ////~ new_task->time_to_run = 10;
-  //new_task->time_to_run = 0;
-  //new_task->time_running = 0;
-  //new_task->ready_to_run = TRUE;
-
-  //new_task->page_directory = directory;
-  ////current_task->kernel_stack = kmalloc_a(KERNEL_STACK_SIZE);
-  //new_task->next = 0;
-
-  //// Add it to the end of the ready queue.
-  //// Find the end of the ready queue...
-  //task_t *tmp_task = (task_t*)ready_queue;
-  ////~ task_t *tmp_task = (task_t*)kmalloc(sizeof(task_t));
-  ////~ tmp_task->next = ready_queue->next;
-  //while(tmp_task->next != 0)
-  //{
-  //tmp_task = tmp_task->next;
-    
-  ////tmp_task->id = tmp_task->next->id;
-  ////strcpy(tmp_task->name, tmp_task->next->name);
-  //////~ tmp_task->name = tmp_task->next->name;
-  ////tmp_task->esp = tmp_task->next->esp;
-  ////tmp_task->ebp = tmp_task->next->ebp;
-  ////tmp_task->eip = tmp_task->next->eip;
-  ////tmp_task->priority = tmp_task->next->priority;
-  ////tmp_task->time_to_run = tmp_task->next->time_to_run;
-  ////tmp_task->time_running = tmp_task->next->time_running;
-  ////tmp_task->ready_to_run = tmp_task->next->ready_to_run;
-  ////tmp_task->page_directory = tmp_task->next->page_directory;
-  ////tmp_task->next = tmp_task->next->next;
-  //}
-
-  ////Find last task
-  ////task_t *task_prev = 0;
-  ////task_t *tmp_task = (task_t*)ready_queue;
-  ////for(;tmp_task->next != 0; tmp_task = tmp_task->next)
-  ////{
-  ////if(tmp_task->next == current_task)
-  ////{
-  //////We got the previous task
-  ////task_prev = tmp_task;
-  ////break; //Don't bother with the rest of the list
-  ////}
-  ////}  
-  
-  //// ...And extend it.
-  //tmp_task->next = new_task;
-  ////~ kfree(tmp_task);
-
-  //// This will be the entry point for the new process.
-  //u32int eip = read_eip();
-
-  //// We could be the parent or the child here - check.
-  //if(current_task == parent_task) //we are the child
-  //{
-  //// We are the parent, so set up the esp/ebp/eip for our child.
-  //u32int esp; asm volatile("mov %%esp, %0" : "=r"(esp));
-  //u32int ebp; asm volatile("mov %%ebp, %0" : "=r"(ebp));
-  //new_task->esp = esp;
-  //new_task->ebp = ebp;
-  //new_task->eip = eip;
-  //// All finished: Reenable interrupts.
-  //asm volatile("sti");
-
-  //// And by convention return the PID of the child.
-  //return new_task->id;
-  //}else{ //we are the parent
-  ////~ k_printf("\nPID %d\n", getpid());
-    
-  //// We are the child - by convention return 0.
-  //return 0;
-  //}
 
   asm volatile("cli");
 
@@ -478,23 +390,12 @@ s32int fork(u32int priority, u32int burst_time, char *task_Name)
   task->next = 0;
 
   // Add it to the end of the ready queue.
-  // Find the end of the ready queue...
-  //task_t *tmp_task = (task_t*)ready_queue;
-  //while(tmp_task->next != 0)
-  //{
-  //tmp_task = tmp_task->next;
-
-  //}
-  
-  //// ...And extend it.
-  //tmp_task->next = task;
-
   preempt_task(task);
 
   u32int eip = read_eip();
 
   // We could be the parent or the child here - check.
-  if(current_task == parent_task) //we are the child
+  if(current_task == parent_task) //we are the parent
   {
     // We are the parent, so set up the esp/ebp/eip for our child.
     u32int esp; asm volatile("mov %%esp, %0" : "=r"(esp));
@@ -507,8 +408,7 @@ s32int fork(u32int priority, u32int burst_time, char *task_Name)
 
     // And by convention return the PID of the child.
     return task->id;
-  }else{ //we are the parent
-    //~ k_printf("\nPID %d\n", getpid());
+  }else{ //we are the child
     
     // We are the child - by convention return 0.
     return 0;
@@ -564,6 +464,7 @@ void exit()
   //Free the memory
   kfree((void*)current_task);
   kfree((void*)current_task->originalStack);
+  //~ kfree((void*)current_task->stack);
   
   asm volatile("sti"); //Restart Interrupts before switching - stop CPU lockup
   switch_task(); //Don't waste any time
@@ -719,4 +620,14 @@ void tasking_test()
     
   //delete the process from the multitasking queue
   exit();  
+}
+
+u32int __test__()
+{
+  s32int pid = fork(PRIO_LOW, PROC_VERY_SHORT, "test");
+
+  if(!pid)
+    k_printf("child\n");
+  else
+    k_printf("parent\n");
 }

@@ -61,9 +61,19 @@ void runShellFunction(u32int runFunction, char *arguements, u32int priority, u32
       program_GUI_pong(arguements);
       break;
     case 4:
+    {
       //multitasking enabled program
-      start_task(priority, burst_time, program_song, arguements, "song");
+      //~ start_task(priority, burst_time, program_song, arguements, "song");
+      s32int pid = fork(priority, burst_time, "song");
+      
+      if(!pid)
+      {
+        program_song(arguements);
+        exit();
+      }
+
       break;
+    }
     case 5:
       program_JS_viewer(arguements);
       break;
@@ -256,15 +266,15 @@ void program_song(char *arguements)
 {
   asm volatile("sti");
   init_timer(globalFreq); // Initialise timer to globalFreq-Hz
-
-  //if there is an arg tied to the current_task, set it to arguements
-  asm volatile("cli");
-  if(current_task->thread_flags)
-  {
-
-    arguements = (char*)current_task->thread_flags;
-  }
-  asm volatile("sti");
+//~ 
+  //~ //if there is an arg tied to the current_task, set it to arguements
+  //~ asm volatile("cli");
+  //~ if(current_task->thread_flags)
+  //~ {
+//~ 
+    //~ arguements = (char*)current_task->thread_flags;
+  //~ }
+  //~ asm volatile("sti");
 
   if(k_strcmp(arguements, "-pacman") == 0)
   {
@@ -272,7 +282,7 @@ void program_song(char *arguements)
   }
 
   //delete the process from the multitasking queue
-  exit();
+  //~ exit();
 }
 
 ///**************************LS function*****************************///
