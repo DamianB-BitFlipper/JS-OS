@@ -36,6 +36,15 @@ u8int *de_ceaser_shift(u8int *data, u8int orig_shift);
 u8int *en_vigenere_cipher(u8int *data, u32int size_bytes, char *key);
 
 /*for decrypting using Vigenere cipher*/
-u8int *de_vigenere_cipher(u8int *data, u32int size_bytes, char *key);
+u8int *de_vigenere_cipher(u8int *data, char *key);
+
+/*for encrypting using the bitwise xor cipher*/
+u8int *en_bitwise_xor(u8int *data, u32int size_bytes, char *pass_phrase);
+
+/*for decrypting using the bitwise xor cipher*/
+u8int *de_bitwise_xor(u8int *data, char *pass_phrase);
+
+/*for encrypting using the DES cipher*/
+u8int *en_DES_cipher(u8int *data, u32int size_bytes, char *pass_phrase);
 
 #endif

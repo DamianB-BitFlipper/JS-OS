@@ -432,8 +432,8 @@ void free(void *p, heap_t *heap)
 
 }
 
-u32int size_of_alloc(u32int *alloc)
+u32int size_of_alloc(void *alloc)
 {
   //the u32int before the start of the actual data holds the size of the whole alloc, including headers and footers
-  return *(alloc - 1) -  (sizeof(header_t) + sizeof(footer_t));
+  return *((u32int*)alloc - 1) -  (sizeof(header_t) + sizeof(footer_t));
 }

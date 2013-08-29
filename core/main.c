@@ -126,19 +126,28 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   
   addShellIndent();
 
-  u8int *wow, *dec;
+  //Encryption test
+  u8int *wow, *data;
+  data = (u8int*)kmalloc(8);
+  *(data) = 0x01;
+  *(data + 1) = 0x23;
+  *(data + 2) = 0x45;
+  *(data + 3) = 0x67;
+  *(data + 4) = 0x89;
+  *(data + 5) = 0xab;
+  *(data + 6) = 0xcd;
+  *(data + 7) = 0xef;
 
-  wow = en_vigenere_cipher("This Test Took Tom", 18, "alphe");
-  dec = de_ceaser_shift(wow, 'a');
+  wow = en_DES_cipher("0123456789ABCDEF", 8, );
 
   u32int i;
-  for(i = 0; i < 26; i++)
+  for(i = 0; i < 8; i++)
     k_putChar(*(wow + i));
 
-  k_printf("\n");
-
-  for(i = 0; i < 26; i++)
-    k_putChar(*(dec + i));
+  //~ k_printf("\n");
+//~ 
+  //~ for(i = 0; i < 18; i++)
+    //~ k_putChar(*(dec + i));
 
   //sucess!
   return 0;
