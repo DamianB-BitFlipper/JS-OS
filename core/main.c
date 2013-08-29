@@ -126,39 +126,33 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   
   addShellIndent();
 
-  //Encryption test
-  u8int *wow, *data, *pass;
-  data = (u8int*)kmalloc(8);
-  pass = (u8int*)kmalloc(9);
-  *(data) = 0x01;
-  *(data + 1) = 0x23;
-  *(data + 2) = 0x45;
-  *(data + 3) = 0x67;
-  *(data + 4) = 0x89;
-  *(data + 5) = 0xab;
-  *(data + 6) = 0xcd;
-  *(data + 7) = 0xef;
+  //DES Encryption test
+  u8int *wow, *data, *pass, *out, i;
+  data = (u8int*)kmalloc(63);
 
-  *(pass) = 0x13;
-  *(pass + 1) = 0x34;
-  *(pass + 2) = 0x57;
-  *(pass + 3) = 0x79;
-  *(pass + 4) = 0x9b;
-  *(pass + 5) = 0xbc;
-  *(pass + 6) = 0xdf;
-  *(pass + 7) = 0xf1;
-  *(pass + 8) = 0x00;
+  for(i = 0; i < 63; i++)
+    *(data + i) = 'a';
 
-  wow = en_DES_cipher(data, 8, pass);
+  wow = en_DES_cipher(data, 63, "kontruap");
 
-  u32int i;
-  for(i = 0; i < 8; i++)
-    k_putChar(*(wow + i));
+  //~ wow = en_DES_cipher(wow, 16, pass);
+  out = de_DES_cipher(wow, "kontruap");
 
-  //~ k_printf("\n");
-//~ 
-  //~ for(i = 0; i < 18; i++)
-    //~ k_putChar(*(dec + i));
+  k_printf("%d\n", size_of_alloc(wow));
+
+  for(i = 0; i < 16; i++)
+  {
+    //~ k_putChar(*(wow + i));
+    k_printf("%h ", *(wow + i));
+
+    //~ if(i == 7)
+      //~ k_printf("\n");
+  }
+
+  k_printf("\n%s", out);
+
+  //~ for(i = 0; i < 16; i++)
+    //~ k_printf("%h ", *(out + i));
 
   //sucess!
   return 0;
