@@ -304,15 +304,16 @@ static u8int *des_permutate_key(char *key)
   
   u8int *new_key;
   //allocate space for a 56 bit key
-  new_key = (u8int*)kmalloc(56 / sizeof(u8int));
+  new_key = (u8int*)kmalloc(56 / 8);
   memset(new_key, 0x0, 7);
 
   u32int i, byte = 0, new_byte;
   u8int bit = 0, bit_value = 0, new_bit;
   for(i = 0; i < 56; i++)
   {
-    byte = des_PC_1[i] / sizeof(u8int);
-    bit = 0b10000000 >> des_PC_1[i] % sizeof(u8int);
+    byte = des_PC_1[i] / 8;
+    //-1 since des_PC_1 starts from 1, not 0
+    bit = 0b10000000 >> (des_PC_1[i] - 1) % 8;
 
     //get the actually value of the bit
     bit_value = (*(key + byte) & bit) > 0 ? 1 : 0;
@@ -321,10 +322,10 @@ static u8int *des_permutate_key(char *key)
     if(!bit_value)
       continue;
 
-    new_byte = i / sizeof(u8int);
-    new_bit = 0b10000000 >> (i % sizeof(u8int));
+    new_byte = i / 8;
+    new_bit = 0b10000000 >> (i % 8);
 
-    *(new_key + new_byte) &= new_bit;
+    *(new_key + new_byte) |= new_bit;
 
   }
 
@@ -354,7 +355,6 @@ static u8int *des_permutate_sub_keys(u8int *a_key, u8int *b_key)
 
 static void des_permutate_input(u8int *input, u8int *a_ip_key, u8int *b_ip_key)
 {
-
   //none of the args should be 0
   if(!input || !a_ip_key || !b_ip_key)
     return;
@@ -367,9 +367,8 @@ static void des_permutate_input(u8int *input, u8int *a_ip_key, u8int *b_ip_key)
   u8int bit = 0, bit_value = 0;
   for(i = 0; i < 64; i++)
   {
-
-    byte = des_ip[i] / sizeof(u8int);
-    bit = 0b10000000 >> des_ip[i] % sizeof(u8int);
+    byte = (des_ip[i] - 1) / 8;
+    bit = 0b10000000 >> (des_ip[i] - 1) % 8;
 
     //get the actually value of the bit
     bit_value = (*(input + byte) & bit) > 0 ? 1 : 0;
@@ -401,10 +400,16 @@ static u8int *des_shift_subkey_block(u8int *key, u32int shift)
   //28 bits is the size fo one subkey block, every byte represents one bit
   out = (u8int*)kmalloc(28);
 
+  u8int *tmp_key;
+  tmp_key = key;
+
   for(i = 0; i < shift; i++)
   {
+    if(i)
+      tmp_key = out;
+
     //record the beggining bit that will go to the end
-    end = *(key);
+    end = *(tmp_key);
 
     //move all of the byte's values to the left one
     for(b = 0; b < 28; b++)
@@ -414,7 +419,7 @@ static u8int *des_shift_subkey_block(u8int *key, u32int shift)
       if(b == 27)
         *(out + b) = end;
       else
-        *(out + b) = *(key + b + 1);
+        *(out + b) = *(tmp_key + b + 1);
     }
   }
 
@@ -505,20 +510,20 @@ u8int *en_DES_cipher(u8int *data, u32int size_bytes, char *pass_phrase)
   {
     //allocate more space to make the size a multiple of 64 bits (8 bytes)
     u8int *new_data;
-    new_data = (u8int*)kmalloc(size_bytes + (size_bytes % sizeof(u8int)));
+    new_data = (u8int*)kmalloc(size_bytes + (size_bytes % 8));
 
     //copy the acutal data to our new buffer
     memcpy(new_data, data, size_bytes);
 
     //pad the rest of the space with 0's
-    memset(new_data + size_bytes, 0x0, size_bytes % sizeof(u8int));
+    memset(new_data + size_bytes, 0x0, size_bytes % 8);
 
     //free the old data
     kfree(data);
 
     //assign the new data
     data = new_data;
-    size_bytes += (size_bytes % sizeof(u8int));
+    size_bytes += (size_bytes % 8);
   }
 
   //allocate our output
@@ -545,20 +550,20 @@ u8int *en_DES_cipher(u8int *data, u32int size_bytes, char *pass_phrase)
 
   for(i = 0; i < 28; i++)
   {
-    byte = i / sizeof(u8int);
-    bit = 0b10000000 >> (i % sizeof(u8int));
+    byte = i / 8;
+    bit = 0b10000000 >> (i % 8);
 
     //copies every bit to a byte in the a_key, for easier manipulation
-    *(a_key + i) = *(des_key + byte) & bit > 0 ? 1 : 0;
+    *(a_key + i) = (*(des_key + byte) & bit) > 0 ? 1 : 0;
    
     if(i < 4) //for the trialing bits, i.e. in the 4th byte of des_key, the starting bit of b_key is the 5th bit
     {
-      bit = 0b00001000 >> (i % sizeof(u8int));     
-      *(b_key + i) = *(des_key + byte + 3) & bit > 0 ? 1 : 0;
-    }else if(i > 4)  //for the non-trialing bits
-    {
-      bit = 0b10000000 >> ((i - 5) % sizeof(u8int));
-      *(b_key + i) = *(des_key + byte + 4) & bit > 0 ? 1 : 0;
+      bit = 0b00001000 >> (i % 8);     
+      *(b_key + i) = (*(des_key + byte + 3) & bit) > 0 ? 1 : 0;
+    }else{  //for the non-trialing bits
+      byte = (i - 4) / 8;
+      bit = 0b10000000 >> ((i - 4) % 8);
+      *(b_key + i) = (*(des_key + byte + 4) & bit) > 0 ? 1 : 0;
     }
   }
 
@@ -571,18 +576,17 @@ u8int *en_DES_cipher(u8int *data, u32int size_bytes, char *pass_phrase)
   //permutate all of the other subkeys and create the final subkeys (permutate_keys)
   for(i = 0; i < 16; i++)
   {
-    *(a_sub_keys + i) = des_shift_subkey_block(a_key, des_left_shifts[i]);
-    *(b_sub_keys + i) = des_shift_subkey_block(b_key, des_left_shifts[i]);
+    *(a_sub_keys + i) = des_shift_subkey_block(i == 0 ? a_key : *(a_sub_keys + i - 1), des_left_shifts[i]);
+    *(b_sub_keys + i) = des_shift_subkey_block(i == 0 ? b_key : *(b_sub_keys + i - 1), des_left_shifts[i]);
 
     *(permutate_keys + i) = des_permutate_sub_keys(*(a_sub_keys + i), *(b_sub_keys + i));
   }
 
   //start the actual encryption of the text
-
   u32int b;
   u8int **a_ip_phrases, **b_ip_phrases, *ip_l, *ip_r, *tmp_l, *tmp_r, *ip_last;
-  a_ip_phrases = (u8int**)kmalloc((size_bytes % 64) * sizeof(u8int**));
-  b_ip_phrases = (u8int**)kmalloc((size_bytes % 64) * sizeof(u8int**));
+  a_ip_phrases = (u8int**)kmalloc((size_bytes % 64) * sizeof(u8int*));
+  b_ip_phrases = (u8int**)kmalloc((size_bytes % 64) * sizeof(u8int*));
   ip_l = (u8int*)kmalloc(32);
   ip_r = (u8int*)kmalloc(32);
   ip_last = (u8int*)kmalloc(64);
@@ -591,7 +595,7 @@ u8int *en_DES_cipher(u8int *data, u32int size_bytes, char *pass_phrase)
    * but the old data is needed for calculating the new ip_r*/
   tmp_l = (u8int*)kmalloc(32);
   tmp_r = (u8int*)kmalloc(32);
-  for(i = 0; i < size_bytes % sizeof(u8int); i++)
+  for(i = 0; i < size_bytes % 8; i++)
   {
     des_permutate_input(data + (i * 8), *(a_ip_phrases + i), *(b_ip_phrases + i));
 
@@ -639,9 +643,9 @@ u8int *en_DES_cipher(u8int *data, u32int size_bytes, char *pass_phrase)
       if(!*(ip_last + b))
         continue;
 
-      byte = b / sizeof(u8int);
-      bit = 0b10000000 >> (b % sizeof(u8int));
-      *(out + i * sizeof(u8int) + byte) |= bit;
+      byte = b / 8;
+      bit = 0b10000000 >> (b % 8);
+      *(out + i * 8 + byte) |= bit;
     }
   }
 
@@ -660,6 +664,20 @@ u8int *en_DES_cipher(u8int *data, u32int size_bytes, char *pass_phrase)
   kfree(a_sub_keys);
   kfree(b_sub_keys);
   kfree(permutate_keys);
+
+  for(i = 0; i < size_bytes % 64; i++)
+  {
+    kfree(*(a_ip_phrases + i));
+    kfree(*(b_ip_phrases + i));
+  }
+
+  kfree(a_ip_phrases);
+  kfree(b_ip_phrases);
+  kfree(ip_l);
+  kfree(ip_r);
+  kfree(ip_last);
+  kfree(tmp_l);
+  kfree(tmp_r);
 
   //done!
   return out;

@@ -127,8 +127,9 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   addShellIndent();
 
   //Encryption test
-  u8int *wow, *data;
+  u8int *wow, *data, *pass;
   data = (u8int*)kmalloc(8);
+  pass = (u8int*)kmalloc(9);
   *(data) = 0x01;
   *(data + 1) = 0x23;
   *(data + 2) = 0x45;
@@ -138,7 +139,17 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   *(data + 6) = 0xcd;
   *(data + 7) = 0xef;
 
-  wow = en_DES_cipher("0123456789ABCDEF", 8, );
+  *(pass) = 0x13;
+  *(pass + 1) = 0x34;
+  *(pass + 2) = 0x57;
+  *(pass + 3) = 0x79;
+  *(pass + 4) = 0x9b;
+  *(pass + 5) = 0xbc;
+  *(pass + 6) = 0xdf;
+  *(pass + 7) = 0xf1;
+  *(pass + 8) = 0x00;
+
+  wow = en_DES_cipher(data, 8, pass);
 
   u32int i;
   for(i = 0; i < 8; i++)
