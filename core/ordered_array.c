@@ -90,6 +90,9 @@ type_t lookup_ordered_array(u32int i, ordered_array_t *array)
 
 void remove_ordered_array(u32int i, ordered_array_t *array)
 {
+
+  ((header_t*)array->array[i])->magic = 0;
+
   while (i < array->size)
   {
     array->array[i] = array->array[i+1];

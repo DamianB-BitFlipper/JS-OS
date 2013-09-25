@@ -1,6 +1,13 @@
 Items that need to be completed include:
 
+Fix k_programs to make the programs decent in error correction and more stable upon errors
+
 ELF execution
 fopen and fclose for the vfs
 file locks for the floppy ext2 file system
-propper multitasking
+
+Fix kheap problem
+	When unifing right in the free function, a heap array header may be found,
+		but is not in the actual array list. There has been a work around applied 
+		where the operating system detects the flase header, deletes it an moves 
+		on with the freeing of the pointer.

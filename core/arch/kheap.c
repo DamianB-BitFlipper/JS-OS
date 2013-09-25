@@ -93,6 +93,42 @@ u32int kmalloc(u32int sz)
   return kmalloc_int(sz, 0, 0);
 }
 
+u32int krealloc(u32int *ptr, u32int old_sz, u32int new_sz)
+{
+  u32int *out;
+  out = (u32int*)kmalloc(new_sz);
+  memcpy(out, ptr, old_sz);
+  kfree(ptr);
+  return (u32int)out;
+}
+
+u32int krealloc_a(u32int *ptr, u32int old_sz, u32int new_sz)
+{
+  u32int *out;
+  out = (u32int*)kmalloc_int(new_sz, 1, 0);
+  memcpy(out, ptr, old_sz);
+  kfree(ptr);
+  return (u32int)out;
+}
+
+u32int krealloc_ap(u32int *ptr, u32int old_sz, u32int new_sz, u32int *phys)
+{
+  u32int *out;
+  out = (u32int*)kmalloc_int(new_sz, 1, phys);
+  memcpy(out, ptr, old_sz);
+  kfree(ptr);
+  return (u32int)out;  
+}
+
+u32int krealloc_p(u32int *ptr, u32int old_sz, u32int new_sz, u32int *phys)
+{
+  u32int *out;
+  out = (u32int*)kmalloc_int(new_sz, 0, phys);
+  memcpy(out, ptr, old_sz);
+  kfree(ptr);
+  return (u32int)out;    
+}
+
 void expand(u32int new_size, heap_t *heap)
 {
   
@@ -326,15 +362,17 @@ void *alloc(u32int size, u8int page_align, heap_t *heap)
   block_footer->magic = HEAP_MAGIC;
   block_footer->header = block_header;
 
+  //TODO this >= was a >, I am not sure if it the fix to assertions while kfreeing
   // We may need to write a new hole after the allocated block.
   // We do this only if the new hole would have positive size...
   if(orig_hole_size - new_size > 0)
   {
-    header_t *hole_header = (header_t *) (orig_hole_pos + sizeof(header_t) + size + sizeof(footer_t));
+    header_t *hole_header = (header_t *)(orig_hole_pos + sizeof(header_t) + size + sizeof(footer_t));
     hole_header->magic    = HEAP_MAGIC;
     hole_header->is_hole  = 1;
     hole_header->size     = orig_hole_size - new_size;
-    footer_t *hole_footer = (footer_t *) ( (u32int)hole_header + orig_hole_size - new_size - sizeof(footer_t) );
+    footer_t *hole_footer = (footer_t *)((u32int)hole_header + orig_hole_size - new_size - sizeof(footer_t) );
+    //footer_t *hole_footer = (footer_t *)((u8int*)hole_header + orig_hole_size - new_size - sizeof(footer_t) );
     if((u32int)hole_footer < heap->end_address)
     {
       hole_footer->magic = HEAP_MAGIC;
@@ -387,35 +425,45 @@ void free(void *p, heap_t *heap)
   header_t *test_header = (header_t*)((u32int)footer + sizeof(footer_t) );
   if(test_header->magic == HEAP_MAGIC && test_header->is_hole)
   {
-    header->size += test_header->size; // Increase our size.
-    test_footer = (footer_t*)((u32int)test_header + // Rewrite its footer to point to our header.
-                                test_header->size - sizeof(footer_t));
-    footer = test_footer;
     // Find and remove this header from the index.
     u32int iterator = 0;
     while((iterator < heap->index.size) && (lookup_ordered_array(iterator, &heap->index) != (void*)test_header))
       iterator++;
 
     // Make sure we actually found the item.
-    ASSERT(iterator < heap->index.size);
-    // Remove it.
-    remove_ordered_array(iterator, &heap->index);
+    //~ ASSERT(iterator < heap->index.size);
+
+    //the header is fake, delete it and process as if there was nothing
+    if(iterator > heap->index.size)
+    {
+      //delete the fake header
+      test_header->magic = 0;
+      test_header->is_hole = 1;
+    }else{ //eveything was normal
+      header->size += test_header->size; // Increase our size.
+      test_footer = (footer_t*)((u32int)test_header + // Rewrite its footer to point to our header.
+                                test_header->size - sizeof(footer_t));
+      footer = test_footer;
+
+      // Remove it.
+      remove_ordered_array(iterator, &heap->index);
+    }
   }
 
   // If the footer location is the end address, we can contract.
-  if((u32int)footer+sizeof(footer_t) == heap->end_address)
+  if((u32int)footer + sizeof(footer_t) == heap->end_address)
   {
-    u32int old_length = heap->end_address-heap->start_address;
+    u32int old_length = heap->end_address - heap->start_address;
     u32int new_length = contract( (u32int)header - heap->start_address, heap);
     // Check how big we will be after resizing.
-    if (header->size - (old_length-new_length) > 0)
+    if(header->size - (old_length-new_length) > 0)
     {
       // We will still exist, so resize us.
       header->size -= old_length-new_length;
       footer = (footer_t*) ( (u32int)header + header->size - sizeof(footer_t) );
       footer->magic = HEAP_MAGIC;
       footer->header = header;
-   }else{
+    }else{
       // We will no longer exist :(. Remove us from the index.
       u32int iterator = 0;
       while((iterator < heap->index.size) && (lookup_ordered_array(iterator, &heap->index) != (void*)test_header))
@@ -427,7 +475,7 @@ void free(void *p, heap_t *heap)
   }
 
   // If required, add us to the index.
-  if (do_add == 1)
+  if(do_add == 1)
     insert_ordered_array((void*)header, &heap->index);
 
 }

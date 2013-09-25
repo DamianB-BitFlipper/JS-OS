@@ -26,6 +26,12 @@
 
 #include <system.h>
 
+//the DES encryption's meta data
+typedef struct des_header {
+  u32int size;
+  u32int magic;
+} des_header_t;
+
 /*for encryption using Ceaser shift*/
 u8int *en_ceaser_shift(u8int *data, u32int size_bytes, u8int shift);
 
@@ -45,9 +51,9 @@ u8int *en_bitwise_xor(u8int *data, u32int size_bytes, char *pass_phrase);
 u8int *de_bitwise_xor(u8int *data, char *pass_phrase);
 
 /*for encryption using the DES cipher*/
-u8int *en_DES_cipher(u8int *data, u32int size_bytes, char *pass_phrase);
+u8int *en_DES_cipher(u8int *input, u32int size_bytes, char *pass_phrase);
 
 /*for decryption using the DES cipher*/
-u8int *de_DES_cipher(u8int *data, char *pass_phrase);
+u8int *de_DES_cipher(u8int *input, char *pass_phrase);
 
 #endif

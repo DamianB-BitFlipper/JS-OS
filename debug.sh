@@ -30,7 +30,18 @@ printf "\n--------------------------GDB------[in new terminal window]----"
 printf "\ntarget remote localhost:1234"
 printf "\nsymbol-file kernel.sym"
 printf "\nbreak <filename.c> :<function or line to break at>"
-printf "\nUse 'continue' instead of 'run' in gdb\n\n"
+printf "\nUse 'continue' instead of 'run' in gdb\n"
+
+#checks if xclip is installed
+command -v xclip >/dev/null 2>&1 || { printf '\e[0;31m\n' ; echo >&2 "I require xclip, but it's not installed.  It is best to install it."; printf '\e[0m\n';
+
+objcopy --only-keep-debug kernel kernel.sym;
+qemu-system-x86_64 -m 64M -vga std -soundhw pcspk -s -S -fda "$floppy_image" -fdb "$storage_image" ; exit 1;}
+
+printf "\nBy default, the initial gdb commands are copied to the clipboard\n\n"
+
+echo "target remote localhost:1234
+symbol-file kernel.sym" |  xclip -selection clipboard
 
 objcopy --only-keep-debug kernel kernel.sym
 

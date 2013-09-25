@@ -126,34 +126,6 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   
   addShellIndent();
 
-  //DES Encryption test
-  u8int *wow, *data, *pass, *out, i;
-  data = (u8int*)kmalloc(63);
-
-  for(i = 0; i < 63; i++)
-    *(data + i) = 'a';
-
-  wow = en_DES_cipher(data, 63, "kontruap");
-
-  //~ wow = en_DES_cipher(wow, 16, pass);
-  out = de_DES_cipher(wow, "kontruap");
-
-  k_printf("%d\n", size_of_alloc(wow));
-
-  for(i = 0; i < 16; i++)
-  {
-    //~ k_putChar(*(wow + i));
-    k_printf("%h ", *(wow + i));
-
-    //~ if(i == 7)
-      //~ k_printf("\n");
-  }
-
-  k_printf("\n%s", out);
-
-  //~ for(i = 0; i < 16; i++)
-    //~ k_printf("%h ", *(out + i));
-
   //sucess!
   return 0;
 }

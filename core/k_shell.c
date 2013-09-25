@@ -127,8 +127,6 @@ void getTypedText(int charCount, int startingYPos, int cursor_y, char *c)
     //to compensate for the extra c-- on the last loop
     c++;
     *(c + charCount) = 0; //add the \000 at the end
-
-    //~ k_printf("\nstartingY=%d\n", startingYPos);
   }
 
 }
@@ -156,7 +154,13 @@ void dirFilePathCount(char *args, u32int *dirCount, u32int *fileCount)
     memcpy(dirs, args, count + 1); //+1 to count because count starts at 0 for the first character
     *(dirs + count + 1) = 0; //add \000 at the end
 
-    program_cd(dirs);
+    //there is an error, no such directory, return both zeros to signal an error
+    if(program_cd(dirs))
+    {
+      *dirCount = 0;
+      *fileCount = 0;
+      return;
+    }
 
     fs_node_t *testDir;
     
@@ -328,10 +332,7 @@ int getopt(int argIndex, int nArgs, char **args, const char *optString)
   {
     //if the arg we are looking for is in our optString
     if(singleArg == *(optString + i))
-    {
       return singleArg;
-
-    }
   }
 
   //if we did not exit in the above for loop, return an error, there was no proper arg
@@ -368,17 +369,20 @@ int cdFormatArgs(char *args, char *dirPath, char *filePath)
     {
       //error!
       return 1;
-    }else if(isDir != 0 && isDir->flags == FS_FILE) //the input is a file, cannot be cd'ed to
+    }else if(isDir && isDir->flags == FS_FILE) //the input is a file, cannot be cd'ed to
     {
       *(dirPath) = 0; //set dirPath to null
       strcpy(filePath, isDir->name);
       *(filePath + strlen(isDir->name)) = 0; //add \000 to the end
 
       return 0;
-    }else if(isDir != 0 && isDir->flags == FS_DIRECTORY) //the input is just a directory
+    }else if(isDir && isDir->flags == FS_DIRECTORY) //the input is just a directory
     {
       u32int w = program_cd(args);
-      
+     
+      strcpy(dirPath, isDir->name);
+      *(dirPath + strlen(isDir->name)) = 0; //add the \000 to the end
+
       //there is no filePath, set it to 0
       *(filePath) = 0;
       return w;
@@ -432,7 +436,7 @@ typedef struct
   u8int own_multiask;
 }programs_list_t;
 
-#define PROGRAM_LIST_NUMBER    19
+#define PROGRAM_LIST_NUMBER    20
 
 programs_list_t programsList[PROGRAM_LIST_NUMBER]=
 {
@@ -455,7 +459,8 @@ programs_list_t programsList[PROGRAM_LIST_NUMBER]=
   "help", PRIO_LOW, PROC_VERY_SHORT, FALSE,
   "mv", PRIO_LOW, PROC_VERY_SHORT, FALSE,
   "find", PRIO_LOW, PROC_VERY_SHORT, FALSE,
-  "about", PRIO_LOW, PROC_VERY_SHORT, FALSE
+  "about", PRIO_LOW, PROC_VERY_SHORT, FALSE,
+  "jpg", PRIO_LOW, PROC_SHORT, FALSE
 };
 
 void executeInput(char *input, char *arguements)
@@ -681,25 +686,7 @@ void saveInputToBuffer(char *input)
 {
   int length = k_strlen(input), x;
 
-  //char *copy;
-  //k_strcpy(input, copy);
-
   setOrGetCommandBuffer("write", bufferCount, input);
-  //~ setOrGetCommandBuffer("write", 1, input);
-
-  //for(x = 0; x < length; x++)
-  //{
-    //inputCommandsBuffer[bufferCount][x] = *copy;
-
-    //copy++;
-  //}
-  //~ k_printf("\n%d", bufferCount);
-  //~ k_printf("\n%s", input);
-
-  //~ inputCommandsBuffer[bufferCount] = copy;
-  //~ k_strcpy(copy, inputCommandsBuffer[bufferCount]);
-
-  //~ k_printf("\nthis: %s, as to in my array: %s", input, inputCommandsBuffer[bufferCount]);
 
   bufferCount = (bufferCount + 1) % 5;
   localIndex = bufferCount;
@@ -738,25 +725,11 @@ void printInputBuffer(s32int direction) //value of 1 meaning up and -1 meaning d
 
   setOrGetCommandBuffer("read", localIndex, output);
 
-  //~ k_printf(inputCommandsBuffer[bufferCount - direction]);
-  //~ if(k_strcmp(output, "") == 1 || localIndex == 5)
   if(localIndex <= 5)
-  {
     k_printf(output);
-    //~ if(k_strcmp(output, " ") == 0)
-    //~ {
-      //~ localIndex--;
-    //~ }
-    //~ k_printf("IN printed");
-
-  }else if(localIndex >= 5 && direction < 0)
-  {
+  else if(localIndex >= 5 && direction < 0)
     localIndex = 10;
-    //~ k_printf("printed");
 
-  }
-
-  //~ k_printf("printed");
   kfree(output);
 
 }
@@ -841,18 +814,6 @@ int getArgs(char *args, char **output)
 
   int length = strlen(args);
   int i;
-  //~ int nArgs = 1;
-//~
-  //~ /*counts the number of args*/
-  //~ for(i = 0; i < length; i++)
-  //~ {
-    //~ if(*(args + i) == ' ')
-    //~ {
-      //~ nArgs++;
-    //~ }
-  //~ }
-
-  //~ char *arguments[nArgs]; //creates a 2d array of pointers for chars
 
   int oldI = 0, curArg = 0;
   for(i = 0; i < length + 1; i++)

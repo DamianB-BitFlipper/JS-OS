@@ -41,6 +41,9 @@ int charCount = 0, charPosition = 0, lineCount = 0, startingYPos = 0;
 int yMin = 0, yMax = 25;
 u32int screen[25 * 80]; //char array to hold screen characters when k_save() is called
 
+//extern of the keyboard handler
+extern void *(*key_handle)(char);
+
 // Updates the hardware cursor.
 static void move_cursor()
 {
@@ -335,9 +338,8 @@ void k_printf(char *c, ...)
       }else if(c[i+1] == 'C') //user wants to print colored background
       {
         if(c[i+2] == 'w') //white background
-        {
           backColour = WHITE;
-        }else if(c[i+2] == 'b' && c[i+3] == 'k') //black background
+        else if(c[i+2] == 'b' && c[i+3] == 'k') //black background
         {
           backColour = BLACK;
           i++;
@@ -350,15 +352,11 @@ void k_printf(char *c, ...)
           backColour = BROWN;
           i++;
         }else if(c[i+2] == 'g') //dark green background
-        {
           backColour = DARK_GREEN;
-        }else if(c[i+2] == 'r') //dark red background
-        {
+        else if(c[i+2] == 'r') //dark red background
           backColour = DARK_RED;
-        }
 
         i = i + 3;
-        //~ k_printf("\n%d\n", i);
 
       }else if(c[i+1] == 'h') //user wants to print a hex number
       {
@@ -375,35 +373,24 @@ void k_printf(char *c, ...)
         for (hexCount = 28; hexCount > 0; hexCount -= 4)
         {
           tmp = (hexArg >> hexCount) & 0xF;
-          if (tmp == 0 && noZeroes != 0)
-          {
+          if(!tmp && noZeroes)
             continue;
-          }
       
           if (tmp >= 0xA)
           {
             noZeroes = 0;
             k_putChar(tmp-0xA+'a');
-          }
-          else
-          {
+          }else{
             noZeroes = 0;
             k_putChar(tmp+'0');
-            
           }
         }
       
         tmp = hexArg & 0xF;
         if (tmp >= 0xA)
-        {
           k_putChar(tmp-0xA+'a');
-          
-        }
         else
-        {
           k_putChar(tmp+'0');
-          
-        }
 
         i = i + 2;
       }
@@ -412,19 +399,253 @@ void k_printf(char *c, ...)
     if(i < stringLength + 1 && c[i] != '%')
     {
       if(c[i] == 0) //if i is at the terminating 0 '\000' of a string, break from loop
-      {
         break;
-      }else{
+      else{
         k_putChar(c[i]);
         i++;
       }
     }
-
-
-
   }
 
   va_end(arguments);
+}
+
+enum __k_scanf_type__
+{
+  __k_scanf_done__,
+  __k_scanf_string__,
+  __k_scanf_decimal__
+};
+  
+static enum __k_scanf_type__ __k_scanf_type__;
+
+enum __k_scanf_text_handle__
+{
+  __k_scanf_hide__,
+  __k_scanf_print__
+};
+
+static enum __k_scanf_text_handle__ __k_scanf_text_handle__;
+
+//internal definition of k_scanf
+static u32int __k_scanf__(char input);
+
+char *__k_scanf_out__(u32int add_or_get, char *input)
+{
+  static char *text = 0;
+
+  //we want to set the static char *text;
+  if(add_or_get)
+  {
+    text = input;
+    //there is nothing to return
+    return 0;
+  }else{//we want to get (return) the static char *text;
+    //store the location of text temporarily
+    u32int tmp;
+    tmp = (u32int)text;
+
+    //reset the value of text
+    text = 0;
+
+    return (char*)tmp;
+  }
+    
+}
+
+u32int k_scanf(char *type, u8int **ptr)
+{
+  //set default flags
+  __k_scanf_text_handle__ = __k_scanf_print__;
+
+  u32int i = 0;
+  while(*(type + i) != '%')
+  {
+    switch(*(type + i))
+    {
+      case 'h':
+        __k_scanf_text_handle__ = __k_scanf_hide__;
+        break;
+      default:
+        k_printf("k_scanf error; unknown %s argument", *(type + i));
+        return 1; //error
+    }
+    i++;
+  }
+
+  //make sure interupts are enabled
+  asm volatile("sti");
+
+  void *(*old_key_handle)(char);
+
+  old_key_handle = key_handle;
+  key_handle = (void*)__k_scanf__;
+
+  //set the correct __k_scanf_type
+  //+1 because the *(type + i) is the % and we want the char after it
+  switch(*(type + i + 1))
+  {
+    case 's':
+      __k_scanf_type__ = __k_scanf_string__;
+      break;
+    case 'd':
+      __k_scanf_type__ = __k_scanf_decimal__;
+      break;
+    default: //error
+      return 1;
+  }
+
+  //wait until the __k_scanf__ internal sends an escape call
+  while(__k_scanf_type__ != __k_scanf_done__);
+
+  //retrieve the output of the __k_scanf__ internal
+  char *out;
+  out = __k_scanf_out__(0, 0);
+
+  *ptr = (u8int*)out;
+
+  //reset the keyboard driver handler
+  key_handle = old_key_handle;
+
+  //sucess!
+  return 0;
+}
+
+static void __k_scanf_print_input__(char input)
+{
+  if(__k_scanf_text_handle__ == __k_scanf_print__)
+    //print the character on the screen
+    k_putChar(input);
+}
+
+static u32int __k_scanf__(char input)
+{
+  static void *text = 0;
+  static u32int size = 50, count = 0;
+  switch(__k_scanf_type__)
+  {
+    //string
+    case __k_scanf_string__:
+    {
+      if(!text)
+      {
+        text = (void*)kmalloc(size);
+        memset((char*)text, 0x0, size);
+      }else if(count == size)
+      {
+        //do a reallocation
+        text = (void*)krealloc((u32int*)text, size, 2 * size);
+
+        //increase size
+        size *= 2;
+
+      }
+
+      if(input == '\b')
+      {
+        if(count)
+        {
+          count--;
+          //count down 1 and replace that character with a 0
+          *((char*)text + count) = 0;
+
+          __k_scanf_print_input__(input);
+        }
+      }else if(input == '\r') //if the input is a carridge return (enter)
+      {
+
+        //we do not what to print a carrige return, since the runShellFunction will initiat, print \n
+        k_putChar('\n');
+
+        //send the static char *text to our middle out function to be retrieved from the real function
+        __k_scanf_out__(1, (char*)text);
+
+        //reset the variables
+        size = 50;
+        count = 0;
+        text = 0;
+
+        //send a signal that we have finished
+        __k_scanf_type__ = __k_scanf_done__;
+        
+        //sucess
+        return 0;
+      }else{ //then it is just normal text
+
+        //save the character to our buffer
+        *((char*)text + count) = input;
+        count++;
+
+        //print the text
+        __k_scanf_print_input__(input);
+      }
+    }
+    case __k_scanf_decimal__:
+    {
+      if(!text)
+      {
+        text = (void*)kmalloc(sizeof(u32int));
+        *(u32int*)text = 0;
+      }
+
+      if(input == '\b')
+      {
+        //the value of text must not be equal to zero
+        if(*(u32int*)text)
+        {
+          //simply divide by 10 to reverse ex) 199 / 10 = 19.9, the .9 is dropped due to integer, 19 is final output
+          *(u32int*)text /= 10;
+      
+          //print the text
+          __k_scanf_print_input__(input);
+      
+        }
+      }if(input == '\r')
+      {
+        //we do not what to print a carrige return, since the runShellFunction will initiat, print \n
+        k_putChar('\n');
+
+        //send the static char *text to our middle out function to be retrieved from the real function
+        __k_scanf_out__(1, (char*)text);
+
+        text = 0;
+
+        //send a signal that we have finished
+        __k_scanf_type__ = __k_scanf_done__;
+        
+        //sucess
+        return 0;
+      }
+
+      //if the input is not an integer (0-9), then ignore it
+      if(input < '0' || input > '9')
+        return 1;
+
+      //subtract 48 to make '0' equal 0, in the ascii table
+      u32int number;
+      number = input - 48;
+
+      /*make sure that we do not exceed out u32int size limit
+       * if text is big enough to fit another one of itself 
+       * inside the the max u32int number limit, it is fine,
+       * in theory we have to fit 10 of these plus a little bit more*/
+      if((u32int)(-1) - *(u32int*)text > *(u32int*)text)
+      {
+        if(*(u32int*)text)
+          *(u32int*)text *= 10;
+
+        *(u32int*)text += number;
+
+        //print the text
+        __k_scanf_print_input__(input);
+      }
+    }
+    default: //some sort of error
+      return 1;
+  }
+
+  //sucess
+  return 0;
 }
 
 void monitor_write_hex(u32int n)
@@ -443,7 +664,7 @@ void monitor_write_hex(u32int n)
     //assign tmp to be a 4 bit number
     tmp = (n >> i) & 0xF;
     //if tmp is 0, then there is no need to process those bits
-    if(tmp == 0 && noZeroes != 0)
+    if(!tmp && noZeroes)
     {
       continue;
     }

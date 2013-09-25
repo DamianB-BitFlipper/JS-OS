@@ -28,15 +28,22 @@
 //functions beginning with en_ are to be used for encryption
 //functions beginning with de_ are to be used for decryption
 
+//TODO add meta data
 u8int *en_ceaser_shift(u8int *data, u32int size_bytes, u8int shift)
 {
   //there is no point of encrypting it with a shift of 0
   if(!shift)
+  {
+    k_printf("Error: Invalid shift passphrase\n");
     return 0;
+  }
 
   //if there are no size bytes, we cannot continue
   if(!size_bytes)
+  {
+    k_printf("Error: File size is 0\n");
     return 0;
+  }
 
   u8int *encrypt;
   encrypt = (u8int*)kmalloc(size_bytes);
@@ -67,6 +74,7 @@ u8int *de_ceaser_shift(u8int *data, u8int orig_shift)
   return decrypt;
 }
 
+//TODO add meta data
 u8int *en_vigenere_cipher(u8int *data, u32int size_bytes, char *key)
 {
   //if there is no key, there is no way to encrypt
@@ -80,8 +88,8 @@ u8int *en_vigenere_cipher(u8int *data, u32int size_bytes, char *key)
   u8int *encrypt;
   encrypt = (u8int*)kmalloc(size_bytes);
 
-  u32int i, p = 0, key_len = strlen(key);
-  for(i = 0; i < size_bytes; i++, p++)
+  u32int i, p, key_len = strlen(key);
+  for(i = 0, p = 0; i < size_bytes; i++, p++)
   {
     //once p gets to the length of the key, reset it
     if(p == key_len)
@@ -112,13 +120,15 @@ u8int *de_vigenere_cipher(u8int *data, char *key)
     if(p == key_len)
       p = 0;
 
-    *(decrypt + i) = (*(data + i) + *(key + p)) % 256; 
+    //reverse the encryption, the + 256 is to make
+    *(decrypt + i) = ((*(data + i) + 256) - *(key + p)) % 256; 
 
   }
 
   return decrypt;
 }
 
+//TODO add meta data
 u8int *en_bitwise_xor(u8int *data, u32int size_bytes, char *pass_phrase)
 {
   //no password was entered, return with an error
@@ -171,7 +181,9 @@ u8int *de_bitwise_xor(u8int *data, char *pass_phrase)
   return decrypt;
 }
 
-/******The DES Encryptio******/
+/******The DES Encryption******/
+
+#define DES_MAGIC 0xCA11AB1E
 
 static u8int des_PC_1[56] =
 {
@@ -486,7 +498,7 @@ static void des_ip_f(u8int *ip_r, u8int *ip_l, u8int *old_r, u8int *subkey)
   return;
 }
 
-u8int *en_DES_cipher(u8int *data, u32int size_bytes, char *pass_phrase)
+u8int *en_DES_cipher(u8int *input, u32int size_bytes, char *pass_phrase)
 {
   //no password was entered, return with an error
   if(!pass_phrase)
@@ -504,6 +516,11 @@ u8int *en_DES_cipher(u8int *data, u32int size_bytes, char *pass_phrase)
     k_printf("Error: Password length is not 8 bytes long");
     return 0;
   }
+
+  //copy the input to our own allocation
+  u8int *data;
+  data = (u8int*)kmalloc(size_bytes);
+  memcpy(data, input, size_bytes);
 
   //our data's size has to be exactly a multiple of 64 bits (8 bytes) 
   if(size_bytes % 8)
@@ -653,7 +670,21 @@ u8int *en_DES_cipher(u8int *data, u32int size_bytes, char *pass_phrase)
     }
   }
 
+  //add the meta data to the final output
+  u8int *final;
+  final = (u8int*)kmalloc(size_bytes + sizeof(des_header_t));
+
+  des_header_t *meta;
+  meta = (des_header_t*)kmalloc(sizeof(des_header_t));
+  meta->size = size_bytes;
+  meta->magic = DES_MAGIC;
+    
+  memcpy(final, meta, sizeof(des_header_t));
+  memcpy(final + sizeof(des_header_t), out, size_bytes);
+
   //free everything we kmalloc'd
+  kfree(data);
+
   kfree(des_key);
   kfree(a_key);
   kfree(b_key);
@@ -683,19 +714,24 @@ u8int *en_DES_cipher(u8int *data, u32int size_bytes, char *pass_phrase)
   kfree(tmp_l);
   kfree(tmp_r);
 
+  kfree(out);
+  kfree(meta);
+
   //done!
-  return out;
+  return final;
 }
+
+//TODO, the size_of_alloc does not work all the time. :(
 
 /*decryption is nealy identical as encryption, 
  * just that the order of the subkeys being applied is reversed*/
-u8int *de_DES_cipher(u8int *data, char *pass_phrase)
+u8int *de_DES_cipher(u8int *input, char *pass_phrase)
 {
   //no password was entered or there is no data, return with an error
-  if(!pass_phrase || !data)
+  if(!pass_phrase || !input)
     return 0;
   
-  u32int pass_len = strlen(pass_phrase), size_bytes = size_of_alloc(data);
+  u32int pass_len = strlen(pass_phrase);
 
   //the password length must be 8 bytes
   if(pass_len != 8)
@@ -704,26 +740,26 @@ u8int *de_DES_cipher(u8int *data, char *pass_phrase)
     return 0;
   }
 
-  //our data's size has to be exactly a multiple of 64 bits (8 bytes) 
-  if(size_bytes % 8)
+  //extract the meta data from the input
+  des_header_t *meta;
+  meta = (des_header_t*)kmalloc(sizeof(des_header_t));
+  memcpy(meta, input, sizeof(des_header_t));
+
+  if(meta->magic != DES_MAGIC)
   {
-    //allocate more space to make the size a multiple of 64 bits (8 bytes)
-    u8int *new_data;
-    new_data = (u8int*)kmalloc(size_bytes + 8 - (size_bytes % 8));
-
-    //copy the acutal data to our new buffer
-    memcpy(new_data, data, size_bytes);
-
-    //pad the rest of the space with 0's
-    memset(new_data + size_bytes, 0x0, 8 - (size_bytes % 8));
-
-    //free the old data
-    kfree(data);
-
-    //assign the new data
-    data = new_data;
-    size_bytes += (8 - (size_bytes % 8));
+    k_printf("Error: Meta data is corrupted or not correct\n");
+    return 0;
   }
+
+  u8int *data;
+  data = (u8int*)kmalloc(meta->size);
+  memcpy(data, input + sizeof(des_header_t), meta->size);
+
+  u32int size_bytes = meta->size;
+
+  //our data's size has to be exactly a multiple of 64 bits (8 bytes), else it is an error
+  if(size_bytes % 8)
+    return 0;
 
   //allocate our output
   u8int *out;
@@ -767,7 +803,7 @@ u8int *de_DES_cipher(u8int *data, char *pass_phrase)
   }
 
   //structure that will hold all of the subkeys
-  u8int **a_sub_keys, **b_sub_keys, **permutate_keys;
+  u8int **a_sub_keys, **b_sub_keys, **permutate_keys; //, **poop;
   a_sub_keys = (u8int**)kmalloc(16 * sizeof(u8int*));
   b_sub_keys = (u8int**)kmalloc(16 * sizeof(u8int*));
   permutate_keys = (u8int**)kmalloc(16 * sizeof(u8int*));
@@ -789,27 +825,28 @@ u8int *de_DES_cipher(u8int *data, char *pass_phrase)
   ip_l = (u8int*)kmalloc(32);
   ip_r = (u8int*)kmalloc(32);
   ip_last = (u8int*)kmalloc(64);
-
+  
   /*used to store the old ip_l and ip_r data after the new data is written over it,
    * but the old data is needed for calculating the new ip_r*/
   tmp_l = (u8int*)kmalloc(32);
   tmp_r = (u8int*)kmalloc(32);
+  
   for(i = 0; i < size_bytes / 8; i++)
   {
     //allocate the ip_phrases
     *(a_ip_phrases + i) = (u8int*)kmalloc(32);
     *(b_ip_phrases + i) = (u8int*)kmalloc(32);
-
+  
     des_permutate_input(data + (i * 8), *(a_ip_phrases + i), *(b_ip_phrases + i));
-
+    
     //clear the ip left and right buffers
     memset(ip_l, 0x0, 32);
     memset(ip_r, 0x0, 32);
-
+    
     //copy the left and right buffers
     memcpy(ip_l, *(a_ip_phrases + i), 32);
     memcpy(ip_r, *(b_ip_phrases + i), 32);
-
+    
     //iterating and encrypting the ip data
     //here, we iterate by L1 = R0 and R1 = L0 xor f(R0, K1)
     for(b = 0; b < 16; b++)
@@ -817,16 +854,16 @@ u8int *de_DES_cipher(u8int *data, char *pass_phrase)
       //store the old data of ip_l and ip_r before overwriting it
       memcpy(tmp_l, ip_l, 32);
       memcpy(tmp_r, ip_r, 32);
-
+    
       //calculate the next iteration of ip_l, it is the previous ip_r
       memcpy(ip_l, ip_r, 32);
-
+    
       //calculate the new ip_r
       /*notice here that the + 15 - b reverses the order of the subkeys being applied,
        * thus preforming the decryption instead of the encryption*/
       des_ip_f(ip_r, tmp_l, tmp_r, *(permutate_keys + 15 - b));      
     }
-
+    
     //when we exit we have out final iterated left and right blocks, reverse the 2 blocks and apply the final permutation
     for(b = 0; b < 64; b++)
     {
@@ -838,16 +875,16 @@ u8int *de_DES_cipher(u8int *data, char *pass_phrase)
       else
         //-1 since des_final_perm starts form 1, not 0
         *(ip_last + b) = *(ip_l + (des_final_perm[b] - 32) - 1);
-
+    
     }
-
+    
     //copy the bits from ip_last to the corresponding place in the output (u8int *out)
     for(b = 0; b < 64; b++)
     {
       //there is no need to set a bit to 0 if it alreadt is
       if(!*(ip_last + b))
         continue;
-
+    
       byte = b / 8;
       bit = 0b10000000 >> (b % 8);
       *(out + i * 8 + byte) |= bit;
@@ -855,6 +892,9 @@ u8int *de_DES_cipher(u8int *data, char *pass_phrase)
   }
 
   //free everything we kmalloc'd
+  kfree(meta);
+  kfree(data);
+
   kfree(des_key);
   kfree(a_key);
   kfree(b_key);

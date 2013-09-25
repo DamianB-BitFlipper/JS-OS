@@ -38,7 +38,8 @@ extern u32int nroot_nodes;
 /**To add a new program, add new case statement in function "runShellFunction" in k_programs.c
  * add the program name that the user will have to type in "char *programsList[]" in k_shell.c
  * add initial run function of that program into k_programs.h
- * make the function that will be run in the case stement below, nomenclature-> program_<command name> **/
+ * start programming the function that will be run in the case stement below, nomenclature-> program_<command name> 
+ * add an entry to the program_help desctibing the programs, make sure it is in alphabetical order**/
 
 void runShellFunction(u32int runFunction, char *arguements, u32int priority, u32int burst_time, u8int multitask)
 {
@@ -96,18 +97,13 @@ void runShellFunction(u32int runFunction, char *arguements, u32int priority, u32
     break;
   case 4:
     program_song(arguements);
-
     break;
   case 5:
     program_JS_viewer(arguements);
     break;
   case 6:
-  {
     program_start(arguements);
-    //~ start_task(priority, burst_time, program_start, arguements, "start");
-
     break;
-  }
   case 7:
     program_ls(arguements);
     break;
@@ -145,7 +141,9 @@ void runShellFunction(u32int runFunction, char *arguements, u32int priority, u32
   case 18:
     program_about(arguements);
     break;
-  //~ case 19:
+  case 19:
+    program_jpg(arguements);
+    break;
     
   }
 
@@ -233,9 +231,7 @@ void program_ascii(char *arguements)
 
 void program_echo(char *arguements)
 {
-
   k_printf("%s\n", arguements);
-
 }
 
 //TODO make this decent
@@ -581,20 +577,20 @@ static int ls_decode_flags(int nArgs, char **args)
       all_files = TRUE;
       really_all_files = TRUE;
       break;
-    case 'i': //flag 'a' all
+    case 'i': //flag 'i' inode
       ls_print_inode = TRUE;
       break;
     case 'l': //flag 'l' lengthy
       format = long_format;
       break;
-    case 'm': //flag 'l' lengthy
+    case 'm': //flag 'm' with commas
       format = with_commas;
       break;
     case 'A': //flag 'A' almost all
       all_files = TRUE;
       really_all_files = FALSE;
       break;
-    case 'U': //flag 'A' almost all
+    case 'U': //flag 'U' unsorted
       sort_type = sort_none;
       break;
     default: //a legal flag was not found, so print and error and exit
@@ -671,6 +667,30 @@ void program_ls(char *arguements)
     //Gets the dirPath and filePath name sizes in the args and cd's to that directory
     dirFilePathCount(args[dirPathArg], &dirCount, &fileCount);
 
+    //an error occured, no such directory
+    if(!dirCount && !fileCount)
+    {
+
+      //free char **args that holds our individual arguments
+      u32int c;
+      for(c = 0; c < nArgs; c++)
+      {
+        kfree(args[c]);
+      }
+
+      setCurrentDir(&root_nodes[currentIno]);
+
+      //also free all of the name locations
+      for(c = 0; c < ls_files_indexed; c++)
+      {
+        kfree(ls_files[c].name);
+      }
+  
+      kfree(ls_files); //frees the block that contained the file names to print
+
+      return;
+    }
+
     dirPath = (char*)kmalloc(dirCount + 1);
     filePath = (char*)kmalloc(fileCount + 1);
 
@@ -736,20 +756,12 @@ void program_ls(char *arguements)
     //*
     //*also, there must be a list path specified, if dirPathArg == nArgs,
     //* then there was no list path specified, so ignore this and use regular routine*/
-    //if(*filePath && gobbled_something == FALSE && dirPathArg != nArgs)
-    //{
-    //k_printf("filePath: %h\n", *filePath);
-    //k_printf("In \"%s%s\", \"%s\" does not exist\n", dirPath, filePath, filePath);
-    //}else{
-  
+
     //print the files that we added in the print file buffer
     ls_print_format();
-    //~ }
 
   }else if(work == 1)
-  {
     k_printf("In \"%s\", \"%s\" is not a directory\n", arguements, arguements);
-  }
 
   //free char **args that holds our individual arguments
   u32int c;
@@ -847,17 +859,13 @@ int program_cd(char *arguements)
       {
         k_printf("In \"%s\", \"%s\" is not a directory\n", arguements, cd);
       }
-      //~ }else{
-      //~ k_printf("In \"%s\", \"%s\" is not a directory\n", arguements, arguements);
-
-      //~ }
       kfree(cd);
 
       /*if we have an initial (starting point) dir, set the current dir
        * to that dir as it was before the user typed an incorrect path name */
       setCurrentDir(&root_nodes[initDir]);
 
-      break;
+      //~ break;
 
       //failure!
       return 1;
@@ -1252,12 +1260,9 @@ void program_cat(char *arguments)
      * number of blocks this file will take up at a given length */
     for(a = 0; a < ((u32int)(file->length / BLOCK_SIZE) + 1); a++)
     {
-      //~ u32int sz = read_fs(file, 0, file->length, buf); //assign the content of file to char *buf
       u32int sz = read_fs(file, a * BLOCK_SIZE, kmalloc_size, buf); //assign the content of file to char *buf
       for (j = 0; j < sz; j++)
-      {
         k_putChar(buf[j]);
-      }
 
       //if there is a block after this one (we are not at the last block)
       if(a != (u32int)(file->length / BLOCK_SIZE))
@@ -1282,11 +1287,9 @@ void program_cat(char *arguments)
     }
 
   }else if(file->flags == FS_DIRECTORY)
-  {
     k_printf("%s: Is a directory\n", arguments);
-  }else{
+  else
     k_printf("%s: No such file\n", arguments);
-  }
 
   setCurrentDir(&root_nodes[initDir]);
 
@@ -1530,6 +1533,7 @@ void program_help(char *arguements)
   k_printf("\n\tcd - changes directories [cd /test]");
   k_printf("\n\tcp - copies a file to a destination [cp test.txt /test/dir]");
   k_printf("\n\techo - prints text [echo hello]");
+  k_printf("\n\tjpg - encrypt files using varios meathods [jpg -c file]");
   k_printf("\n\thelp - prints the command list [help]");
   k_printf("\n\tls - lists the contents in the current directory [ls]");
   k_printf("\n\tmkdir - creates a directory [mkdir /test]");
@@ -1584,34 +1588,411 @@ void program_JS_viewer(char *arguements)
   arrayOfImages[0].color = 4;
   arrayOfImages[0].priority = 0;
 
-  //~ VGA_init(320, 200, 256); //initialize the gui
   VGA_init(1024, 768, 24); //initialize the gui
 
   int x, y = 0;
 
-  //~ for(x = 0; x < 300; x++)
-  //~ {
-  //~ for(y = 0; y < 300; y++)
-  //~ {
-
   putRect(0, 0, 400, 400, 0xbf2bc4);
 
   mSleep(10);
-  //~ y++;
-  //~ }
-  //~ }
-
-  //~ VGA_init(640, 480, 16); //initialize the gui
-
-  //~ VGA_clear_screen();
-
-  //~ putPixel(100, 100, 0xc812e7);
-  //~ putRect(100, 100, 100, 75, 0xc812e7);
-  //~ putRect(arrayOfImages[0].x, arrayOfImages[0].y, arrayOfImages[0].width, arrayOfImages[0].height, arrayOfImages[0].color);
 
 }
 
+////John's Privacy Guard
 
+enum jpg_algorithm
+{
+  none,                 /*for error checking*/
+  bitwise,              /* -B */
+  ceaser_shift,	        /* -C */
+  DES_algorithm,        /* -D */
+  vigenere              /* -V */
+};
+
+static enum jpg_algorithm jpg_algorithm;
+
+enum jpg_en_de
+{
+  encrypt = 1,
+  decrypt
+};
+
+static enum jpg_en_de jpg_en_de;
+
+static u32int jpg_decode_flags(u32int nArgs, char **args)
+{
+  ///* PROCESS THE ARGUMENT FLAGS *///
+
+  s32int flagRep = 0, i;
+  while((i = getopt(flagRep, nArgs, args, "BCDVde")) != -1)
+  {
+    switch(i)
+    {
+    case 0:
+      //do nothing
+      break;
+    case 'd': //flag 'd' decrypt file
+      jpg_en_de = decrypt;
+      break;
+    case 'e': //flag 'e' encrypt file
+      jpg_en_de = encrypt;
+      break;
+    case 'B': //flag 'B' Bitwise encryption
+      jpg_algorithm = bitwise;
+      break;
+    case 'C': //flag 'C' Ceaser shift
+      jpg_algorithm = ceaser_shift;
+      break;
+    case 'D': //flag 'D' DES encryption
+      jpg_algorithm = DES_algorithm;
+      break;
+    case 'V': //flag 'V' vigenere
+      jpg_algorithm = vigenere;
+      break;
+    default: //something went wrong, the default should not run
+      //error!, continue
+      break;
+    }
+
+    flagRep++;
+  }
+  ///* PROCESS THE ARGUMENT FLAGS *///
+
+  //if we exited with an error because of an undefined arg
+  if(i == -1 && flagRep < nArgs)
+    return flagRep + 1; //so we do not return a 0 (no error) when there really is an error
+
+  //success!
+  return 0;
+}
+
+u32int jpg_encrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode)
+{
+  char *passphrase1, *passphrase2;
+
+  //ask for passphrase
+  k_printf("Passphrase:");
+  if(k_scanf(k_scanf_text, (u8int**)&passphrase1))
+  {
+    //exit gracefully
+    k_printf("\njpg: k_scanf error");
+      
+    //passphrase1 was never kmalloced, so we will not free it
+
+    //error
+    return 0;
+
+  }
+
+  k_printf("Repeat passphrase:");
+  if(k_scanf(k_scanf_text, (u8int**)&passphrase2))
+  {
+    //exit gracefully
+    k_printf("\njpg: k_scanf error");
+
+    kfree(passphrase1);
+    //passphrase2 was never kmalloced, so we will not free it
+
+    //error
+    return;
+  }
+
+  //check if the passphrases are the same
+  if(strcmp(passphrase1, passphrase2))
+  {
+    //the passphrases are different
+    k_printf("Passphrases did not match");
+
+    kfree(passphrase1);
+    kfree(passphrase2);
+
+    //error
+    return;
+  }
+
+  u8int *out = 0;
+  FILE *orig;
+  orig = open_fs(file->name, &root_nodes[currentDir_inode]);
+
+  u32int meta_data_size = 0, file_length = file->length;
+  //do the encryption itself
+  switch(jpg_algorithm)
+  {
+  case bitwise:
+    out = en_bitwise_xor(orig, file->length, passphrase1);
+    break;
+  case ceaser_shift:
+    out = en_ceaser_shift(orig, file->length, *(u32int*)passphrase1);
+    break;
+  case DES_algorithm:
+    out = en_DES_cipher(orig, file->length, passphrase1);
+
+    //this for of DES encryption may change the file size and haze some metadata, account for them
+    meta_data_size = sizeof(des_header_t);
+    file_length = file->length + (8 - file->length % 8) + meta_data_size;
+    break;
+  case vigenere:
+    out = en_vigenere_cipher(orig, file->length, passphrase1);
+    break;
+  }
+
+  //if there was no error in the encryption
+  if(out)
+  {
+    //create the new file name with the .jspg ending
+    u8int extension = strlen(".jspg"), name_len = strlen(file->name);
+    char *new_name;
+    new_name = (char*)kmalloc(name_len + extension + 1); //+1 for the \000
+    memcpy(new_name, file->name, name_len);
+    memcpy(new_name + name_len, ".jspg", extension);
+    *(new_name + name_len + extension) = 0;
+
+    /*write the encrypted data to the file, adding meta_data_size
+     * will account for the extra data added to the file, thus increasing its
+     * size, by certain encryption algorithms*/
+    fs_node_t *encrypt_file;
+    encrypt_file = createFile(&root_nodes[currentDir_inode], new_name, file_length);
+    write_fs(encrypt_file, 0, file_length, out);
+
+    //free the stuff
+    kfree(new_name);
+    kfree(out);
+  }else
+    k_printf("\njpg: error in encryption\n");
+
+  close_fs(orig);
+  kfree(passphrase1);
+  kfree(passphrase2);
+
+}
+
+u32int jpg_decrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode)
+{
+  char *passphrase1;
+
+  //ask for passphrase
+  k_printf("Passphrase:");
+  if(k_scanf(k_scanf_text, (u8int**)&passphrase1))
+  {
+    //exit gracefully
+    k_printf("\njpg: k_scanf error");
+      
+    //passphrase1 was never kmalloced, so we will not free it
+
+    //error
+    return 0;
+
+  }
+
+  u8int *out = 0;
+  FILE *orig;
+  orig = open_fs(file->name, &root_nodes[currentDir_inode]);
+
+  u32int meta_data_size = 0;
+  //do the encryption itself
+  switch(jpg_algorithm)
+  {
+  case bitwise:
+    out = de_bitwise_xor(orig, passphrase1);
+    break;
+  case ceaser_shift:
+    out = de_ceaser_shift(orig, *(u32int*)passphrase1);
+    break;
+  case DES_algorithm:
+    out = de_DES_cipher(orig, passphrase1);
+    meta_data_size = sizeof(des_header_t);
+    break;
+  case vigenere:
+    out = de_vigenere_cipher(orig, passphrase1);
+    break;
+  }
+
+  //if there was no error in the encryption
+  if(out)
+  {
+    //create the new file name with the .jspg ending
+    u8int extension = strlen(".jspg"), name_len = strlen(file->name);
+    char *new_name;
+    new_name = (char*)kmalloc(name_len - extension + 1); //+1 for \000
+    memcpy(new_name, file->name, name_len - extension);
+    *(new_name + name_len - extension) = 0;
+
+    /*write the encrypted data to the file,  the subtaction of
+     * meta_data_size is because some algorithms have a metadata, but the final
+     * encrypted data should not account for it, because it is trimmed of during decryption*/
+    fs_node_t *decrypt_file;
+    decrypt_file = createFile(&root_nodes[currentDir_inode], new_name, file->length - meta_data_size);
+    write_fs(decrypt_file, 0, file->length - meta_data_size, out);
+
+    //free the stuff
+    kfree(new_name);
+    kfree(out);
+  }else
+    k_printf("\njpg: error in encryption\n");
+
+  close_fs(orig);
+  kfree(passphrase1);
+
+}
+
+void program_jpg(char *arguements)
+{
+  //get the current dir Inode before we cd into a different directory
+  u32int currentIno = currentDir_inode;
+
+  //gets the number of args in the char *arguements
+  u32int nArgs = countArgs(arguements);
+
+  //assigns values from the char *arguements to char *arguements[nArgs]
+  char *args[nArgs];
+  getArgs(arguements, args);
+
+  //set the default flags
+  jpg_algorithm = none;
+  jpg_en_de = none;
+
+  u32int i = jpg_decode_flags(nArgs, args);
+  if(i || jpg_algorithm == none || jpg_en_de == none)
+  {
+    if(jpg_en_de == none)
+      k_printf("jpg: not specified whether to encrypt or decrypt [-d/-e]");
+    else if(jpg_algorithm == none) //if there is no encrpytion flag, error
+      k_printf("jpg: no encrpytion flag");
+    else
+      /*-1 since the decode flags adds a +1 so that ecen if it is the 0th arg, it 
+       * can be distinguised as an error*/
+      k_printf("jpg: unknown argument %s", args[i - 1]);
+
+    //free char **args that holds our individual arguments
+    u32int c;
+    for(c = 0; c < nArgs; c++)
+      kfree(args[c]);
+
+    //error!
+    return;
+  }
+
+  /*gets the arg number in char *args[nArgs] that points to the path of the file to
+   * encrypt. */
+  u32int filePathArg;
+  for(filePathArg = 0; filePathArg < nArgs; filePathArg++)
+  {
+    /*if the first char in the arg is not a slash (not a flag but the dirPath itself)
+     * or, if the first arg is a slash and there is nothing after it, meaning it could be a directory name */
+    if(*(args[filePathArg]) != '-' || *(args[filePathArg] + 1) == ' ' || *(args[filePathArg] + 1) == 0)
+    {
+      break;
+    }
+  }
+  
+  u32int work;
+  char *dirPath = 0, *filePath = 0;
+  //there was no file, exit with an error
+  if(filePathArg == nArgs)
+  {
+    //there error message
+    k_printf("jpg: there was no input file to encrypt");
+
+    //free char **args that holds our individual arguments
+    u32int c;
+    for(c = 0; c < nArgs; c++)
+      kfree(args[c]);
+
+    //error!
+    return;
+  }else{
+    u32int dirCount = 0, fileCount = 0;
+
+    //Gets the dirPath and filePath name sizes in the args and cd's to that directory
+    dirFilePathCount(args[filePathArg], &dirCount, &fileCount);
+
+    //if there was an error in dirFilePathCount
+    if(!dirCount && !fileCount)
+    {
+
+      //free char **args that holds our individual arguments
+      u32int c;
+      for(c = 0; c < nArgs; c++)
+        kfree(args[c]);
+      
+      return;
+    }
+
+    dirPath = (char*)kmalloc(dirCount + 1);
+    filePath = (char*)kmalloc(fileCount + 1);
+
+    /*put zeros as first character since if there is no filePath in the arg,
+     * then cdFormatArgs will do nothing to, if it contains random junk, the
+     * function will think there is a filePath, where there really is not*/
+    *(dirPath) = 0;
+    *(filePath) = 0;
+
+    //Gets the dirPath and filePath in the args and cd's to that directory
+    work = cdFormatArgs(args[filePathArg], dirPath, filePath);
+
+  }
+
+  //if everything worked
+  if(!work)
+  {
+    fs_node_t *file;
+    file = finddir_fs(&root_nodes[currentDir_inode], filePath);
+    
+    //if there is some error in finding file, exit
+    if(!file)
+    {
+      //if there is no filepath
+      if(!*(filePath))
+        k_printf("jpg: no file was inputed");
+      else
+        k_printf("jpg: file \"%s\" not found", filePath);
+
+      //free char **args that holds our individual arguments
+      u32int c;
+      for(c = 0; c < nArgs; c++)
+        kfree(args[c]);
+
+      setCurrentDir(&root_nodes[currentIno]);
+
+      kfree(dirPath);
+      kfree(filePath);
+
+      //exit prematurly
+      return;
+    }
+
+    char *passphrase1, *passphrase2;
+
+    //for if the k_scanf should scan for a string or an integer
+    char *k_scanf_text;
+    k_scanf_text = (char*)kmalloc(4);
+
+    if(jpg_algorithm == ceaser_shift)
+      //4 chars because after the 'd' is a "hidden", \000
+      memcpy(k_scanf_text, "h%d", 4);
+    else
+      memcpy(k_scanf_text, "h%s", 4);
+
+    if(jpg_en_de == encrypt)
+      jpg_encrypt(k_scanf_text, file, currentDir_inode);
+    else
+      jpg_decrypt(k_scanf_text, file, currentDir_inode);
+
+  }else
+    k_printf("In \"%s\", \"%s\" is not a directory\n", args[filePathArg], dirPath);
+
+  //free char **args that holds our individual arguments
+  u32int c;
+  for(c = 0; c < nArgs; c++)
+    kfree(args[c]);
+
+  kfree(dirPath);
+  kfree(filePath);
+
+  setCurrentDir(&root_nodes[currentIno]);
+  
+  return;
+}
 
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -1861,7 +2242,6 @@ void movePongBall(u32int reset)
 void flagUpDown(int movement)
 {
   upDown = upDown + movement;
-  //~ k_printf("\nKEY\n");
 
   moveLeftPong();
 

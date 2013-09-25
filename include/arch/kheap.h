@@ -128,4 +128,10 @@ void kfree(void *p);
 **/
 u32int size_of_alloc(void *alloc);
 
+/*For reallocation of kmallocs, regular, a, p, ap*/
+u32int krealloc(u32int *ptr, u32int old_sz, u32int new_sz);
+u32int krealloc_a(u32int *ptr, u32int old_sz, u32int new_sz);
+u32int krealloc_ap(u32int *ptr, u32int old_sz, u32int new_sz, u32int *phys);
+u32int krealloc_p(u32int *ptr, u32int old_sz, u32int new_sz, u32int *phys);
+
 #endif // KHEAP_H

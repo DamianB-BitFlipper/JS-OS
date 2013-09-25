@@ -54,14 +54,10 @@ u32int initrd_read(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
 
   //error checks
   if(offset > node->length)
-  {
     return 0;
-  }
 
   if(offset + size > node->length)
-  {
     size = node->length - offset;
-  }
 
   u32int i, size_to_copy, block_size_at_index;
   u32int block;
@@ -96,11 +92,10 @@ u32int initrd_read(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
      * that it (u32int block) is node->blocks[i], although
      * they are found at different memory locations, same concept with hard links */
     if(offset != 0 && i == startingBlock)
-    {
       memcpy(buffer + (i - startingBlock) * BLOCK_SIZE, (u8int*)(*(u32int*)block + offset % BLOCK_SIZE), size_to_copy);
-    }else{
+    else
       memcpy(buffer + (i - startingBlock) * BLOCK_SIZE, (u8int*)(*(u32int*)block), size_to_copy);
-    }
+
   }
 
   return size;
@@ -408,6 +403,5 @@ fs_node_t *initialise_initrd(u32int location)
 
   kfree((void*)tempLoc);
 
-  //~ return initrd_root;
   return initrd_dev;
 }

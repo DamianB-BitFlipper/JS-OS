@@ -28,6 +28,8 @@ extern s32int cursor_x;
 volatile s32int shift_flag = 0;
 volatile s32int caps_flag = 0;
 
+void *(*key_handle)(char);
+
 static void keyboard_callback(registers_t regs)
 {
   k_printf("\nKeypress");
@@ -192,9 +194,9 @@ void keyboardInput_handler()
     if(!speciaKeyNumber) //not a special Key
     {
       if(!shift_flag) //shift is off
-        k_putChar(lowerCaseKbdus[scancode]);
+        key_handle(lowerCaseKbdus[scancode]);
       else if(shift_flag) //shift is on
-        k_putChar(upperCaseKbdus[scancode]);
+        key_handle(upperCaseKbdus[scancode]);
 
     }else if(speciaKeyNumber == 1) //left arrow
       arrowKeyFunction("call", "left", &shiftCursor);
@@ -211,11 +213,11 @@ void keyboardInput_handler()
 void init_keyboard()
 {
 
+  key_handle = (void*)k_putChar;
+
   register_interrupt_handler(IRQ1, &keyboardInput_handler);
 
   arrowKeyFunction("write", "left", &shiftCursor); //initialized left and right arrows to shiftCursor()
   arrowKeyFunction("write", "up", &printInputBuffer); //initialized up and down arrows to shiftCursor()
-  //~ arrowKeyFunction("write", "left", &notmalCursor); //initialized left and right arrows to shiftCursor()
-  //~ arrowKeyFunction("write", "up", &normalVCursor); //initialized up and down arrows to shiftCursor()
 
 }

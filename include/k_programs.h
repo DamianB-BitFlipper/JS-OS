@@ -79,5 +79,7 @@ void program_about(char *arguements); //18 index --print information about the p
 /*a count down timer that displays numbers and counts down every second, ie: 3, 2, 1,*/
 u32int count_down(u32int seconds);
 
+void program_jpg(char *arguements); //19 index --John's Privacy Guard for encryption
+
 #endif //PROGRAMS_H
 

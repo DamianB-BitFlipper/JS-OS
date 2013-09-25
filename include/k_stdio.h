@@ -128,4 +128,7 @@ void k_warning(char *warning, char *added_text, u32int row);
 /*prints the same text, used for verbose functions to keep the trail of '.' growing after the ...*/
 void working();
 
+/*scans input text*/
+u32int k_scanf(char *type, u8int **ptr);
+
 #endif // K_STDIO

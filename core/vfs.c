@@ -58,12 +58,12 @@ u32int write_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
 FILE *open_fs(char *filename, fs_node_t *dir)
 {
   // Has the node got an open callback?
-  if((dir->flags & 0x7) == FS_DIRECTORY && dir->finddir != 0)
+  if((dir->flags & 0x7) == FS_DIRECTORY && dir->finddir)
   {
     fs_node_t *file;
     file = finddir_fs(dir, filename);
 
-    if(file->read)
+    if(file && file->read)
     {
       FILE *buffer;
       buffer = (FILE*)kmalloc(file->length);
