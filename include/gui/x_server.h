@@ -24,6 +24,8 @@
 #ifndef XSERVER
 #define XSERVER
 
+#include <system.h>
+
 #define MAX_PRIORITY     255
 
 /*function that initializes the X server*/

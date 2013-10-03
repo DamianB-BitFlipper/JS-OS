@@ -30,9 +30,11 @@ fs_node_t *initrd_dev;              // We also add a directory node for /dev, so
 fs_node_t *root_nodes;              // List of file nodes.
 int nroot_nodes;                    // Number of file nodes.
 
-//~ fs_node_t *directory_nodes;         // List of file nodes.
 u32int fs_location;
 u32int currentDir_inode; //the inode of the current directory
+
+//initial file descriptor location
+file_desc_t *initial_fdesc;
 
 char *path; //a character array containing the path from root to the current directory
 
@@ -344,15 +346,12 @@ fs_node_t *initialise_initrd(u32int location)
             nBlocks < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY + BLOCKS_TRIPLY)
     {
       //allocate the singly typedef
-      //~ root_nodes[i].singly = (fs_singly_t*)kmalloc_a(sizeof(fs_singly_t));
       root_nodes[i].singly = (fs_singly_t*)kmalloc(sizeof(fs_singly_t));
 
       //allocate the doubly typedef
-      //~ root_nodes[i].doubly = (fs_doubly_t*)kmalloc_a(sizeof(fs_doubly_t));
       root_nodes[i].doubly = (fs_doubly_t*)kmalloc(sizeof(fs_doubly_t));
 
       //allocate the triply typedef
-      //~ root_nodes[i].triply = (fs_triply_t*)kmalloc_a(sizeof(fs_triply_t));
       root_nodes[i].triply = (fs_triply_t*)kmalloc(sizeof(fs_triply_t));
     }
 
@@ -395,11 +394,33 @@ fs_node_t *initialise_initrd(u32int location)
 
   setCurrentDir(initrd_dev);
 
+  //create the /dev directory for the virtual files
+  fs_node_t *dev = createDirectory(initrd_dev, "dev");
+
+  //create and open the stdin, stdout, and stderr files and file descriptors
+  fs_node_t *stdin = createFile(dev, "stdin", 1024);
+  fs_node_t *stdout = createFile(dev, "stdout", 1024);
+  fs_node_t *stderr = createFile(dev, "stderr", 1024);
+
+  //set the initial file descriptor
+  initial_fdesc = (file_desc_t*)kmalloc(sizeof(file_desc_t));
+
+  //set the mask for "rw", read and write
+  initial_fdesc->permisions = FDESC_READ | FDESC_WRITE;
+  initial_fdesc->node = stdin;
+  initial_fdesc->next = 0;
+
+  //open the std files, stdin has alreadt been open when setting the initial file_desc
+  if(!open_fs("stdout", dev, "rw") || !open_fs("stderr", dev, "rw"))
+  {
+    //some sort of error
+    kfree((void*)tempLoc);
+    return 0;
+  }
+
   //assigns all of the files that were in the file_headers to this dev directory
   for(i = 0; i < initrd_header->nfiles; i++)
-  {
     addFileToDir(initrd_dev, &root_nodes[i]);
-  }
 
   kfree((void*)tempLoc);
 

@@ -388,6 +388,176 @@ void k_printf(char *c, ...)
       
         tmp = hexArg & 0xF;
         if (tmp >= 0xA)
+          k_putChar(tmp - 0xA + 'a');
+        else
+          k_putChar(tmp+'0');
+
+        i = i + 2;
+      }
+    }
+
+    if(i < stringLength + 1 && c[i] != '%')
+    {
+      if(c[i] == 0) //if i is at the terminating 0 '\000' of a string, break from loop
+        break;
+      else{
+        k_putChar(c[i]);
+        i++;
+      }
+    }
+  }
+
+  va_end(arguments);
+}
+
+// Outputs a null-terminated ASCII string stderr (standard error) to the monitor.
+void k_fprintf(char *c, ...)
+{
+
+  va_list arguments;
+
+  int i = 0, numberOfArgs = 0, stringLength = k_strlen(c);
+  int integerArg;
+
+  while(c[i]) //checks number of arguments that should be in file
+  {
+    if(c[i] == '%')
+    {
+      numberOfArgs++;
+    }
+    i++;
+  }
+
+  i = 0; //set i to zero for next while loop
+
+  //get the args after char *c
+  va_start(arguments, *c);
+
+  while (c[i])
+  {
+
+    if(c[i] == '%')
+    {
+      if(c[i+1] == 'd')
+      {
+        integerArg = va_arg(arguments, int);
+
+        int numberLength = math_intLength(integerArg);
+        int x;
+
+        char integer[numberLength];
+        //~ char *stringCharacter;
+        //~ k_printf("\n%d\n", numberLength);
+
+        //~ char integer[10];
+
+        k_intToChar(integerArg, integer); //sets integer as char
+
+        k_numbersToAsciInChar(integer, numberLength); //sets char to ASCII for printing
+
+        for(x = 0; x < numberLength; x++)
+        {
+          //~ *stringCharacter = integer[x];
+
+          k_putChar(integer[x]);
+
+          //~ k_printf("5");
+          //~ integer++;
+        }
+
+        i = i + 2;
+      }else if(c[i+1] == 's') //user wants to print a string
+      {
+        char *charArrayArg;
+        charArrayArg = va_arg(arguments, char*);
+
+        k_printf(charArrayArg);
+        i = i + 2;
+
+      }else if(c[i+1] == 'c') //user wants to print colored text
+      {
+        if(c[i+2] == 'w') //white text
+        {
+          foreColour = WHITE;
+        }else if(c[i+2] == 'b' && c[i+3] == 'k') //black text
+        {
+          foreColour = BLACK;
+          i++;
+        }else if(c[i+2] == 'b' && c[i+3] == 'l') //dark blue text
+        {
+          foreColour = DARK_BLUE;
+          i++;
+        }else if(c[i+2] == 'b' && c[i+3] == 'r') //brown text
+        {
+          foreColour = BROWN;
+          i++;
+        }else if(c[i+2] == 'g') //dark green text
+        {
+          foreColour = DARK_GREEN;
+        }else if(c[i+2] == 'r') //dark red text
+        {
+          foreColour = DARK_RED;
+        }else if(c[i+2] == 'l' && c[i+3] == 'b' && c[i+4] == 'l') //light blue text
+        {
+          foreColour = LIGHT_BLUE;
+          i += 2;
+        }
+
+        i = i + 3;
+
+      }else if(c[i+1] == 'C') //user wants to print colored background
+      {
+        if(c[i+2] == 'w') //white background
+          backColour = WHITE;
+        else if(c[i+2] == 'b' && c[i+3] == 'k') //black background
+        {
+          backColour = BLACK;
+          i++;
+        }else if(c[i+2] == 'b' && c[i+3] == 'l') //dark blue background
+        {
+          backColour = DARK_BLUE;
+          i++;
+        }else if(c[i+2] == 'b' && c[i+3] == 'r') //brown background
+        {
+          backColour = BROWN;
+          i++;
+        }else if(c[i+2] == 'g') //dark green background
+          backColour = DARK_GREEN;
+        else if(c[i+2] == 'r') //dark red background
+          backColour = DARK_RED;
+
+        i = i + 3;
+
+      }else if(c[i+1] == 'h') //user wants to print a hex number
+      {
+
+        u32int hexArg = va_arg(arguments, u32int);
+
+        s32int tmp;
+
+        k_printf("0x");
+
+        char noZeroes = 1;
+
+        int hexCount;
+        for (hexCount = 28; hexCount > 0; hexCount -= 4)
+        {
+          tmp = (hexArg >> hexCount) & 0xF;
+          if(!tmp && noZeroes)
+            continue;
+      
+          if (tmp >= 0xA)
+          {
+            noZeroes = 0;
+            k_putChar(tmp-0xA+'a');
+          }else{
+            noZeroes = 0;
+            k_putChar(tmp+'0');
+          }
+        }
+      
+        tmp = hexArg & 0xF;
+        if (tmp >= 0xA)
           k_putChar(tmp-0xA+'a');
         else
           k_putChar(tmp+'0');
@@ -410,6 +580,7 @@ void k_printf(char *c, ...)
   va_end(arguments);
 }
 
+//k_scan_f, can read keyboard input
 enum __k_scanf_type__
 {
   __k_scanf_done__,

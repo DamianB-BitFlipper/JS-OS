@@ -103,6 +103,21 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
 
   // Initialise the initial ramdisk, and set it as the filesystem root.
   fs_root = initialise_initrd(initrd_location);
+
+  //if there is some error in the vfs, it will be fatal!
+  if(!fs_root)
+  {
+    k_printf("Error: VFS not initialized properly, fatal error");
+
+    //stop any interupts
+    asm volatile("cli");
+
+    //freeze the OS
+    for(;;);
+
+    return 1; //error!, and also very bad :(
+  }
+
   k_printf("Initialized the VFS file system!\n");
 
   ///Create a few test files and directories
@@ -111,9 +126,22 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
 
   fs_node_t *testDir2 = createDirectory(testDir, "awesome");
 
-  write_fs(testFile, 0, 9, "\t\"test_file\" read successfully, VFS is working\n");
-  program_cat("./direct/test_file");
+  //open the file for writing
+  FILE *f_testFile = open_fs("test_file", testDir, "w");
 
+  //test if the created file has been opened properly
+  if(f_testFile)
+  {
+    write_fs(testFile, 0, 9, "\t\"test_file\" read successfully, VFS is working\n");
+
+    //after writing, close the file
+    close_fs(f_testFile);
+
+    program_cat("./direct/test_file");
+  }else
+    k_printf("Error: test_file cannot be opened properly");
+
+  //initialize the ext2 driver on the floppy disk
   if(ext2_initialize(FLOPPY_SIZE - EXT2_SBLOCK_OFF))
     k_printf("%crFailed to Initialize the EXT2 file system%cw\n");
   else
@@ -122,6 +150,7 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   datetime_t n = getDatetime();
   k_printf("The CMOS time is:\n\t%d:%d:%d %d/%d/%d\n",n.hour, n.min, n.sec, n.month, n.day, n.year);
 
+  //greet the user
   greeting_message();
   
   addShellIndent();

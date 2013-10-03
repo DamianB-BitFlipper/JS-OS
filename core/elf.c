@@ -170,35 +170,56 @@ u32int load_elf(u32int inode, u32int size)
   k_printf("[load_elf] Called for inode %d - %d bytes of data allocated\n", inode, size);
 
   char *elf_name = root_nodes[inode].name;
+  fs_node_t *modulenode;
   
   //tests if this module exist in the root
-  if(finddir_fs(fs_root, elf_name) == 0)
-  {
+  if(!(modulenode = finddir_fs(fs_root, elf_name)))
     return 1;
-  }else{ //the module exists
+  else{ //the module exists
     k_printf("[load_elf] Directory entry read correctly\n");
     k_printf("[load_elf] Looking for \"%s\"\n", elf_name);
 
     //get the node information from the dirent
-    fs_node_t *modulenode = finddir_fs(fs_root, elf_name);
+    //~ fs_node_t *modulenode = finddir_fs(fs_root, elf_name);
     
     k_printf("[load_elf] Reading file\n");
 
     //create the actuall module buffer 
     char *modulebuffer = (char*)kmalloc(size);
+    
+    //open the file
+    FILE *modulenode_file;
+    modulenode_file = open_fs(modulenode->name, fs_root, "r");
+
+    //if there was an opening error
+    if(!modulenode_file)
+    {
+      kfree(modulebuffer);
+      return 1; //error
+    }
+
     u32int modulesize = read_fs(modulenode, 0, size, modulebuffer);
     
     k_printf("[load_elf] Allocating space\n");
 
     //create a pointer and copy the above saved buffer that address
     u32int moduleptr = kmalloc(modulesize);
-    memcpy((void*)moduleptr,(void*) modulebuffer, modulesize);
+    memcpy((void*)moduleptr, (void*)modulebuffer, modulesize);
     
     k_printf("[load_elf] Data moved into allocated space: %h\n", moduleptr);
     
     if(openModule_elf(elf_name, moduleptr))
       k_printf("[load_elf] openModule_elf returned with an error\n");
+
+    //close the opened module file
+    close_fs(modulenode_file);
+    
+    //free stuff
+    kfree(modulebuffer);
+    kfree((u32int*)moduleptr);
   }
+
+  //sucess!
   return 0;
 }
 

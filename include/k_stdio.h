@@ -48,7 +48,9 @@
 
 extern u16int *video_memory;
 
-/*String Manipulation*/
+/* enum k_fprintf_types = {
+ *   
+ * }; */
 
 /*Write a single character out to the screen.*/
 void k_putChar(char c);

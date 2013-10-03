@@ -37,25 +37,99 @@ extern u32int greatestFS_location;
 extern char *path;
 /*In initrd.c*/
 
+file_desc_t *look_up_fdesc(fs_node_t *node)
+{
+  file_desc_t *tmp_desc;
+  tmp_desc = initial_fdesc;
+
+  //find our file descriptor
+  for(; tmp_desc->node != node && tmp_desc; tmp_desc = tmp_desc->next);
+
+  //a simple error check if the tmp_desc exists
+  if(!tmp_desc)
+    return 0;
+
+  return tmp_desc;
+}
+
 u32int read_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
 {
   // Has the node got a read callback?
   if(node->read)
-    return node->read(node, offset, size, buffer);
-  else
-    return 0;
+  {
+
+    file_desc_t *fdesc;
+    fdesc = look_up_fdesc(node);
+
+    //we did not find the file desc in the list
+    if(!fdesc)
+    {
+      k_printf("Error: file not in file descriptor list\n");
+      return 1;
+    }
+
+    //if the user can read from it
+    if(fdesc->permisions & FDESC_READ)
+      return node->read(node, offset, size, buffer);
+    else
+      k_printf("Error: reading from an unprivilaged file\n");
+  }
+  
+  //if we have not exited yet, it is an error
+  return 1;
 }
 
 u32int write_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
 {
   // Has the node got a write callback?
   if(node->write)
-    return node->write(node, offset, size, buffer);
-  else
-    return 0;
+  {
+    file_desc_t *fdesc;
+    fdesc = look_up_fdesc(node);
+
+    //we did not find the file desc in the list
+    if(!fdesc)
+    {
+      k_printf("Error: file not in file descriptor list\n");
+      return 1;
+    }
+
+    //if the user can read from it
+    if(fdesc->permisions & FDESC_WRITE)
+      return node->write(node, offset, size, buffer);
+    else
+      k_printf("Error: writing to an unprivilaged file\n");
+  }
+
+  //if we have not exited yet, it is an error
+  return 1;
 }
 
-FILE *open_fs(char *filename, fs_node_t *dir)
+static u8int __open_fs_mask_to_u32int__(char *mask)
+{
+  u8int flags = 0;
+  u32int i;
+  for(i = 0; i < strlen(mask); i++)
+  {
+    //assign the values of the flags
+    switch(*(mask + i))
+    {
+      case 'r':
+        flags |= FDESC_READ;
+        break;
+      case 'w':
+        flags |= FDESC_WRITE;
+        break;
+      case 'a':
+        flags |= FDESC_APPEND;
+        break;
+    }
+  }
+
+  return flags;
+}
+
+FILE *open_fs(char *filename, fs_node_t *dir, char *mask)
 {
   // Has the node got an open callback?
   if((dir->flags & 0x7) == FS_DIRECTORY && dir->finddir)
@@ -65,27 +139,58 @@ FILE *open_fs(char *filename, fs_node_t *dir)
 
     if(file && file->read)
     {
-      FILE *buffer;
-      buffer = (FILE*)kmalloc(file->length);
+      file_desc_t *tmp_desc, *new_desc;
+      tmp_desc = initial_fdesc;
 
-      read_fs(file, 0, file->length, buffer);
+      //a simple error check if the tmp_desc exists
+      if(!tmp_desc)
+        return 0;
 
-      return buffer;
+      /*go to the end of out file descriptor list
+       * while iterating, check if this file_desc already exists,
+       * if true, return an error*/
+      for(; tmp_desc->next; tmp_desc = tmp_desc->next)
+        //if we already have this file node in the list
+        if(tmp_desc->node == file)
+          return 0; //return an error
+
+      new_desc = (file_desc_t*)kmalloc(sizeof(file_desc_t));
+      
+      //make the new list entry and add it to the end of the list
+      new_desc->permisions = __open_fs_mask_to_u32int__(mask);
+      new_desc->node = file;
+      new_desc->next = 0;
+      tmp_desc->next = new_desc;
+
+      return new_desc;
     }else
       return 0;
   }else
     return 0;
 }
 
-u32int *close_fs(FILE *file)
+u32int close_fs(FILE *file)
 {
   if(file)
   {
+    file_desc_t *tmp_desc;
+    tmp_desc = initial_fdesc;
+
+    //find our file descriptor
+    for(; tmp_desc->next != file && tmp_desc; tmp_desc = tmp_desc->next);
+
+    //a simple error check if the tmp_desc exists
+    if(!tmp_desc)
+      return 1;
+      
+    //remove the file descriptor entry
+    tmp_desc->next = tmp_desc->next->next;
+
     kfree((void*)file);
     return 0;
   }
   else
-    return (u32int*)1;
+    return 1;
 }
 
 struct dirent *readdir_fs(fs_node_t *node, u32int index)

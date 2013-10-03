@@ -36,7 +36,7 @@ extern u32int currentDir_inode; //the inode of the current directory
 typedef struct
 {
   u32int nfiles; // The number of files in the ramdisk.
-}initrd_header_t;
+} initrd_header_t;
 
 typedef struct
 {
@@ -44,7 +44,10 @@ typedef struct
   s8int name[128];  // Filename.
   u32int offset;    // Offset in the initrd that the file starts.
   u32int length;    // Length of the file.
-}initrd_file_header_t;
+} initrd_file_header_t;
+
+//set the initial file desctripter to be globally gloabal :)
+extern file_desc_t *initial_fdesc;
 
 /*Initialises the initial ramdisk. It gets passed the address of the multiboot module,
  * and returns a completed filesystem node */

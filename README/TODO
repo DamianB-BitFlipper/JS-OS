@@ -1,9 +1,10 @@
-Items that need to be completed include:
+Items that need to be completed or fixed include:
 
-Fix k_programs to make the programs decent in error correction and more stable upon errors
+Add a stdout, stderror, 
+Fix k_programs, fdc driver, ext2 fs to make the programs decent in error correction and more stable upon errors
 
 ELF execution
-fopen and fclose for the vfs
+Proper fopen and fclose for the vfs
 file locks for the floppy ext2 file system
 
 Fix kheap problem

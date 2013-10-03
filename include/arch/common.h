@@ -33,9 +33,6 @@ typedef          short s16int;
 typedef unsigned char  u8int;
 typedef          char  s8int;
 
-//create the typedef for a FILE
-typedef          u8int FILE;
-
 void outb(u16int port, u8int value);
 u8int inb(u16int port);
 u16int inw(u16int port);

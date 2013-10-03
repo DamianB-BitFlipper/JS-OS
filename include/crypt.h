@@ -1,5 +1,5 @@
 /*
- * k_shell.h
+ * crypt.h
  * 
  * Copyright 2013 JS-OS <js@duck-squirell>
  * 
@@ -27,7 +27,8 @@
 #include <system.h>
 
 //the DES encryption's meta data
-typedef struct des_header {
+typedef struct des_header 
+{
   u32int size;
   u32int magic;
 } des_header_t;

@@ -1229,9 +1229,9 @@ void program_find(char *arguments)
 
 void program_cat(char *arguments)
 {
-  int initDir = currentDir_inode;
+  u32int initDir = currentDir_inode;
 
-  int dirCount, fileCount;
+  s32int dirCount, fileCount;
 
   dirFilePathCount(arguments, &dirCount, &fileCount);
 
@@ -1246,8 +1246,24 @@ void program_cat(char *arguments)
 
   file = finddir_fs(&root_nodes[currentDir_inode], filePath);
 
-  if(file != 0 && file->flags == FS_FILE) //if the file exists
+  if(file && file->flags == FS_FILE) //if the file exists
   {
+
+    //open the file
+    FILE *f_file = open_fs(file->name, &root_nodes[currentDir_inode], "r");
+
+    //error in opening of file, exit the if loop
+    if(!f_file)
+    {
+      k_printf("cat: cannot open file: %s", file->name);
+
+      setCurrentDir(&root_nodes[initDir]);
+
+      kfree(dirPath);
+      kfree(filePath);
+
+      return;      
+    }
 
     /*the purpose of the following section is to one address with a max
      * size of 1KB (to conserve space) to display any size file
@@ -1283,6 +1299,7 @@ void program_cat(char *arguments)
       }else{
         //free the buffer
         kfree(buf);
+        close_fs(f_file);
       }
     }
 
@@ -1296,6 +1313,7 @@ void program_cat(char *arguments)
   kfree(dirPath);
   kfree(filePath);
 
+  return;
 }
 
 void program_rm(char *arguments)
@@ -1680,7 +1698,7 @@ u32int jpg_encrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
     //passphrase1 was never kmalloced, so we will not free it
 
     //error
-    return 0;
+    return 1;
 
   }
 
@@ -1694,7 +1712,7 @@ u32int jpg_encrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
     //passphrase2 was never kmalloced, so we will not free it
 
     //error
-    return;
+    return 1;
   }
 
   //check if the passphrases are the same
@@ -1707,32 +1725,48 @@ u32int jpg_encrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
     kfree(passphrase2);
 
     //error
-    return;
+    return 1;
   }
 
-  u8int *out = 0;
+  u8int *out = 0, *in;
   FILE *orig;
-  orig = open_fs(file->name, &root_nodes[currentDir_inode]);
+  orig = open_fs(file->name, &root_nodes[currentDir_inode], "r");
+
+  //error opening file
+  if(!orig)
+  {
+    //print the error
+    k_printf("Error opening file: %s", file->name);
+
+    kfree(passphrase1);
+    kfree(passphrase2);
+
+    //error
+    return 1;
+  }
+
+  in = (u8int*)kmalloc(file->length);
+  read_fs(file, 0, file->length, in);
 
   u32int meta_data_size = 0, file_length = file->length;
   //do the encryption itself
   switch(jpg_algorithm)
   {
   case bitwise:
-    out = en_bitwise_xor(orig, file->length, passphrase1);
+    out = en_bitwise_xor(in, file->length, passphrase1);
     break;
   case ceaser_shift:
-    out = en_ceaser_shift(orig, file->length, *(u32int*)passphrase1);
+    out = en_ceaser_shift(in, file->length, *(u32int*)passphrase1);
     break;
   case DES_algorithm:
-    out = en_DES_cipher(orig, file->length, passphrase1);
+    out = en_DES_cipher(in, file->length, passphrase1);
 
     //this for of DES encryption may change the file size and haze some metadata, account for them
     meta_data_size = sizeof(des_header_t);
     file_length = file->length + (8 - file->length % 8) + meta_data_size;
     break;
   case vigenere:
-    out = en_vigenere_cipher(orig, file->length, passphrase1);
+    out = en_vigenere_cipher(in, file->length, passphrase1);
     break;
   }
 
@@ -1752,18 +1786,43 @@ u32int jpg_encrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
      * size, by certain encryption algorithms*/
     fs_node_t *encrypt_file;
     encrypt_file = createFile(&root_nodes[currentDir_inode], new_name, file_length);
+
+    //open the file
+    FILE *f_encrypt_file = open_fs(new_name, &root_nodes[currentDir_inode], "w");
+
+    if(!f_encrypt_file)
+    {
+      //print the error
+      k_printf("Error opening the created encrypted file: %s", new_name);
+
+      //free the stuff
+      kfree(new_name);
+      kfree(out);      
+      close_fs(orig);
+      kfree(in);
+      kfree(passphrase1);
+      kfree(passphrase2);
+
+      //error
+      return 1;      
+    }
+
     write_fs(encrypt_file, 0, file_length, out);
 
     //free the stuff
     kfree(new_name);
     kfree(out);
+    close_fs(f_encrypt_file);
   }else
     k_printf("\njpg: error in encryption\n");
 
   close_fs(orig);
+  kfree(in);
   kfree(passphrase1);
   kfree(passphrase2);
 
+  //sucess!
+  return 0;
 }
 
 u32int jpg_decrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode)
@@ -1780,30 +1839,44 @@ u32int jpg_decrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
     //passphrase1 was never kmalloced, so we will not free it
 
     //error
-    return 0;
+    return 1;
 
   }
 
-  u8int *out = 0;
+  u8int *out = 0, *in;
   FILE *orig;
-  orig = open_fs(file->name, &root_nodes[currentDir_inode]);
+  orig = open_fs(file->name, &root_nodes[currentDir_inode], "r");
+
+  //there was an error opening the file
+  if(!orig)
+  {
+    k_printf("Error opening file: %s", file->name);
+
+    //free passphrase1
+    kfree(passphrase1);
+
+    return 1; //error
+  }
+
+  in = (u8int*)kmalloc(file->length);
+  read_fs(file, 0, file->length, in);
 
   u32int meta_data_size = 0;
   //do the encryption itself
   switch(jpg_algorithm)
   {
   case bitwise:
-    out = de_bitwise_xor(orig, passphrase1);
+    out = de_bitwise_xor(in, passphrase1);
     break;
   case ceaser_shift:
-    out = de_ceaser_shift(orig, *(u32int*)passphrase1);
+    out = de_ceaser_shift(in, *(u32int*)passphrase1);
     break;
   case DES_algorithm:
-    out = de_DES_cipher(orig, passphrase1);
+    out = de_DES_cipher(in, passphrase1);
     meta_data_size = sizeof(des_header_t);
     break;
   case vigenere:
-    out = de_vigenere_cipher(orig, passphrase1);
+    out = de_vigenere_cipher(in, passphrase1);
     break;
   }
 
@@ -1822,17 +1895,39 @@ u32int jpg_decrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
      * encrypted data should not account for it, because it is trimmed of during decryption*/
     fs_node_t *decrypt_file;
     decrypt_file = createFile(&root_nodes[currentDir_inode], new_name, file->length - meta_data_size);
-    write_fs(decrypt_file, 0, file->length - meta_data_size, out);
 
+    //open and write to the file
+    FILE *f_decrypt_file = open_fs(new_name, &root_nodes[currentDir_inode], "w");
+    
+    if(!f_decrypt_file)
+    {
+      k_printf("Error opening created decrypted file: %s", new_name);
+ 
+      //free the stuff
+      kfree(new_name);
+      kfree(out);
+      close_fs(orig);
+      kfree(in);
+      kfree(passphrase1);
+
+      //error
+      return 1;
+    }
+
+    write_fs(decrypt_file, 0, file->length - meta_data_size, out);
+ 
     //free the stuff
     kfree(new_name);
     kfree(out);
+    close_fs(f_decrypt_file);
   }else
     k_printf("\njpg: error in encryption\n");
 
   close_fs(orig);
+  kfree(in);
   kfree(passphrase1);
 
+  return 0;
 }
 
 void program_jpg(char *arguements)

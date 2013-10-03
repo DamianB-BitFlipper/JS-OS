@@ -24,6 +24,8 @@
 #ifndef FS_H
 #define FS_H
 
+#include <system.h>
+
 #define FS_FILE        0x01
 #define FS_DIRECTORY   0x02
 #define FS_CHARDEVICE  0x03
@@ -31,6 +33,11 @@
 #define FS_PIPE        0x05
 #define FS_SYMLINK     0x06
 #define FS_MOUNTPOINT  0x08 // Is the file an active mountpoint?
+
+//for the file descriptor
+#define FDESC_READ    0b100
+#define FDESC_WRITE   0b10
+#define FDESC_APPEND  0b1
 
 struct fs_node;
 
@@ -40,8 +47,8 @@ typedef u32int (*read_type_t)(struct fs_node*,u32int,u32int,u8int*);
 typedef u32int (*write_type_t)(struct fs_node*,u32int,u32int,u8int*);
 //~ typedef void (*open_type_t)(struct fs_node*);
 //~ typedef void (*close_type_t)(struct fs_node*);
-typedef struct dirent * (*readdir_type_t)(struct fs_node*,u32int);
-typedef struct fs_node * (*finddir_type_t)(struct fs_node*,char *name);
+typedef struct dirent *(*readdir_type_t)(struct fs_node*, u32int);
+typedef struct fs_node *(*finddir_type_t)(struct fs_node*, char *name);
 
 //define the number of blocks per each level
 #define BLOCKS_DIRECT     12          //12 KB
@@ -52,17 +59,17 @@ typedef struct fs_node * (*finddir_type_t)(struct fs_node*,char *name);
 typedef struct fs_singly
 {
   u32int blocks[256];
-}fs_singly_t;
+} fs_singly_t;
 
 typedef struct fs_doubly
 {
   fs_singly_t singly[256];
-}fs_doubly_t;
+} fs_doubly_t;
 
 typedef struct fs_triply
 {
   fs_doubly_t doubly[256];
-}fs_triply_t;
+} fs_triply_t;
 
 typedef struct fs_node
 {
@@ -98,7 +105,16 @@ struct dirent
   char *name;               //filename, remember to kmalloc this to give it an address, or else it will page fault
 };
 
-#include <system.h>
+/*for the file desctptor*/
+typedef struct file_desc
+{
+  u8int permisions;
+  fs_node_t *node;
+  struct file_desc *next;
+} file_desc_t;
+
+//create the typedef for a FILE
+typedef file_desc_t FILE;
 
 extern fs_node_t *fs_root; // The root of the filesystem.
 
@@ -107,8 +123,8 @@ extern fs_node_t *fs_root; // The root of the filesystem.
 // , not file nodes.
 u32int read_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer);
 u32int write_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer);
-FILE *open_fs(char *filename, fs_node_t *dir);
-u32int *close_fs(FILE *file);
+FILE *open_fs(char *filename, fs_node_t *dir, char *mask);
+u32int close_fs(FILE *file);
 
 /*fs_node_t *node is the directory node to search in, returns dirent of file at the index input*/
 struct dirent *readdir_fs(fs_node_t *node, u32int index);
@@ -141,5 +157,8 @@ u32int blockSizeAtIndex(u32int fileSize, u32int blockNum, u32int offset);
 
 /*returns the pointer to the correct block in the block hierarchy of a file node*/
 u32int *block_of_set(fs_node_t *node, u32int block_number);
+
+/*looks up and returns a file descriptor if it exitsts*/
+file_desc_t *look_up_fdesc(fs_node_t *node);
 
 #endif
