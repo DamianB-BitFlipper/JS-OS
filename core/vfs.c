@@ -152,7 +152,7 @@ FILE *open_fs(char *filename, fs_node_t *dir, char *mask)
       for(; tmp_desc->next; tmp_desc = tmp_desc->next)
         //if we already have this file node in the list
         if(tmp_desc->node == file)
-          return 0; //return an error
+          return tmp_desc; //no need to open, just return it
 
       new_desc = (file_desc_t*)kmalloc(sizeof(file_desc_t));
       
@@ -252,10 +252,8 @@ int findOpenNode()
 u32int blockSizeAtIndex(u32int fileSize, u32int blockNum, u32int offset)
 {
   if(blockNum * BLOCK_SIZE > fileSize)
-  {
     //error
     return 0;
-  }
 
   //num is the number of whole (full 1KB) blocks will fit in the file
   u32int num = (u32int)(fileSize / BLOCK_SIZE);
@@ -263,51 +261,48 @@ u32int blockSizeAtIndex(u32int fileSize, u32int blockNum, u32int offset)
   //if the blockNum requested is less than the number of whole blocks, then it will fit BLOCK_SIZE
   if(blockNum < num)
   {
-    if(offset == 0) //if there is no offset
-    {
+    if(!offset) //if there is no offset
+      //default to the BLOCK_SIZE
       return BLOCK_SIZE;
-    }else{
-      if((blockNum + 1) * BLOCK_SIZE < offset) //if the offset exceeds the size of the block looked for
-      {
-        return 0;
-      }else{
-        if(((blockNum + 1) * BLOCK_SIZE) - offset < BLOCK_SIZE) //if the offset is in the block looked for
-        {
-          return ((blockNum + 1) * BLOCK_SIZE) - offset; //if the block looked for excedds the block that the offset is in
-        }else{
+    else{
+      //if the offset exceeds the size of the block looked for
+      if(offset > (blockNum + 1) * BLOCK_SIZE) 
+        return 0; //error
+      else{
+        //if the offset is in the block looked for
+        if(((blockNum + 1) * BLOCK_SIZE) - offset < BLOCK_SIZE) 
+          //return the difference of the block size and the offset
+          return ((blockNum + 1) * BLOCK_SIZE) - offset; 
+        else
           return BLOCK_SIZE;
-        }
+        
       }
     }
 
-  }else if(blockNum >= num && blockNum < num + 1)
+  }else if(blockNum == num)
   {
-
-    if(offset == 0) //if there is no offset
-    {
+    if(!offset) //if there is no offset
       return fileSize % BLOCK_SIZE;
-    }else{
-      if((blockNum + 1) * BLOCK_SIZE < offset) //if the offset exceeds the size of the block looked for
-      {
-        return 0;
-      }else{
-        if(fileSize - offset < BLOCK_SIZE) //if the offset is in the block looked for
-        {
-          return fileSize - offset; //if the block looked for excedds the block that the offset is in
-        }else{
-          return BLOCK_SIZE;
-        }
+    else{
+      //if the offset exceeds the size of the block looked for
+      if(offset > (blockNum + 1) * BLOCK_SIZE) 
+        return 0; //error!
+      else{
+        //if the offset is in the block looked for
+        if(fileSize - offset < BLOCK_SIZE)
+          return fileSize - offset;
+        else //if the block looked for exceeds the block that the offset is in
+          return fileSize % BLOCK_SIZE;
 
       }
     }
 
   }else if((blockNum + 1) * BLOCK_SIZE >= fileSize) //blockNum is too large and does not fir in the fileSize
-  {
     return 0;
-  }
 
 }
 
+//This may be difficult to understand due to lack of explaining comments
 u32int *block_of_set(fs_node_t *node, u32int block_number)
 {
   //if the block is a direct block
@@ -318,19 +313,60 @@ u32int *block_of_set(fs_node_t *node, u32int block_number)
   //if the block is in the singly set
   }else if(block_number >= BLOCKS_DIRECT && block_number < BLOCKS_DIRECT + BLOCKS_SINGLY)
   {
-    return &node->singly->blocks[block_number];
+    //disregard the direct blocks
+    u32int offset = block_number - BLOCKS_DIRECT;
+
+    return (u32int*)(node->singly + offset);
     
   //if the block is in the doubly set
   }else if(block_number >= BLOCKS_DIRECT + BLOCKS_SINGLY &&
           block_number < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY)
   {
-    return &node->doubly->singly->blocks[block_number];
+    //disregard the direct blocks
+    u32int offset = block_number - (BLOCKS_DIRECT + BLOCKS_SINGLY);
+
+    /*the doubly_offset is the offset of the doubly block's node pointing towards the singly block,
+     * the singly block offset is the offset of the singly block that is inside our doubly block that
+     * points to our physical block*/
+    u32int doubly_offset = (offset) / BLOCKS_SINGLY;
+    u32int singly_offset = (offset) % BLOCKS_SINGLY;
+
+    //if the singly pointer is 0, allocate space for it
+    if(!*(node->doubly + doubly_offset))
+      *(node->doubly + doubly_offset) = kmalloc(BLOCK_SIZE);
+
+    //the value of the doubly returns a singly block, get the value of that and there is the direct block      
+    u32int *doubly_pointer = (u32int*)*(node->doubly + doubly_offset);    
+    u32int *singly_pointer = (u32int*)(doubly_pointer + singly_offset);
+
+    //the singly_pointer points to the singly blocks pointer to the direct block's pointer
+    return singly_pointer;
 
   //if the block is in the triply set
   }else if(block_number >= BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY &&
           block_number < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY + BLOCKS_TRIPLY)
   {
-    return &node->triply->doubly->singly->blocks[block_number];
+    //disregard the direct blocks
+    u32int offset = block_number - (BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY);
+
+    /*trpily_offset is the offset in the triply block of the node pointing to the doubly block, the doubly_offset
+     * is the offset inside the doubly block of the triply block that points to the singly block,
+     * the singly_offset is the offset of the singly block inside the doubly block of the triply block
+     * pointing to the block we want to return*/
+
+    u32int triply_offset = (offset) / BLOCKS_DOUBLY;
+    u32int doubly_offset = (offset % BLOCKS_DOUBLY) / BLOCKS_DOUBLY;
+    u32int singly_offset = (offset % BLOCKS_DOUBLY) % BLOCKS_SINGLY;
+
+    /*the value of the tripy block with an offset returns a doubly block,
+     * the offset of that returns a singly block,
+     * the offset of that gets the value of the desired block, return its memmory location*/
+    u32int *triply_pointer = (u32int*)*(node->triply + triply_offset);
+    u32int *doubly_pointer = (u32int*)*(triply_pointer + doubly_offset);
+    u32int *singly_pointer = (u32int*)(doubly_pointer + singly_offset);
+
+    //the singly_pointer points to the singly blocks pointer to the direct block's pointer
+    return singly_pointer;
 
   }else{
     //the block number is not in range, error
@@ -346,8 +382,14 @@ fs_node_t *createFile(fs_node_t *parentNode, char *name, u32int size)
   strcpy(root_nodes[n].name, name);
   root_nodes[n].mask = 0b110110100; //user rw, group rw, other r
   root_nodes[n].uid = root_nodes[n].gid = 0;
-  root_nodes[n].length = size;
   root_nodes[n].inode = n;
+  root_nodes[n].length = size;
+
+  //set the pointers to singly, doubly, triply to 0
+  root_nodes[n].singly = 0;
+  root_nodes[n].doubly = 0;
+  root_nodes[n].triply = 0;
+
   root_nodes[n].flags = FS_FILE;
   root_nodes[n].read = &initrd_read;
   //~ root_nodes[n].write = 0;
@@ -360,7 +402,34 @@ fs_node_t *createFile(fs_node_t *parentNode, char *name, u32int size)
   u32int i, allocSize, block;
   for(i = 0; i < (u32int)((size - 1) / BLOCK_SIZE) + 1; i++) //size - 1 because if size == BLOCK size, there should be only one block created, but w/o that -1, 2 will be created
   {
-   
+
+    //if we need to alloc for the single, doubly, and triply
+    if(i >= BLOCKS_DIRECT && i < BLOCKS_DIRECT + BLOCKS_SINGLY && !root_nodes[n].singly) 
+    {
+      //allocate for the singly block
+      root_nodes[n].singly = (u32int*)kmalloc(BLOCK_SIZE);
+
+      //clear any junk
+      memset(root_nodes[n].singly, 0x0, BLOCK_SIZE);
+    }else if(i >= BLOCKS_DIRECT + BLOCKS_SINGLY && 
+            i < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY && !root_nodes[n].doubly)
+    {
+      //allocate for the doubly block
+      root_nodes[n].doubly = (u32int*)kmalloc(BLOCK_SIZE);
+
+      //clear any junk
+      memset(root_nodes[n].doubly, 0x0, BLOCK_SIZE);
+    }else if(i >= BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY &&
+            i < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY + BLOCKS_TRIPLY && 
+            !root_nodes[n].triply)
+    {
+      //allocate for the triply block
+      root_nodes[n].triply = (u32int*)kmalloc(BLOCK_SIZE);
+
+      //clear any junk
+      memset(root_nodes[n].triply, 0x0, BLOCK_SIZE);
+    }
+
     //get the address of the block to write to
     block = (u32int)block_of_set(&root_nodes[n], i);
     
@@ -374,9 +443,15 @@ fs_node_t *createFile(fs_node_t *parentNode, char *name, u32int size)
      * that it (u32int block) is rootnodes[i].blocks[a], although
      * they are found at different memory locations, same concept with hard links */
     
-    //allocate space for a block
-    *(u32int*)block = kmalloc(BLOCK_SIZE);
+    /*allocate space for a block, if it is a direct block, 
+     * assign it to the node's structure, else assign it to
+     * an indirect block's entry*/
+    //~ if(i < BLOCKS_DIRECT)
+      //~ *(u32int*)block = kmalloc(BLOCK_SIZE);
+    //~ else
+      //~ block = kmalloc(BLOCK_SIZE);
 
+    *(u32int*)block = kmalloc(BLOCK_SIZE);
   }
 
 

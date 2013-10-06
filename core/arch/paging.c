@@ -196,7 +196,8 @@ void initialise_paging(u32int memorySize)
   kernel_directory->physicalAddr = (u32int)kernel_directory->tablesPhysical;
 
   //~ This is for our VESA LFB
-  u32int vga_mem_addr = 0xE0000000; //replace me with a routine
+  //~ u32int vga_mem_addr = 0xE0000000; //replace me with a routine
+  u32int vga_mem_addr = 0xFD000000; //replace me with a routine
 
   pageMem(vga_mem_addr);
 

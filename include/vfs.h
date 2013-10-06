@@ -56,20 +56,20 @@ typedef struct fs_node *(*finddir_type_t)(struct fs_node*, char *name);
 #define BLOCKS_DOUBLY     65536       //65536 (256 * 256) KB (64 MB)
 #define BLOCKS_TRIPLY     16777216    //16777216 (256 * 256 * 256) KB (16 GB)
 
-typedef struct fs_singly
-{
-  u32int blocks[256];
-} fs_singly_t;
-
-typedef struct fs_doubly
-{
-  fs_singly_t singly[256];
-} fs_doubly_t;
-
-typedef struct fs_triply
-{
-  fs_doubly_t doubly[256];
-} fs_triply_t;
+//~ typedef struct fs_singly
+//~ {
+  //~ u32int blocks[256];
+//~ } fs_singly_t;
+//~ 
+//~ typedef struct fs_doubly
+//~ {
+  //~ fs_singly_t singly[256];
+//~ } fs_doubly_t;
+//~ 
+//~ typedef struct fs_triply
+//~ {
+  //~ fs_doubly_t doubly[256];
+//~ } fs_triply_t;
 
 typedef struct fs_node
 {
@@ -83,10 +83,14 @@ typedef struct fs_node
   u32int impl;              //an implementation-defined number.
 
   u32int blocks[12];        //Data blocks (1 KB each)
-  fs_singly_t *singly;      //pointer to a singly indirect data set
-  fs_doubly_t *doubly;      //pointer to a doubly indirect data set
-  fs_triply_t *triply;      //pointer to a triply indirect data set
+  //~ fs_singly_t *singly;      //pointer to a singly indirect data set
+  //~ fs_doubly_t *doubly;      //pointer to a doubly indirect data set
+  //~ fs_triply_t *triply;      //pointer to a triply indirect data set
   
+  u32int *singly;
+  u32int *doubly;
+  u32int *triply;
+
   read_type_t read;         //function to file read event
   write_type_t write;       //function to file write event
   //~ open_type_t open;         //function to file open event

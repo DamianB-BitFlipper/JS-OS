@@ -714,7 +714,7 @@ u32int ext2_block_of_set(ext2_inode_t *file, u32int block_number, u32int *block_
   }else if(block_number >= EXT2_NDIR_BLOCKS + EXT2_NIND_BLOCK &&
           block_number < EXT2_NDIR_BLOCKS + EXT2_NIND_BLOCK + EXT2_NDIND_BLOCK)
   {
-    u32int offset = block_number - EXT2_NDIR_BLOCKS;
+    u32int offset = block_number - (EXT2_NDIR_BLOCKS + EXT2_NIND_BLOCK);
     u32int doubly_offset = offset / EXT2_NIND_BLOCK;
     u32int singly_offset = offset % EXT2_NIND_BLOCK;
 
@@ -722,6 +722,7 @@ u32int ext2_block_of_set(ext2_inode_t *file, u32int block_number, u32int *block_
     singly = (u32int*)kmalloc(EXT2_BLOCK_SZ);
     doubly = (u32int*)kmalloc(EXT2_BLOCK_SZ);
 
+    //error checking is always good
     if(!file->blocks[EXT2_DIND_BLOCK])
     {
       kfree(singly);
@@ -734,6 +735,7 @@ u32int ext2_block_of_set(ext2_inode_t *file, u32int block_number, u32int *block_
 
     u32int singly_block_location = *(doubly + doubly_offset);
 
+    //error checking is always good
     if(!singly_block_location)
     {
       kfree(singly);
@@ -746,6 +748,7 @@ u32int ext2_block_of_set(ext2_inode_t *file, u32int block_number, u32int *block_
 
     u32int block = *(singly + singly_offset);
 
+    //error checking is always good
     if(!block)
     {
       kfree(singly);
@@ -756,6 +759,7 @@ u32int ext2_block_of_set(ext2_inode_t *file, u32int block_number, u32int *block_
 
     floppy_read(block, EXT2_BLOCK_SZ, block_output);
 
+    //free the stuff allocated
     kfree(doubly);
     kfree(singly);
 
@@ -765,7 +769,7 @@ u32int ext2_block_of_set(ext2_inode_t *file, u32int block_number, u32int *block_
   }else if(block_number >= EXT2_NDIR_BLOCKS + EXT2_NIND_BLOCK + EXT2_NDIND_BLOCK &&
           block_number < EXT2_NDIR_BLOCKS + EXT2_NIND_BLOCK + EXT2_NDIND_BLOCK + EXT2_NTIND_BLOCK)
   {
-    u32int offset = block_number - EXT2_NDIR_BLOCKS;
+    u32int offset = block_number - (EXT2_NDIR_BLOCKS + EXT2_NIND_BLOCK + EXT2_NDIND_BLOCK);
     u32int triply_offset = offset / EXT2_NDIND_BLOCK;
     u32int doubly_offset = (offset % EXT2_NDIND_BLOCK) / EXT2_NIND_BLOCK;
     u32int singly_offset = (offset % EXT2_NDIND_BLOCK) % EXT2_NIND_BLOCK;
@@ -1174,8 +1178,8 @@ u32int ext2_expand(ext2_inode_t *node, u32int increase_bytes)
 
   u32int *initial_locs, *all_locs, *added_locs, orig_nblocks, added_nblocks, all_nblocks;
   
-  orig_nblocks = ((node->size - 1) / 1024) + 1;
-  added_nblocks = ((increase_bytes - 1) / 1024) + 1;
+  orig_nblocks = ((node->size - 1) / EXT2_BLOCK_SZ) + 1;
+  added_nblocks = ((increase_bytes - 1) / EXT2_BLOCK_SZ) + 1;
   all_nblocks = orig_nblocks + added_nblocks;
 
   all_locs = (u32int*)kmalloc(sizeof(u32int) * all_nblocks);

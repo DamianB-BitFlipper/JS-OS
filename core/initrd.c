@@ -92,8 +92,10 @@ u32int initrd_read(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
      *
      * then the *(u32int*)block is the value of that address, i.e. it impersonates
      * that it (u32int block) is node->blocks[i], although
-     * they are found at different memory locations, same concept with hard links */
-    if(offset != 0 && i == startingBlock)
+     * they are found at different memory locations, same concept with hard links
+     */  
+
+    if(offset && i == startingBlock)
       memcpy(buffer + (i - startingBlock) * BLOCK_SIZE, (u8int*)(*(u32int*)block + offset % BLOCK_SIZE), size_to_copy);
     else
       memcpy(buffer + (i - startingBlock) * BLOCK_SIZE, (u8int*)(*(u32int*)block), size_to_copy);
@@ -109,19 +111,17 @@ u32int initrd_write(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
   u32int endingBlock = (u32int)((offset + size) / BLOCK_SIZE);
 
   if(offset > node->length)
-  {
     return 0;
-  }
 
   if(offset + size > node->length)
-  {
     size = node->length - offset;
-  }
 
   u32int i, block_size_at_index, size_to_copy;
   u32int block;
   for(i = startingBlock; i < endingBlock + 1; i++)
   {
+
+    //~ k_printf("\n%d", i);
 
     //get the writing size at a specific index
     block_size_at_index = blockSizeAtIndex(node->length, i, offset);
@@ -143,16 +143,13 @@ u32int initrd_write(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
      *
      * (u32int*)block points to the address of the node->blocks[i]
      * e.g. &node->blocks[i]
-     *
-     * then the *(u32int*)block is the value of that address, i.e. it impersonates
-     * that it (u32int block) is node->blocks[i], although
-     * they are found at different memory locations, same concept with hard links */
-    if(offset != 0 && i == startingBlock)
-    {
-      memcpy((u8int*)(*(u32int*)block), buffer + (i - startingBlock) * BLOCK_SIZE + offset % BLOCK_SIZE, block_size_at_index);
-    }else{
-      memcpy((u8int*)(*(u32int*)block), buffer + (i - startingBlock) * BLOCK_SIZE, block_size_at_index);
-    }
+     */
+
+    if(offset && i == startingBlock)
+        memcpy((u8int*)(*(u32int*)block), buffer + (i - startingBlock) * BLOCK_SIZE + offset % BLOCK_SIZE, block_size_at_index);
+    else
+        memcpy((u8int*)(*(u32int*)block), buffer + (i - startingBlock) * BLOCK_SIZE, block_size_at_index);
+     
   }
 
   return size;
@@ -327,7 +324,7 @@ fs_node_t *initialise_initrd(u32int location)
     {
       //allocate the singly typedef
       //~ root_nodes[i].singly = (fs_singly_t*)kmalloc_a(sizeof(fs_singly_t));
-      root_nodes[i].singly = (fs_singly_t*)kmalloc(sizeof(fs_singly_t));
+      root_nodes[i].singly = (u32int*)kmalloc(BLOCK_SIZE);
 
     //if this file has a singly set and a doubly set
     }else if(nBlocks >= BLOCKS_DIRECT + BLOCKS_SINGLY &&
@@ -335,24 +332,24 @@ fs_node_t *initialise_initrd(u32int location)
     {
       //allocate the singly typedef
       //~ root_nodes[i].singly = (fs_singly_t*)kmalloc_a(sizeof(fs_singly_t));
-      root_nodes[i].singly = (fs_singly_t*)kmalloc(sizeof(fs_singly_t));
+      root_nodes[i].singly = (u32int*)kmalloc(BLOCK_SIZE);
 
       //allocate the doubly typedef
       //~ root_nodes[i].doubly = (fs_doubly_t*)kmalloc_a(sizeof(fs_doubly_t));
-      root_nodes[i].doubly = (fs_doubly_t*)kmalloc(sizeof(fs_doubly_t));
+      root_nodes[i].doubly = (u32int*)kmalloc(BLOCK_SIZE);
 
     //if this file has a singly set, a doubly set, and a triply set
     }else if(nBlocks >= BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY&&
             nBlocks < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY + BLOCKS_TRIPLY)
     {
       //allocate the singly typedef
-      root_nodes[i].singly = (fs_singly_t*)kmalloc(sizeof(fs_singly_t));
+      root_nodes[i].singly = (u32int*)kmalloc(BLOCK_SIZE);
 
       //allocate the doubly typedef
-      root_nodes[i].doubly = (fs_doubly_t*)kmalloc(sizeof(fs_doubly_t));
+      root_nodes[i].doubly = (u32int*)kmalloc(BLOCK_SIZE);
 
       //allocate the triply typedef
-      root_nodes[i].triply = (fs_triply_t*)kmalloc(sizeof(fs_triply_t));
+      root_nodes[i].triply = (u32int*)kmalloc(BLOCK_SIZE);
     }
 
     /* This section copies the file's data into the blocks of the node

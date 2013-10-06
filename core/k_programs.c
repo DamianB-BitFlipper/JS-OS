@@ -878,6 +878,7 @@ int program_cd(char *arguements)
 
 }
 
+//SOME SORT OF PAGE FAULT BUG. :(
 u32int program_cp(char *arguments)
 {
   u32int currentIno = currentDir_inode, error = FALSE;
@@ -899,6 +900,9 @@ u32int program_cp(char *arguments)
   cdFormatArgs(args[0], dirPath, filePath);
 
   fs_node_t *src;
+
+  //save the directory inode of the source file, may come in use later
+  u32int old_currentDir = currentDir_inode;
 
   src = finddir_fs(&root_nodes[currentDir_inode], filePath); //gets the structure of the first argument input
 
@@ -945,53 +949,83 @@ u32int program_cp(char *arguments)
      * go to that directory and then create the file */
     if(restSrc && restSrc->flags == FS_DIRECTORY)
     {
+      //cd to the directory to place the new file
       program_cd(restPath);
 
-      u32int src_block, copied_block;
+      //create the new file
       fs_node_t *copiedFile;
       copiedFile = createFile(&root_nodes[currentDir_inode], src->name, src->length);
 
-      //copy the data
-      for(b = 0; b < (u32int)((src->length - 1) / BLOCK_SIZE) + 1; b++)
-      {
-        src_block = (u32int)block_of_set(src, b);
-        copied_block = (u32int)block_of_set(copiedFile, b);
+      //open the files to copy to and the new one
+      FILE *orig = open_fs(src->name, &root_nodes[old_currentDir], "r");
+      FILE *new = open_fs(copiedFile->name, &root_nodes[currentDir_inode], "w");
 
-        memcpy(*(u32int*)copied_block, *(u32int*)src_block, BLOCK_SIZE);
-      }
+      //copy the contents into a buffer
+      u8int *data;
+      data = (u8int*)kmalloc(src->length);
+      read_fs(src, 0, src->length, data);
 
-    }else if(*restPath) //if there is contents after the last "/", make the file with that name
+      //write the data
+      write_fs(copiedFile, 0, src->length, data);
+
+      //close the files
+      close_fs(orig);
+      close_fs(new);
+      
+      //free allocations
+      kfree(data);
+
+    }else if(*restPath) //if there are contents after the last "/", make the file with that name
     {
-      u32int src_block, copied_block;
       fs_node_t *copiedFile;
       copiedFile = createFile(&root_nodes[currentDir_inode], restPath, src->length);
 
-      for(b = 0; b < (u32int)((src->length - 1) / BLOCK_SIZE) + 1; b++)
-      {
+      //open the files to copy to and the new one
+      FILE *orig = open_fs(src->name, &root_nodes[old_currentDir], "r");
+      FILE *new = open_fs(copiedFile->name, &root_nodes[currentDir_inode], "w");
 
-        src_block = (u32int)block_of_set(src, b);
-        copied_block = (u32int)block_of_set(copiedFile, b);
+      //copy the contents into a buffer
+      u8int *data;
+      data = (u8int*)kmalloc(src->length);
+      read_fs(src, 0, src->length, data);
 
-        memcpy(*(u32int*)copied_block, *(u32int*)src_block, BLOCK_SIZE);
-      }
+      //write the data
+      write_fs(copiedFile, 0, src->length, data);
 
+      //close the files
+      close_fs(orig);
+      close_fs(new);
+      
+      //free allocations
+      kfree(data);
 
     }else if(!work) //if the cd function above did not fail, i.e., we should still copy the file, but with its original name
     {
-      u32int src_block, copied_block;
       fs_node_t *copiedFile;
       copiedFile = createFile(&root_nodes[currentDir_inode], src->name, src->length);
 
-      for(b = 0; b < (u32int)((src->length - 1) / BLOCK_SIZE) + 1; b++)
-      {
-        src_block = (u32int)block_of_set(src, b);
-        copied_block = (u32int)block_of_set(copiedFile, b);
+      //open the files to copy to and the new one
+      FILE *orig = open_fs(src->name, &root_nodes[old_currentDir], "r");
+      FILE *new = open_fs(copiedFile->name, &root_nodes[currentDir_inode], "w");
 
-        memcpy(*(u32int*)copied_block, *(u32int*)src_block, BLOCK_SIZE);
-      }
+      //copy the contents into a buffer
+      u8int *data;
+      data = (u8int*)kmalloc(src->length);
+      read_fs(src, 0, src->length, data);
+
+      //write the data
+      write_fs(copiedFile, 0, src->length, data);
+
+      //close the files
+      close_fs(orig);
+      close_fs(new);
+      
+      //free allocations
+      kfree(data);
 
     }
 
+    //return the allocations and directory to the original state
     setCurrentDir(&root_nodes[currentIno]); //sets the current dir back to the original
 
     kfree(destPath);
@@ -1276,9 +1310,13 @@ void program_cat(char *arguments)
      * number of blocks this file will take up at a given length */
     for(a = 0; a < ((u32int)(file->length / BLOCK_SIZE) + 1); a++)
     {
-      u32int sz = read_fs(file, a * BLOCK_SIZE, kmalloc_size, buf); //assign the content of file to char *buf
+      //assign the content of file to char *buf
+      u32int sz = read_fs(file, a * BLOCK_SIZE, kmalloc_size, buf);
+
       for (j = 0; j < sz; j++)
         k_putChar(buf[j]);
+
+      //~ k_printf("\n\n%d\n", a);
 
       //if there is a block after this one (we are not at the last block)
       if(a != (u32int)(file->length / BLOCK_SIZE))

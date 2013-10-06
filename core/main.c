@@ -139,7 +139,7 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
 
     program_cat("./direct/test_file");
   }else
-    k_printf("Error: test_file cannot be opened properly");
+    k_printf("Error: test_file cannot be opened properly\n");
 
   //initialize the ext2 driver on the floppy disk
   if(ext2_initialize(FLOPPY_SIZE - EXT2_SBLOCK_OFF))
