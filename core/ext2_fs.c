@@ -31,9 +31,8 @@
 #define IS_CONS_BLOCKS(first, second)      ((((second) - (first)) / (EXT2_BLOCK_SZ / SECTOR_SIZE)) == 1 ? TRUE : FALSE)
 
 //the global path for the current directory
-char *ext2_path;
-u32int ext2_current_dir_inode = 0;
 ext2_inode_t *ext2_root;
+char *ext2_root_name;
 
 //caches
 ext2_superblock_t *ext2_g_sblock = 0;
@@ -49,13 +48,13 @@ u32int _Rlogged = EXT2_I_RUSR, _Wlogged = EXT2_I_WUSR, _Xlogged = EXT2_I_XUSR;
 static ext2_inode_t *__create_root__(void);
 static ext2_inode_t *__create_file__(u32int size);
 static ext2_inode_t *__create_dir__(ext2_superblock_t *sblock, ext2_group_descriptor_t *gdesc);
-static char *__get_name_of_dir__(ext2_inode_t *directory, ext2_inode_t *inode_table);
+static char *__get_name_of_dir__(ext2_inode_t *directory);
 static char *__get_name_of_file__(ext2_inode_t *directory, ext2_inode_t *file);
 
 static struct ext2_dirent dirent;
 
 //The start of the open file linked list
-volatile ext2_open_files_t *ext2_open_queue;
+//~ volatile ext2_open_files_t *ext2_open_queue;
 
 enum __block_types__
 {
@@ -394,33 +393,24 @@ u32int ext2_data_to_inode_table(ext2_inode_t *data, ext2_group_descriptor_t *gde
 
     floppy_read(gdesc->inode_table_id, gdesc->inode_table_size * EXT2_BLOCK_SZ, (u32int*)buffer);
 
-    //~ update = TRUE;
-  }else{
+  }else
     buffer = ext2_g_inode_table;
-    //~ update = FALSE;
-  }
 
   //loop until a free space has opened up
   u32int off = 0;
   while(buffer[off].nlinks && off < sblock->inodes_per_group)
-  {
     off++;
-  }
 
   //if we did not find enough space, return an error
   if(off == sblock->inodes_per_group)
     return 1; //error
 
   memcpy((u8int*)buffer + sizeof(ext2_inode_t) * off, data, sizeof(ext2_inode_t));
-
-  //~ if(update == TRUE)
-    //~ memcpy((u8int*)ext2_g_inode_table + sizeof(ext2_inode_t) * off, data, sizeof(ext2_inode_t));
   
   //write the new inode table buffer
   floppy_write((u32int*)buffer, gdesc->inode_table_size * EXT2_BLOCK_SZ, gdesc->inode_table_id);
   
   //purposly not freeing since buffer, either way with update, is the global variable which should not be cleared
-  //~ kfree(buffer);
 
   //sucess!, return where we put it
   return off;
@@ -441,13 +431,12 @@ u32int ext2_inode_from_inode_table(u32int inode_number, ext2_inode_t *output, ex
   memcpy(output, (u8int*)buffer + sizeof(ext2_inode_t) * inode_number, sizeof(ext2_inode_t));
 
   //purposly not freeing since buffer, either way with update, is the global variable which should not be cleared
-  //~ kfree(buffer);
 
   //sucess!
   return 0;
 }
 
-ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name, ext2_inode_t *inode_table)
+ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name)
 {
   ext2_superblock_t *sblock;  
   ext2_group_descriptor_t *gdesc;
@@ -460,6 +449,15 @@ ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name, ext2_inode_t *in
     sblock = ext2_g_sblock;
     gdesc = ext2_g_gdesc;
   }
+
+  ext2_inode_t *inode_table;
+
+  if(!ext2_g_inode_table)
+  {
+    inode_table = ext2_get_inode_table(gdesc);
+    ext2_g_inode_table = inode_table;
+  }else
+    inode_table = ext2_g_inode_table;
 
   ext2_inode_t *inode;
   inode = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
@@ -1164,9 +1162,14 @@ u32int ext2_free_blocks(u32int *block_locs, u32int nblocks)
 
 u32int ext2_expand(ext2_inode_t *node, u32int increase_bytes)
 {
+  //no point to expand, return sucess
+  if(!increase_bytes)
+    return 0; //sucess
+  
   ext2_superblock_t *sblock;  
   ext2_group_descriptor_t *gdesc; 
 
+  //get the meta data if not already cached
   if(!ext2_g_sblock || !ext2_g_gdesc)
   {
     if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
@@ -1292,7 +1295,6 @@ u32int ext2_remove_inode_entry(ext2_inode_t *node)
   return 0;
 }
 
-//TODO, when deleting, everything works, make it remove dirent from parent dir
 u32int ext2_delete(ext2_inode_t *parent_dir, ext2_inode_t *node)
 {
   ext2_superblock_t *sblock;  
@@ -1386,13 +1388,11 @@ u32int ext2_delete(ext2_inode_t *parent_dir, ext2_inode_t *node)
       if(i + dirent.rec_len >= EXT2_BLOCK_SZ)
         break;
 
-      //if the offset (i) + the length of the contents in the struct dirent is greater than what a direcotory can hold, exit function before page fault happens
+      /*if the offset (i) + the length of the contents in the struct dirent 
+       * is greater than what a direcotory can hold, exit function, 
+       * we did not find our file in this directory*/
       if(b * EXT2_BLOCK_SZ + i + dirent.rec_len >= parent_dir->size)
-      {
-        //expand parent_dir by one block
-        if(ext2_expand(parent_dir, EXT2_BLOCK_SZ))
-          return 1; //failed, out of directory left over space
-      }
+        return 1; //failed!
 
     }
 
@@ -1466,6 +1466,7 @@ static ext2_inode_t *__create_dir__(ext2_superblock_t *sblock, ext2_group_descri
   ext2_inode_t *data;
   data = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
 
+  data->magic = M_EXT2;
   data->inode = ext2_find_open_inode(sblock, gdesc);
   data->mode = EXT2_I_RUSR | EXT2_I_WUSR | EXT2_I_XUSR | EXT2_I_RGRP | EXT2_I_XGRP | EXT2_I_ROTH | EXT2_I_XOTH;
   data->type = EXT2_DIR;
@@ -1584,6 +1585,7 @@ static ext2_inode_t *__create_file__(u32int size)
   ext2_inode_t *data;
   data = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
   
+  data->magic = M_EXT2;
   data->inode = ext2_find_open_inode(sblock, gdesc);
   data->mode = EXT2_I_RUSR | EXT2_I_WUSR | EXT2_I_RGRP | EXT2_I_WGRP | EXT2_I_ROTH | EXT2_I_WOTH;
   data->type = EXT2_FILE;
@@ -2004,75 +2006,39 @@ u32int *ext2_chunk_data(u32int *blocks, u32int nblocks, u32int chunk, u32int *ou
 
 }
 
-u32int *ext2_open(ext2_inode_t *node, u8int read, u8int write)
+u32int *ext2_open(ext2_inode_t *node, char *mask)
 {
-  u32int *block_locs, *data, *chunk_data, *chunk_size, offset = 0, i = 0, nblocks, permission = 0;
+  u32int permission = 0;
 
-  if(read && write)
-    permission = EXT2_OPEN_RW;
-  else if(read && !write)
-    permission = EXT2_OPEN_R;
-  else if(!read && write)
-    permission = EXT2_OPEN_W;
-  else //if we do not want to read nor write to it, what is the point?
-    return 0;
+  //set the permissions based on the mask
+  permission = __open_fs_mask_to_u32int__(mask);
 
-  if(read)
-  {
-    chunk_size = (u32int*)kmalloc(sizeof(u32int));
-    data = (u32int*)kmalloc(node->size);
+  FILE *open_file, *prev;
+  open_file = (FILE*)kmalloc(sizeof(FILE));
 
-    //calculates the number of blocks in the file and also their locations
-    nblocks = ((node->size - 1) / EXT2_BLOCK_SZ) + 1;
-    block_locs = ext2_block_locs(node);
-
-    do
-    {
-      //gets chunk number 'i'
-      chunk_data = ext2_chunk_data(block_locs, nblocks, i, chunk_size);
-      i++;
-
-      //if there is data copy it over and increment offset by its size
-      if(chunk_data)
-      {
-        memcpy(data + offset, chunk_data, *chunk_size);
-
-        offset += *chunk_size;
-        kfree(chunk_data);
-      }
-    }while(chunk_data);
-
-    kfree(chunk_size);
-    kfree(block_locs);
-  }else if(!read && write)
-    data = 0;
-
-  ext2_open_files_t *open_file, *prev;
-  open_file = (ext2_open_files_t*)kmalloc(sizeof(ext2_open_files_t));
-
-  open_file->inode = node->inode;
-  open_file->permissions = permission;
-  open_file->data = data;
+  open_file->permisions = permission;
+  open_file->fs_type = M_EXT2;
+  open_file->node = (void*)node;
   open_file->next = 0;
   
   //place the typedef 'open_file' at the very end of the list
-  prev = (ext2_open_files_t*)ext2_open_queue;
+  prev = (FILE*)initial_fdesc;
   while(prev->next)
     prev = prev->next;
 
   prev->next = open_file;
 
-  return data;
+  return 0; //sucess!
 }
 
 u32int ext2_close(ext2_inode_t *node)
 {
-  ext2_open_files_t *open_file, *prev;
+  FILE *open_file, *prev;
   
-  open_file = (ext2_open_files_t*)ext2_open_queue;
+  open_file = initial_fdesc;
 
   //finds the open node in the open files list
-  while(open_file->inode != node->inode && open_file)
+  while(open_file->node != node && open_file)
   {
     prev = open_file;
     open_file = open_file->next;
@@ -2081,13 +2047,12 @@ u32int ext2_close(ext2_inode_t *node)
   if(!open_file)
     return 1; //error
 
-  //free the open file's data
-  kfree(open_file->data);
-
   //remove the entry from the list
   prev->next = open_file->next;
 
   kfree(open_file);
+
+  return 0; //sucess!
 }
 
 void ext2_sblock_set_data(ext2_superblock_t *data, u32int reserved_blocks, u32int sblock_location,
@@ -2334,6 +2299,19 @@ ext2_inode_t *ext2_get_inode_table(ext2_group_descriptor_t *gdesc)
   return buffer;
 }
 
+char *ext2_name_of_node(ext2_inode_t *parent_dir, ext2_inode_t *node)
+{
+  switch(node->type)
+  {
+  case EXT2_FILE:
+    return __get_name_of_file__(parent_dir, node);
+  case EXT2_DIR:
+    return __get_name_of_dir__(node);
+  default:
+    return 0;
+  }
+}
+
 static char *__get_name_of_file__(ext2_inode_t *directory, ext2_inode_t *file) 
 {
   u32int i = 0;
@@ -2355,17 +2333,26 @@ static char *__get_name_of_file__(ext2_inode_t *directory, ext2_inode_t *file)
 
 }
 
-static char *__get_name_of_dir__(ext2_inode_t *directory, ext2_inode_t *inode_table) 
+static char *__get_name_of_dir__(ext2_inode_t *directory) 
 {
 
   if(directory->inode == ext2_root->inode)
+    return ext2_root_name;
+
+  ext2_superblock_t *sblock;  
+  ext2_group_descriptor_t *gdesc;
+
+  if(!ext2_g_sblock || !ext2_g_gdesc)
   {
-    char *name;
-    name = (char*)kmalloc(2);
-    *(name) = '/';
-    *(name + 1) = 0;
-    return name;
+    if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
+      return 0; //error
+  }else{
+    sblock = ext2_g_sblock;
+    gdesc = ext2_g_gdesc;
   }
+
+  ext2_inode_t *inode_table;
+  inode_table = ext2_get_inode_table(gdesc);
 
   struct ext2_dirent *dirent;
   //get the inode of the parent, always the second index (1) starting from 0
@@ -2414,18 +2401,18 @@ static char *__get_name_of_dir__(ext2_inode_t *directory, ext2_inode_t *inode_ta
 
 u32int ext2_set_current_dir(ext2_inode_t *directory)
 {
-  kfree(ext2_path); //frees the contents of the char array pointer, ext2_path
+  kfree(path); //frees the contents of the char array pointer, path
   
-  ext2_current_dir_inode = directory->inode; //sets the value of the dir inode to the cuurentDir_inode
+  ptr_currentDir = directory; //sets the value of the dir to the ptr_cuurentDir
 
   //the root's inode is always 1, after the mother root's inode of 0
   if(directory->inode == 1)
   {
     //keep it simple, if root is the only directory, copy its name manually
-    ext2_path = (char*)kmalloc(2); //2 chars beign "/" for root and \000
+    path = (char*)kmalloc(2); //2 chars beign "/" for root and \000
   
-    *(ext2_path) = '/';
-    *(ext2_path + 1) = 0; //added \000 to the end
+    *(path) = '/';
+    *(path + 1) = 0; //added \000 to the end
     
     //sucess!
     return 0;
@@ -2437,21 +2424,12 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
   if(!ext2_g_sblock || !ext2_g_gdesc)
   {
     if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
-      return 0; //error
+      return 1; //error
   }else{
     sblock = ext2_g_sblock;
     gdesc = ext2_g_gdesc;
   }
 
-  ext2_inode_t *inode_table;
-
-  if(!ext2_g_inode_table)
-  {
-    inode_table = ext2_get_inode_table(gdesc);
-    ext2_g_inode_table = inode_table;
-  }else
-    inode_table = ext2_g_inode_table;
-  
   ext2_inode_t *node;
   node = directory;
   ext2_inode_t *copy;
@@ -2472,7 +2450,7 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
   {
     copy = node;
 
-    name = __get_name_of_dir__(copy, inode_table);
+    name = __get_name_of_dir__(copy);
 
     if(copy)
     {
@@ -2494,7 +2472,7 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
       name_locs = tmp;
     }
 
-    node = ext2_file_from_dir(copy, "..", inode_table);
+    node = ext2_file_from_dir(copy, "..");
   }
   while(node->inode != copy->inode);
   
@@ -2506,8 +2484,8 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
    * -2 to count for both of those instances*/
   totalCharLen -= 2;
   
-  ext2_path = (char*)kmalloc(totalCharLen + 1); //+1 is for the \000 NULL terminating 0
-  //~ strcpy(ext2_path, "/");
+  path = (char*)kmalloc(totalCharLen + 1); //+1 is for the \000 NULL terminating 0
+  //~ strcpy(path, "/");
   
   //reset the copy back to the top (current directory)
   copy = directory;
@@ -2518,29 +2496,29 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
     nameLen = strlen(*(name_locs + i));
   
     /* i < count - 2 is a protection from drawing the preceding "/"
-     * on the first two dirs in the ext2_path (root and one more). The first two dirs will
-     * allways be drawn the last two times (we write the dir names to ext2_path from
+     * on the first two dirs in the path (root and one more). The first two dirs will
+     * allways be drawn the last two times (we write the dir names to path from
      * current dir (top) to root (bottom)), thus if i is less
      * than the count - 2, that means we are not yet at the last
      * two drawing and it is ok to have a precedding "/" */
     if(copy->inode != ext2_root->inode && i < count - 2)
     {
-      memcpy(ext2_path + (totalCharLen - charsWritten - nameLen - 1), "/", 1);
-      memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), *(name_locs + i), nameLen);
+      memcpy(path + (totalCharLen - charsWritten - nameLen - 1), "/", 1);
+      memcpy(path + (totalCharLen - charsWritten - nameLen), *(name_locs + i), nameLen);
       charsWritten = charsWritten + nameLen + 1; //increment charsWritten with the "/<name>" string we just wrote, +1 is that "/"
     }else{
-      memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), *(name_locs + i), nameLen);
+      memcpy(path + (totalCharLen - charsWritten - nameLen), *(name_locs + i), nameLen);
       charsWritten = charsWritten + nameLen; //increment charsWritten with the "/" string we just wrote
     }
   
     //find the parent of copy
-    node = ext2_file_from_dir(copy, "..", inode_table);
+    node = ext2_file_from_dir(copy, "..");
     copy = node;
   }
   
-  *(ext2_path + totalCharLen) = 0; //added \000 to the end of ext2_path
+  *(path + totalCharLen) = 0; //added \000 to the end of path
   
-  //~ k_printf("\n\nEXT2_PATH is: %s\n", ext2_path);
+  //~ k_printf("\n\nPATH is: %s\n", path);
   
   kfree(name_locs);
 
@@ -2566,6 +2544,7 @@ static ext2_inode_t *__create_root__()
   ext2_inode_t *data;
   data = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
 
+  data->magic = M_EXT2;
   //the root is always with an inode of 0, the root inode
   data->inode = 0;
 
@@ -2643,9 +2622,9 @@ u32int ext2_initialize(u32int size)
     if(!ext2_root)
       return 1; //error
 
-    ext2_path = (char*)kmalloc(2);
-    *(ext2_path) = '/';
-    *(ext2_path + 1) = 0;
+    path = (char*)kmalloc(2);
+    *(path) = '/';
+    *(path + 1) = 0;
 
     k_printf("\tCreating root \".\" hardlink...");
     if(ext2_add_hardlink_to_dir(root, root, ".")) //adds hardlink to root
@@ -2657,15 +2636,12 @@ u32int ext2_initialize(u32int size)
       return 1; //error
     k_printf("%cgdone%cw\n");
 
+    //set the name of the root directory
+    ext2_root_name = (char*)kmalloc(2);
+    *(ext2_root_name) = '/';
+    *(ext2_root_name + 1) = 0;
+
     ext2_set_current_dir(root); 
-
-    ext2_open_queue = (ext2_open_files_t*)kmalloc(sizeof(ext2_open_files_t));
-
-    //set up the initial queue for the open files list
-    ext2_open_queue->inode = 0;
-    ext2_open_queue->permissions = 0;
-    ext2_open_queue->data = 0;
-    ext2_open_queue->next = 0;
 
     //sucess!
     return 0;
@@ -2689,15 +2665,12 @@ u32int ext2_initialize(u32int size)
     if(!ext2_root)
       return 1; //error
 
+    //set the name of the root directory
+    ext2_root_name = (char*)kmalloc(2);
+    *(ext2_root_name) = '/';
+    *(ext2_root_name + 1) = 0;
+
     ext2_set_current_dir(ext2_root); 
-
-    ext2_open_queue = (ext2_open_files_t*)kmalloc(sizeof(ext2_open_files_t));
-
-    //set up the initial queue for the open files list
-    ext2_open_queue->inode = 0;
-    ext2_open_queue->permissions = 0;
-    ext2_open_queue->data = 0;
-    ext2_open_queue->next = 0;
 
     //sucess!
     return 0;

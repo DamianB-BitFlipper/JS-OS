@@ -138,17 +138,12 @@ void dirFilePathCount(char *args, u32int *dirCount, u32int *fileCount)
 
   //a == the position of the very last "/" after finnished with for loop
   for(a = 0; a < length; a++)
-  {
     if(*(args + a) == '/')
-    {
-
       count = a;
-    }
-  }
 
   if(count != -1) //if count was changed (in char *args, there is atleast one "/")
   {
-    u32int intitialDir = currentDir_inode;
+    void *initialDir = ptr_currentDir;
 
     char dirs[count + 2]; //+2 to count because count starts at 0 for the first character and for \000 at the end
     memcpy(dirs, args, count + 1); //+1 to count because count starts at 0 for the first character
@@ -162,19 +157,19 @@ void dirFilePathCount(char *args, u32int *dirCount, u32int *fileCount)
       return;
     }
 
-    fs_node_t *testDir;
+    void *testDir;
     
     //test if the rest of the args is a dir or file
-    testDir = finddir_fs(&root_nodes[currentDir_inode], args + count + 1); 
+    testDir = finddir_fs(ptr_currentDir, args + count + 1); 
 
-    if(testDir != 0 && testDir->flags == FS_DIRECTORY) //if testDir is a directory
+    if(testDir && type_of_node(testDir) == TYPE_DIRECTORY) //if testDir is a directory
     {
       //set the dirCount to the whole arg len
       *dirCount = length;
 
       //if everything is a directory, then there are no file names, set length to 0
       *fileCount = 0;
-    }else if(testDir != 0 && testDir->flags == FS_FILE) //if testDir is a file
+    }else if(testDir && type_of_node(testDir) == TYPE_FILE) //if testDir is a file
     {
       //the dirCount is everything before the final '/'
       *dirCount = count + 1;
@@ -191,25 +186,25 @@ void dirFilePathCount(char *args, u32int *dirCount, u32int *fileCount)
     }
 
     //return the current directory to the initialDir
-    setCurrentDir(&root_nodes[intitialDir]);
+    setCurrentDir(initDir);
 
     return;
   }else{
-    fs_node_t *testDir;
+    void *testDir;
 
-    testDir = finddir_fs(&root_nodes[currentDir_inode], args);
+    testDir = finddir_fs(ptr_currentDir, args);
 
-    if(testDir != 0 && testDir->flags == FS_DIRECTORY) //if testDir is a directory
+    if(testDir && type_of_node(testDir) == TYPE_DIRECTORY) //if testDir is a directory
     {
       *dirCount = length;
       //~ *fileCount = -1;
       *fileCount = 0;
-    }else if(testDir != 0 && testDir->flags == FS_FILE) //if testDir is a file
+    }else if(testDir && type_of_node(testDir) == TYPE_FILE) //if testDir is a file
     {
       //~ *dirCount = -1;
       *dirCount = 0;
       *fileCount = length;
-    }else if(testDir == 0) //there is no testDir location, it must be a file
+    }else if(!testDir) //there is no testDir location, it must be a file
     {
       *dirCount = 0;
       //~ *fileCount = 0;
@@ -346,15 +341,11 @@ int cdFormatArgs(char *args, char *dirPath, char *filePath)
   s32int count = -1;
 
   for(i = 0; i < length; i++)
-  {
     /* using the following, after it is done executing, the integer
      * count will be equeal to the number of character before and
      * including the last "/" in the destination string of input */
     if(*(args + i) == '/') //for every "/" in the dest of input, increment count to i
-    {
       count = i;
-    }
-  }
 
   //if count is still -1, then all of args is the filePath and none of it is dirPath
   if(count == -1)
@@ -362,34 +353,36 @@ int cdFormatArgs(char *args, char *dirPath, char *filePath)
     //set count to be the length of args (i) -1 becuase i starts from 0
     count = i - 1;
 
-    fs_node_t *isDir;
-    isDir = finddir_fs(&root_nodes[currentDir_inode], args);
+    void *isDir;
+    isDir = finddir_fs(ptr_currentDir, args);
 
     if(!isDir) //no such entry exists
-    {
       //error!
       return 1;
-    }else if(isDir && isDir->flags == FS_FILE) //the input is a file, cannot be cd'ed to
+    else if(isDir && type_of_node(isDir) == TYPE_FILE) //the input is a file, cannot be cd'ed to
     {
+      char *tmp_name;
+      tmp_name = name_of_node(ptr_currentDir, isDir);
       *(dirPath) = 0; //set dirPath to null
-      strcpy(filePath, isDir->name);
-      *(filePath + strlen(isDir->name)) = 0; //add \000 to the end
+      strcpy(filePath, tmp_name);
+      *(filePath + strlen(tmp_name)) = 0; //add \000 to the end
 
       return 0;
-    }else if(isDir && isDir->flags == FS_DIRECTORY) //the input is just a directory
+    }else if(isDir && type_of_node(isDir) == TYPE_DIRECTORY) //the input is just a directory
     {
-      u32int w = program_cd(args);
-     
-      strcpy(dirPath, isDir->name);
-      *(dirPath + strlen(isDir->name)) = 0; //add the \000 to the end
+      char *tmp_name;
+      tmp_name = name_of_node(ptr_currentDir, isDir);
+
+      strcpy(dirPath, tmp_name);
+      *(dirPath + strlen(tmp_name)) = 0; //add the \000 to the end
 
       //there is no filePath, set it to 0
       *(filePath) = 0;
+
+      u32int w = program_cd(args);
       return w;
     }
   }
-
-  //~ u32int intitialDir = currentDir_inode;
 
   char *dirs;
 
@@ -401,9 +394,10 @@ int cdFormatArgs(char *args, char *dirPath, char *filePath)
   u32int work = program_cd(dirs);
 
   fs_node_t *isDir;
-  isDir = finddir_fs(&root_nodes[currentDir_inode], args + count + 1); //test if the rest of the path is a directory
+  //test if the rest of the path is a directory
+  isDir = finddir_fs(ptr_currentDir, args + count + 1);
 
-  if(isDir != 0 && isDir->flags == FS_DIRECTORY) //the rest is a directory
+  if(isDir && type_of_node(isDir) == TYPE_DIRECTORY) //the rest is a directory
   {
     //cd to the directory left out without a ending "/"
     work = program_cd(args + count + 1);

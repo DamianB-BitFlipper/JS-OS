@@ -621,7 +621,7 @@ void program_ls(char *arguements)
   ls_files = (struct ls_file_header*)kmalloc(ls_nfiles * sizeof(struct ls_file_header));
 
   //get the current dir Inode before we cd into a different directory
-  u32int currentIno = currentDir_inode;
+  void *current_dir_ptr = ptr_currentDir;
 
   //gets the number of args in the char *arguements
   u32int nArgs = countArgs(arguements);
@@ -634,14 +634,10 @@ void program_ls(char *arguements)
    * after exiting, the args[dirPathArg] is the argument that is the dir path to ls */
   u32int dirPathArg;
   for(dirPathArg = 0; dirPathArg < nArgs; dirPathArg++)
-  {
     /*if the first char in the arg is not a slash (not a flag but the dirPath itself)
      * or, if the first arg is a slash and there is nothing after it, meaning it could be a directory name */
     if(*(args[dirPathArg]) != '-' || *(args[dirPathArg] + 1) == ' ' || *(args[dirPathArg] + 1) == 0)
-    {
       break;
-    }
-  }
 
   u32int work;
 
@@ -674,17 +670,13 @@ void program_ls(char *arguements)
       //free char **args that holds our individual arguments
       u32int c;
       for(c = 0; c < nArgs; c++)
-      {
         kfree(args[c]);
-      }
 
-      setCurrentDir(&root_nodes[currentIno]);
+      setCurrentDir(current_dir_ptr);
 
       //also free all of the name locations
       for(c = 0; c < ls_files_indexed; c++)
-      {
         kfree(ls_files[c].name);
-      }
   
       kfree(ls_files); //frees the block that contained the file names to print
 
@@ -711,14 +703,11 @@ void program_ls(char *arguements)
   //there was no error in the cd'ing process
   if(!work)
   {
-    fs_node_t *fsnode;
+    void *fsnode;
 
-    fsnode = &root_nodes[currentDir_inode];
+    fsnode = current_dir_ptr;
     struct dirent *entry = 0;
     u32int i = 0;
-
-    //used only if there is contents in filePath
-    //~ u32int gobbled_something = FALSE;
 
     while(entry = readdir_fs(fsnode, i))
     {
@@ -766,17 +755,13 @@ void program_ls(char *arguements)
   //free char **args that holds our individual arguments
   u32int c;
   for(c = 0; c < nArgs; c++)
-  {
     kfree(args[c]);
-  }
 
-  setCurrentDir(&root_nodes[currentIno]);
+  setCurrentDir(current_dir_ptr);
 
   //also free all of the name locations
   for(c = 0; c < ls_files_indexed; c++)
-  {
     kfree(ls_files[c].name);
-  }
   
   kfree(ls_files); //frees the block that contained the file names to print
 
@@ -790,14 +775,16 @@ void program_ls(char *arguements)
 
 int program_cd(char *arguements)
 {
-  int argLen = strlen(arguements);
-  int i = 0, originalI = 0;
+  s32int argLen = strlen(arguements);
+  s32int i = 0, originalI = 0;
 
-  int isInitDirRoot = FALSE, initDir = currentDir_inode;
+  s32int isInitDirRoot = FALSE;
+  
+  void *initDir = ptr_currentDir;
 
   char *cd;
 
-  fs_node_t *dir, *initial_dir;
+  void *dir, *initial_dir;
 
   do
   {
@@ -808,12 +795,9 @@ int program_cd(char *arguements)
     {
       if(*(arguements + i) == '/')
       {
-        if(i != 0) //if the first character is "/" it is ok to not break and continue
-        {
+        if(i) //if the first character is "/" it is ok to not break and continue
           break;
-        }else{
-          //~ initial_dir = fs_root;
-          //~ setCurrentDir(initial_dir);
+        else{
           isInitDirRoot = TRUE;
           i++;
           break;
@@ -821,7 +805,7 @@ int program_cd(char *arguements)
       }
     }
 
-    /*(i - originalI) is the length of the portion after the portion
+    /*(i - originalI) is the length of the portion after the final '/'
      * we just processed. IE: arguments = "./poop", when we process
      * the "." i == 2 and originalI == 2. Continuing on, for "poop",
      * i will equal 6 and originalI equals 2. 6 - 2 is 4, which is
@@ -836,36 +820,27 @@ int program_cd(char *arguements)
       dir = fs_root;
       isInitDirRoot = FALSE;
     }else{
-      dir = finddir_fs(&root_nodes[currentDir_inode], cd);
+      dir = finddir_fs(initDir, cd);
       i++;
     }
 
-    if(dir != 0 && dir->flags == FS_DIRECTORY) //if dir exists and is a directory
+    if(dir && type_of_file(dir) == TYPE_DIRECTORY) //if dir exists and is a directory
     {
-      //if(dir == fs_root) //if the dir is root, increment originalI by strlen so next dir doesn't end up "/dir" istead of "dir"
-      //{
-      ////~ i++;
-      ////~ originalI = originalI + strlen(dir->name);
-      //}else{
-      //originalI = i;
-
-      //}
 
       setCurrentDir(dir);
       kfree(cd);
 
     }else{
-      if(*(cd) != 0) //if the string cd has contents, usually if the char *arguements is "//" for some reason, cd will have no content (begins with a \000)
-      {
+      /*if the string cd has contents, usually if the char *arguements is "//" 
+       * for some reason, cd will have no content (begins with a \000)*/
+      if(*cd)
         k_printf("In \"%s\", \"%s\" is not a directory\n", arguements, cd);
-      }
+
       kfree(cd);
 
       /*if we have an initial (starting point) dir, set the current dir
        * to that dir as it was before the user typed an incorrect path name */
-      setCurrentDir(&root_nodes[initDir]);
-
-      //~ break;
+      setCurrentDir(initDir);
 
       //failure!
       return 1;
@@ -878,10 +853,10 @@ int program_cd(char *arguements)
 
 }
 
-//SOME SORT OF PAGE FAULT BUG. :(
 u32int program_cp(char *arguments)
 {
-  u32int currentIno = currentDir_inode, error = FALSE;
+  u32int error = FALSE;
+  void *currentDir = ptr_currentDir;
 
   u32int nArgs = countArgs(arguments);
 
@@ -904,11 +879,11 @@ u32int program_cp(char *arguments)
   //save the directory inode of the source file, may come in use later
   u32int old_currentDir = currentDir_inode;
 
-  src = finddir_fs(&root_nodes[currentDir_inode], filePath); //gets the structure of the first argument input
+  src = finddir_fs(ptr_currentDir, filePath); //gets the structure of the first argument input
 
   if(src) //if there is a file with the name of the first argument
   {
-    setCurrentDir(&root_nodes[currentIno]); //sets the current dir back to the original
+    setCurrentDir(ptr_currentDir); //sets the current dir back to the original
 
     s32int i = 0, length = strlen(args[1]), count = -1;
 

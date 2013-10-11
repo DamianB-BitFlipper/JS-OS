@@ -207,6 +207,7 @@ typedef struct ext2_group_descriptor
 
 typedef struct ext2_inode
 {
+  u8int magic;
   u32int inode;
   u16int mode;
   u32int type;
@@ -227,7 +228,7 @@ typedef struct ext2_inode
   u16int dir_acl;
   u16int fragment_addr;
   u16int osd2[3];
-  u8int reserved[14];
+  u8int reserved[13];
 }ext2_inode_t;
 
 struct ext2_dirent
@@ -239,13 +240,13 @@ struct ext2_dirent
   char *name;           //filename, remember to kmalloc this to give it an address, or else it will page fault
 };
 
-typedef struct ext2_open_files
-{
-  u32int inode;
-  u8int permissions;
-  u32int *data;
-  struct ext2_open_files *next;
-}ext2_open_files_t;
+//~ typedef struct ext2_open_files
+//~ {
+  //~ u32int inode;
+  //~ u8int permissions;
+  //~ u32int *data;
+  //~ struct ext2_open_files *next;
+//~ }ext2_open_files_t;
 
 //adding a hardlink to a directory is exactly the same as adding a file to a directory, so I just make an alias
 #define ext2_add_hardlink_to_dir(parent_dir, file, filename)    (ext2_add_file_to_dir(parent_dir, file, EXT2_HARDLINK, filename))
@@ -303,7 +304,7 @@ struct ext2_dirent *ext2_dirent_from_dir(ext2_inode_t *dir, u32int index);
 u32int ext2_set_current_dir(ext2_inode_t *directory);
 
 /*gets a file's inode from a directory*/
-ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name, ext2_inode_t *inode_table);
+ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name);
 
 /*returns an inode with the inode table as input*/
 ext2_inode_t *ext2_inode_from_offset(u32int inode_number, ext2_inode_t *inode_table);
@@ -333,7 +334,7 @@ u32int *ext2_get_doubly(u32int location, u32int *nblocks);
 u32int *ext2_get_triply(u32int location, u32int *nblocks);
 
 /*opens a file by returning its contents and placing it in the open files list*/
-u32int *ext2_open(ext2_inode_t *node, u8int read, u8int write);
+u32int *ext2_open(ext2_inode_t *node, char *mask);
 
 /*closes a file after it is done being used*/
 u32int ext2_close(ext2_inode_t *node);
@@ -349,5 +350,8 @@ u32int ext2_delete(ext2_inode_t *parent_dir, ext2_inode_t *node);
 
 /*removes an inode entry in the inode table and flips the bit in the inode bitmap*/
 u32int ext2_remove_inode_entry(ext2_inode_t *node);
+
+/*get the name of the input ext2 node*/
+char *ext2_name_of_node(ext2_inode_t *parent_dir, ext2_inode_t *node);
 
 #endif

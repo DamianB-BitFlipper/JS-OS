@@ -31,12 +31,6 @@ fs_node_t *root_nodes;              // List of file nodes.
 int nroot_nodes;                    // Number of file nodes.
 
 u32int fs_location;
-u32int currentDir_inode; //the inode of the current directory
-
-//initial file descriptor location
-file_desc_t *initial_fdesc;
-
-char *path; //a character array containing the path from root to the current directory
 
 extern u32int initrd_location;
 extern u32int initrd_end;
@@ -301,6 +295,7 @@ fs_node_t *initialise_initrd(u32int location)
     // of memory.
     file_headers[i].offset += tempLoc;
     // Create a new file node.
+    root_nodes[i].magic = M_VFS;
     strcpy(root_nodes[i].name, &file_headers[i].name);
     root_nodes[i].mask = 0b110110100; //user rw, group rw, other r
     root_nodes[i].uid = root_nodes[i].gid = 0;

@@ -46,9 +46,6 @@ typedef struct
   u32int length;    // Length of the file.
 } initrd_file_header_t;
 
-//set the initial file desctripter to be globally gloabal :)
-extern file_desc_t *initial_fdesc;
-
 /*Initialises the initial ramdisk. It gets passed the address of the multiboot module,
  * and returns a completed filesystem node */
 fs_node_t *initialise_initrd(u32int location);
