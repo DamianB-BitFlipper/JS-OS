@@ -303,7 +303,7 @@ struct ext2_dirent *ext2_dirent_from_dir(ext2_inode_t *dir, u32int index);
 u32int ext2_set_current_dir(ext2_inode_t *directory);
 
 /*gets a file's inode from a directory*/
-ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name, ext2_inode_t *inode_table);
+ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name);
 
 /*returns an inode with the inode table as input*/
 ext2_inode_t *ext2_inode_from_offset(u32int inode_number, ext2_inode_t *inode_table);

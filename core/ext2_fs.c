@@ -447,7 +447,7 @@ u32int ext2_inode_from_inode_table(u32int inode_number, ext2_inode_t *output, ex
   return 0;
 }
 
-ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name, ext2_inode_t *inode_table)
+ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name)
 {
   ext2_superblock_t *sblock;  
   ext2_group_descriptor_t *gdesc;
@@ -460,6 +460,10 @@ ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name, ext2_inode_t *in
     sblock = ext2_g_sblock;
     gdesc = ext2_g_gdesc;
   }
+
+  //get the inode table
+  ext2_inode_t *inode_table;
+  inode_table = ext2_get_inode_table(gdesc);
 
   ext2_inode_t *inode;
   inode = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
@@ -2494,7 +2498,7 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
       name_locs = tmp;
     }
 
-    node = ext2_file_from_dir(copy, "..", inode_table);
+    node = ext2_file_from_dir(copy, "..");
   }
   while(node->inode != copy->inode);
   
@@ -2534,7 +2538,7 @@ u32int ext2_set_current_dir(ext2_inode_t *directory)
     }
   
     //find the parent of copy
-    node = ext2_file_from_dir(copy, "..", inode_table);
+    node = ext2_file_from_dir(copy, "..");
     copy = node;
   }
   

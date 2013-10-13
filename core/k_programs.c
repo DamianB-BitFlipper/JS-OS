@@ -634,14 +634,10 @@ void program_ls(char *arguements)
    * after exiting, the args[dirPathArg] is the argument that is the dir path to ls */
   u32int dirPathArg;
   for(dirPathArg = 0; dirPathArg < nArgs; dirPathArg++)
-  {
     /*if the first char in the arg is not a slash (not a flag but the dirPath itself)
      * or, if the first arg is a slash and there is nothing after it, meaning it could be a directory name */
     if(*(args[dirPathArg]) != '-' || *(args[dirPathArg] + 1) == ' ' || *(args[dirPathArg] + 1) == 0)
-    {
       break;
-    }
-  }
 
   u32int work;
 

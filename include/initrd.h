@@ -31,7 +31,6 @@
 #define DIRECTORY_SIZE                BLOCK_SIZE //the size of the directory (bytes)
 
 extern fs_node_t *root_nodes;              // List of file nodes.
-extern u32int currentDir_inode; //the inode of the current directory
 
 typedef struct
 {

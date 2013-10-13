@@ -34,11 +34,6 @@
 #define FS_SYMLINK     0x06
 #define FS_MOUNTPOINT  0x08 // Is the file an active mountpoint?
 
-//for the file descriptor
-#define FDESC_READ    0b100
-#define FDESC_WRITE   0b10
-#define FDESC_APPEND  0b1
-
 struct fs_node;
 
 // These typedefs define the type of callbacks - called when read/write/open/close
@@ -108,17 +103,6 @@ struct dirent
   u8int file_type;          //a flag that states what type of file this dirent is (ie: a file, pipe, directory, etc.)
   char *name;               //filename, remember to kmalloc this to give it an address, or else it will page fault
 };
-
-/*for the file desctptor*/
-typedef struct file_desc
-{
-  u8int permisions;
-  fs_node_t *node;
-  struct file_desc *next;
-} file_desc_t;
-
-//create the typedef for a FILE
-typedef file_desc_t FILE;
 
 extern fs_node_t *fs_root; // The root of the filesystem.
 

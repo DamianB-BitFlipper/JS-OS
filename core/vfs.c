@@ -31,7 +31,10 @@ extern fs_node_t *initrd_dev;              // Root dir
 extern fs_node_t *root_nodes;              // List of file nodes.
 extern int nroot_nodes;                    // Number of file nodes.
 extern u32int fs_location;
-extern u32int currentDir_inode;
+
+//the curent directory node
+extern void *ptr_currentDir;
+
 extern u32int greatestFS_location;
 
 extern char *path;
@@ -103,30 +106,6 @@ u32int write_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
 
   //if we have not exited yet, it is an error
   return 1;
-}
-
-static u8int __open_fs_mask_to_u32int__(char *mask)
-{
-  u8int flags = 0;
-  u32int i;
-  for(i = 0; i < strlen(mask); i++)
-  {
-    //assign the values of the flags
-    switch(*(mask + i))
-    {
-      case 'r':
-        flags |= FDESC_READ;
-        break;
-      case 'w':
-        flags |= FDESC_WRITE;
-        break;
-      case 'a':
-        flags |= FDESC_APPEND;
-        break;
-    }
-  }
-
-  return flags;
 }
 
 FILE *open_fs(char *filename, fs_node_t *dir, char *mask)
@@ -684,7 +663,7 @@ int setCurrentDir(fs_node_t *directory)
 {
   kfree(path); //frees the contents of the char array pointer, path
 
-  currentDir_inode = directory->inode; //sets the value of the dir inode to the cuurentDir_inode
+  ptr_currentDir = directory; //sets the value of the dir inode to the cuurentDir_inode
 
   fs_node_t *node = directory;
   fs_node_t *copy;
@@ -770,4 +749,25 @@ int setCurrentDir(fs_node_t *directory)
   
   //sucess!
   return 0;
+}
+
+int shiftData(void *position, int shiftAmount, u32int lengthOfDataToShift)
+{
+  //TODO add right shift functionalbility
+  if(shiftAmount < 0) //user wants to shift to the left
+  {
+    u32int start = (u32int)position, end = (u32int)position + shiftAmount;
+
+    int i; //sifts the data to the left
+    for(i = 0; i < lengthOfDataToShift; i++)
+    {
+      *(char*)(end + i) = *(char*)(start + i);
+    }
+
+    memset((u32int*)(end + i), 0, -1 * shiftAmount);
+
+    //success!
+    return 0;
+  }
+
 }

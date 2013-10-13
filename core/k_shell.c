@@ -138,13 +138,8 @@ void dirFilePathCount(char *args, u32int *dirCount, u32int *fileCount)
 
   //a == the position of the very last "/" after finnished with for loop
   for(a = 0; a < length; a++)
-  {
     if(*(args + a) == '/')
-    {
-
       count = a;
-    }
-  }
 
   if(count != -1) //if count was changed (in char *args, there is atleast one "/")
   {
