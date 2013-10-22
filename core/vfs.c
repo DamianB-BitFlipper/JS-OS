@@ -40,21 +40,6 @@ extern u32int greatestFS_location;
 extern char *path;
 /*In initrd.c*/
 
-file_desc_t *look_up_fdesc(fs_node_t *node)
-{
-  file_desc_t *tmp_desc;
-  tmp_desc = initial_fdesc;
-
-  //find our file descriptor
-  for(; tmp_desc->node != node && tmp_desc; tmp_desc = tmp_desc->next);
-
-  //a simple error check if the tmp_desc exists
-  if(!tmp_desc)
-    return 0;
-
-  return tmp_desc;
-}
-
 u32int read_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
 {
   // Has the node got a read callback?
@@ -199,9 +184,7 @@ int shiftData(void *position, int shiftAmount, u32int lengthOfDataToShift)
 
     int i; //sifts the data to the left
     for(i = 0; i < lengthOfDataToShift; i++)
-    {
       *(char*)(end + i) = *(char*)(start + i);
-    }
 
     memset((u32int*)(end + i), 0, -1 * shiftAmount);
 
@@ -216,13 +199,9 @@ int findOpenNode()
   int i;
 
   for(i = 0; i < nroot_nodes; i++)
-  {
     //if all of those headers are not used, then there is no file
-    if(*(root_nodes[i].name) == 0 && root_nodes[i].inode == 0 && root_nodes[i].mask == 0 && root_nodes[i].flags == 0)
-    {
+    if(!*(root_nodes[i].name) && !root_nodes[i].inode && !root_nodes[i].mask && !root_nodes[i].flags)
       return i;
-    }
-  }
 
   nroot_nodes++;
   return nroot_nodes - 1;
@@ -353,7 +332,7 @@ u32int *block_of_set(fs_node_t *node, u32int block_number)
   }
 }
 
-fs_node_t *createFile(fs_node_t *parentNode, char *name, u32int size)
+fs_node_t *vfs_createFile(fs_node_t *parentNode, char *name, u32int size)
 {
   u32int n = findOpenNode();
 
@@ -511,7 +490,7 @@ int addHardLinkToDir(fs_node_t *hardlink, fs_node_t *directory, char *name)
 
 }
 
-fs_node_t *createDirectory(fs_node_t *parentNode, char *name)
+fs_node_t *vfs_createDirectory(fs_node_t *parentNode, char *name)
 {
   /*if the directory we are creating is not root, initrd_root is the
    * "mother root" directory, a directory that contains root and only root
@@ -522,7 +501,6 @@ fs_node_t *createDirectory(fs_node_t *parentNode, char *name)
     //check if the dirName has any "/" as a dir name cannot contain them
     u32int i, length = strlen(name);
     for(i = 0; i < length; i++)
-    {
       if(*(name + i) == '/')
       {
         k_printf("The directory name: \"%s\" may not contain any \"/\" characters\n", name);
@@ -530,7 +508,6 @@ fs_node_t *createDirectory(fs_node_t *parentNode, char *name)
         //error!
         return 0;
       }
-    }
     
   }
 
@@ -619,135 +596,38 @@ int addFileToDir(fs_node_t *dirNode, fs_node_t *fileNode)
     block = (u32int)block_of_set(dirNode, b);
 
     //loop untill we hit the end of the current block
-    while(*(u16int*)(*(u32int*)block + i + sizeof(dirent.ino)) != 0)
+    while(*(u16int*)(*(u32int*)block + i + sizeof(dirent.ino)))
     {
       //increase i with the rec_len that we get by moving fileheader sizeof(dirent.ino) (4 bytes) and reading its value
-      i = i + *(u16int*)(*(u32int*)block + i + sizeof(dirent.ino));
+      i += *(u16int*)(*(u32int*)block + i + sizeof(dirent.ino));
 
       //if the offset (i) + the length of the contents in the struct dirent is greater than what a block can hold, exit and go to new block
       if(i + dirent.rec_len >= BLOCK_SIZE)
-      {
         break;
-      }
 
       //if the offset (i) + the length of the contents in the struct dirent is greater than what a direcotory can hold, exit function before page fault happens
       if(b * BLOCK_SIZE + i + dirent.rec_len >= dirNode->length)
-      {
         //failed, out of directory left over space
         return 1;
-      }
 
     }
-
+v
     //if i is a valid offset, do not go to a new block, just exit
-    if(*(u16int*)(*(u32int*)block + i + sizeof(dirent.ino)) == 0)
-    {
+    if(!*(u16int*)(*(u32int*)block + i + sizeof(dirent.ino)) == 0)
       break;
-    }
 
   }
 
   //assigns the contents of the struct dirent to the directory contents location
   memcpy((u32int*)(*(u32int*)block + i), &dirent, dirent.rec_len - dirent.name_len);
 
-  strcpy((char*)(*(u32int*)block + i + sizeof(dirent.ino) + sizeof(dirent.rec_len) + sizeof(dirent.name_len) + sizeof(dirent.file_type)), dirent.name);
+  strcpy((char*)(*(u32int*)block + i + sizeof(dirent.ino) + sizeof(dirent.rec_len) 
+                 + sizeof(dirent.name_len) + sizeof(dirent.file_type)), dirent.name);
 
 
   kfree(dirent.name);
 
   //success!
-  return 0;
-}
-
-int setCurrentDir(fs_node_t *directory)
-{
-  kfree(path); //frees the contents of the char array pointer, path
-
-  ptr_currentDir = directory; //sets the value of the dir inode to the cuurentDir_inode
-
-  fs_node_t *node = directory;
-  fs_node_t *copy;
-
-  u32int count = 0, totalCharLen = 0;
-
-  /*starts from the current directory, goes backwards by getting the node
-   * of the parent (looking up the data in ".." dir), adding its namelen
-   * to the u32int totalCharLen and getting its parent, etc.
-   *
-   *once the parent is the same as the child, that only occurs with the
-   * root directory, so we should exit */
-  do
-  {
-    copy = node;
-
-    if(copy != 0)
-    {
-      //+1 being the preceding "/" to every dir that will be added later
-      totalCharLen = totalCharLen + strlen(copy->name) + 1; 
-      count++;
-    }
-
-    node = finddir_fs(copy, "..");
-  }
-  while(node != copy);
-
-  if(count > 1) //if we are in a directory other than root
-  {
-    /*we have the root dir
-     * that does not need a preceding "/" because we will get "//"
-     * which is ugly and not right. Also the "/" before the very first
-     * directory should not be there because it will look ugly with
-     * the root "/". So the total totalCharLen should be
-     * -2 to count for both of those instances*/
-    totalCharLen = totalCharLen - 2;
-
-    path = (char*)kmalloc(totalCharLen + 1); //+1 is for the \000 NULL terminating 0
-    //~ strcpy(path, "/");
-
-    //reset the copy back to the top (current directory)
-    copy = directory;
-
-    u32int i, charsWritten = 0, nameLen;
-    for(i = 0; i < count; i++)
-    {
-      nameLen = strlen(copy->name);
-
-      /* i < count - 2 is a protection from drawing the preceding "/"
-       * on the first two dirs in the path (root and one more). The first two dirs will
-       * allways be drawn the last two times (we write the dir names to path from
-       * current dir (top) to root (bottom)), thus if i is less
-       * than the count - 2, that means we are not yet at the last
-       * two drawing and it is ok to have a precedding "/" */
-      if(copy != fs_root && i < count - 2)
-      {
-        memcpy(path + (totalCharLen - charsWritten - nameLen - 1), "/", 1);
-        memcpy(path + (totalCharLen - charsWritten - nameLen), copy->name, nameLen);
-        charsWritten = charsWritten + nameLen + 1; //increment charsWritten with the "/<name>" string we just wrote, +1 is that "/"
-
-      }else{
-        memcpy(path + (totalCharLen - charsWritten - nameLen), copy->name, nameLen);
-        charsWritten = charsWritten + nameLen; //increment charsWritten with the "/" string we just wrote
-
-      }
-
-      //find the parent of copy
-      node = finddir_fs(copy, "..");
-      copy = node;
-    }
-
-    *(path + totalCharLen) = 0; //added \000 to the end of path
-
-  }else{
-    //keep it simple, if root is the only directory, copy its name manually
-    path = (char*)kmalloc(2); //2 chars beign "/" for root and \000
-
-    *(path) = '/';
-    *(path + 1) = 0; //added \000 to the end
-  }
-
-  //~ k_printf("\n\nPATH is: %s\n", path);
-  
-  //sucess!
   return 0;
 }
 
@@ -769,5 +649,81 @@ int shiftData(void *position, int shiftAmount, u32int lengthOfDataToShift)
     //success!
     return 0;
   }
+
+}
+
+u32int vfs_remove_dirent(fs_node_t *directory, fs_node_t *node)
+{
+  struct dirent *dirent2;
+  dirent2 = (struct dirent*)kmalloc(sizeof(struct dirent));
+
+  u32int i = 0, b = 0, dir_block;
+  //calculate the first dir_block
+  dir_block = (u32int)block_of_set(directory, b);
+
+  /*this section looks through the direcetory and finds the location
+   * of the dirent of the file that we want to remove */
+  do
+  {
+
+    //if we found the file in the directory's contents
+    if(*(u32int*)(*(u32int*)dir_block + i) == node->inode)
+    {
+
+      dirent2->ino = *(u32int*)(*(u32int*)dir_block + i);
+      dirent2->rec_len = *(u16int*)(*(u32int*)dir_block + i + sizeof(dirent2->ino));
+
+      break;
+
+    }else{
+
+      //if the next rec_length is 0, then we are currently at the last dirent, else increase the offset (i)
+      if(*(u16int*)(*(u32int*)dir_block + i + sizeof(dirent2->ino)))
+        /*increase i with the rec_len that we get by moving fileheader sizeof(dirent2->ino)
+         * (4 bytes) and reading its value*/
+        i += *(u16int*)(*(u32int*)dir_block + i + sizeof(dirent2->ino));
+      else{ //this is the last direct, add 1 to block and reset the offset (i)
+        i = 0;
+        b++;
+
+        if(b > (u32int)((directory->length - 1) / BLOCK_SIZE))
+          //error, block exceds the number of blocks dirNode has
+          return 1;
+
+        //recalculate the dir_block
+        dir_block = (u32int)block_of_set(directory, b);
+      }
+
+    }
+  }
+  while(1);
+
+
+  /*shifts the dirent data in the directory
+   * the "-1 *" is used to show shift to the left */
+  shiftData((u32int*)(*(u32int*)dir_block + i + dirent2->rec_len),
+            -1 * dirent2->rec_len, BLOCK_SIZE - i - dirent2->rec_len);
+
+  kfree(dirent2);
+
+  //sucess!
+  return 0;
+}
+
+u32int vfs_free_data_blocks(fs_node_t *directory, fs_node_t *node)
+{
+  if(!directory || !node)
+    return 1; //error
+
+  //free the actual node content
+  u32int c, block, block_size = block_size_of_node(node);
+  for(c = 0; c < (u32int)((node->length - 1) / block_size) + 1; c++)
+  {
+    block = (u32int)block_of_set(node, c);
+    kfree((void*)(*(u32int*)block));
+  }
+    
+  //sucess!
+  return 0;
 
 }

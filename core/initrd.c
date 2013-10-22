@@ -161,13 +161,13 @@ struct dirent *initrd_readdir(fs_node_t *dirNode, u32int index)
     block = (u32int)block_of_set(dirNode, b);
 
     //loop forever, we will break when we find it
-    while(1)
+    for(;;)
     {
       //if the loop equals the index we are looking for
       if(loop == index)
       {
         //if the rec_len of the direct has contents
-        if(*(u16int*)(*(u32int*)block + i + sizeof(dirent.ino)) != 0)
+        if(*(u16int*)(*(u32int*)block + i + sizeof(dirent.ino)))
         {
           static struct dirent dirent2;
 
@@ -198,7 +198,7 @@ struct dirent *initrd_readdir(fs_node_t *dirNode, u32int index)
       }else{
 
         //this dirent is not the last one (there are more dirents after this one)
-        if(*(u16int*)(*(u32int*)block + i + sizeof(dirent.ino)) != 0)
+        if(*(u16int*)(*(u32int*)block + i + sizeof(dirent.ino)))
         {
           //increase i with the rec_len that we get by moving fileheader sizeof(dirent.ino) (4 bytes) and reading its value
           i = i + *(u16int*)(*(u32int*)block + i + sizeof(dirent.ino));
@@ -235,6 +235,7 @@ fs_node_t *initrd_finddir(fs_node_t *dirNode, char *name)
       //get the dirent information at index i
       dirent2 = initrd_readdir(dirNode, i);
 
+      //does this dirent exits?
       if(dirent2)
       {
         //the input name matches to the dirent2.name that we got

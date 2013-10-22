@@ -34,6 +34,7 @@
 char *ext2_path;
 u32int ext2_current_dir_inode = 0;
 ext2_inode_t *ext2_root;
+char *ext2_root_name;
 
 //caches
 ext2_superblock_t *ext2_g_sblock = 0;
@@ -49,13 +50,9 @@ u32int _Rlogged = EXT2_I_RUSR, _Wlogged = EXT2_I_WUSR, _Xlogged = EXT2_I_XUSR;
 static ext2_inode_t *__create_root__(void);
 static ext2_inode_t *__create_file__(u32int size);
 static ext2_inode_t *__create_dir__(ext2_superblock_t *sblock, ext2_group_descriptor_t *gdesc);
-static char *__get_name_of_dir__(ext2_inode_t *directory, ext2_inode_t *inode_table);
 static char *__get_name_of_file__(ext2_inode_t *directory, ext2_inode_t *file);
 
 static struct ext2_dirent dirent;
-
-//The start of the open file linked list
-volatile ext2_open_files_t *ext2_open_queue;
 
 enum __block_types__
 {
@@ -73,7 +70,7 @@ u32int ext2_read(ext2_inode_t *node, u32int offset, u32int size, u8int *buffer)
 
     //a size of 0 or an offset greater than the node's size is impossible
     if(!size || offset > node->size)
-      return 1; //fail
+      return 0; //fail
 
     //make sure we cap the size
     if(size + offset > node->size)
@@ -86,11 +83,11 @@ u32int ext2_read(ext2_inode_t *node, u32int offset, u32int size, u8int *buffer)
       out = ext2_block_of_set(node, i, (u32int*)(buffer + i * EXT2_BLOCK_SZ));
 
       if(!out)
-        return 1; //fail
+        return 0; //fail
     }
 
     //sucess!
-    return 0;
+    return size;
   }
 }
 
@@ -287,7 +284,8 @@ u32int ext2_doubly_create(u32int *block_locaitions, u32int offset, u32int nblock
 
 }
 
-u32int ext2_inode_entry_blocks(ext2_inode_t *node, ext2_group_descriptor_t *gdesc, u32int *block_locations, u32int blocks_used)
+u32int ext2_inode_entry_blocks(ext2_inode_t *node, ext2_group_descriptor_t *gdesc,
+                               u32int *block_locations, u32int blocks_used)
 {
   u32int blk;
 
@@ -340,8 +338,8 @@ u32int ext2_inode_entry_blocks(ext2_inode_t *node, ext2_group_descriptor_t *gdes
       for(blk = 0; blk < (blocks_used < EXT2_NDIND_BLOCK ? blocks_used : EXT2_NDIND_BLOCK); blk += EXT2_NIND_BLOCK)
       {
         *(block_data + (blk / EXT2_NIND_BLOCK)) = ext2_singly_create(block_locations, EXT2_NDIR_BLOCKS + blk,
-                                                                     (blk + EXT2_NIND_BLOCK) <= blocks_used ? EXT2_NIND_BLOCK : 
-                                                                     blocks_used % EXT2_NIND_BLOCK, gdesc);
+                                                                     (blk + EXT2_NIND_BLOCK) <= blocks_used ?
+                                                                     EXT2_NIND_BLOCK : blocks_used % EXT2_NIND_BLOCK, gdesc);
       }
 
       floppy_write(block_data, EXT2_BLOCK_SZ, *location);
@@ -590,7 +588,7 @@ struct ext2_dirent *ext2_dirent_from_dir(ext2_inode_t *dir, u32int index)
     if(!block)
     {
       kfree(block);
-      return 0;
+      return 0; //error
     }
 
     //loop forever, we will break when we find it or return and exit if we do not
@@ -642,10 +640,9 @@ struct ext2_dirent *ext2_dirent_from_dir(ext2_inode_t *dir, u32int index)
           loop++;
         }else{ //this is the last direct, add 1 to block and reset the offset (i)
           i = 0;
-          b++;
 
           //recalculate the block address
-          ext2_block_of_set(dir, b, block);
+          ext2_block_of_set(dir, ++b, block);
 
           //this dir has not blocks assigned
           if(!block)
@@ -1074,13 +1071,12 @@ u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, u32int
       if(i + dirent.rec_len >= EXT2_BLOCK_SZ)
         break;
 
-      //if the offset (i) + the length of the contents in the struct dirent is greater than what a direcotory can hold, exit function before page fault happens
+      /*if the offset (i) + the length of the contents in the struct dirent is 
+       * greater than what a direcotory can hold, expand the directory*/
       if(b * EXT2_BLOCK_SZ + i + dirent.rec_len >= parent_dir->size)
-      {
         //expand parent_dir by one block
         if(ext2_expand(parent_dir, EXT2_BLOCK_SZ))
           return 1; //failed, out of directory left over space
-      }
 
     }
 
@@ -1296,7 +1292,6 @@ u32int ext2_remove_inode_entry(ext2_inode_t *node)
   return 0;
 }
 
-//TODO, when deleting, everything works, make it remove dirent from parent dir
 u32int ext2_delete(ext2_inode_t *parent_dir, ext2_inode_t *node)
 {
   ext2_superblock_t *sblock;  
@@ -1312,113 +1307,16 @@ u32int ext2_delete(ext2_inode_t *parent_dir, ext2_inode_t *node)
   }
 
   //remove the inode entry from the inode table and the inode bitmap
-  ext2_remove_inode_entry(node);
+  if(ext2_remove_inode_entry(node))
+    return 1; //error
 
-  //remove the singly, doubly, and triply block locations from the block bitmap, allong with the block_locs
-  u32int *block_locs, nblocks, *blocks_to_rm, i;
-  nblocks = ((node->size - 1) / EXT2_BLOCK_SZ) + 1;
+  //free the node's blocks
+  if(ext2_free_data_blocks(parent_dir, node))
+    return 1; //errror
 
-  block_locs = ext2_block_locs(node);
-
-  /*(EXT2_N_BLOCKS - EXT2_NDIR_BLOCKS) are the singly, doubly, and triply block locations in the
-   * inode structure, nblocks are the data blocks that must be freed, we compress these two block
-   * block locations into one for efficientcy*/
-  blocks_to_rm = (u32int*)kmalloc(sizeof(u32int) * ((EXT2_N_BLOCKS - EXT2_NDIR_BLOCKS) + nblocks));
-  
-  for(i = 0; i < EXT2_N_BLOCKS - EXT2_NDIR_BLOCKS; i++)
-    *(blocks_to_rm + i) = *(node->blocks + EXT2_NDIR_BLOCKS + i);
- 
-  memcpy(blocks_to_rm + i, block_locs, sizeof(u32int) * nblocks);
-
-  //when the for loop exits, i + nblocks will equal the number of blocks that have been saved in blocks_to_rm
-  if(ext2_free_blocks(blocks_to_rm, i + nblocks))
-  {
-    kfree(block_locs);
-    kfree(blocks_to_rm);
-
-    return 1; //there was some sort of error
-  }
-
-  //increment the number of free inodes and blocks freed
-  gdesc->free_inodes++;
-  gdesc->free_blocks += nblocks;
-
-  floppy_write((u32int*)gdesc, sizeof(ext2_group_descriptor_t), gdesc->gdesc_location);
-
-  //remove the file's dirent in the parent directory
-  u32int b, *block, location;
-
-  //TODO make this search by chunk not block
-  block = (u32int*)kmalloc(EXT2_BLOCK_SZ);
-
-  /*In this section, we find a valid offset (i) and block number (b)
-   * to an open dirent space
-   *
-   * length - 1 because if length == EXT2_BLOCK_SZ, there should be only one
-   * block checked, but w/o that -1, 2 will be checked */
-  for(b = 0; b <= (u32int)((parent_dir->size - 1) / EXT2_BLOCK_SZ); b++)
-  {
-    //reset i
-    i = 0;
-    location = ext2_block_of_set(parent_dir, b, block);
-
-    if(!location)
-    {
-      kfree(block_locs);
-      kfree(blocks_to_rm);
-      return 1; //error
-    }
-    
-    //this dir has not blocks assigned
-    if(!block)
-    {
-
-      kfree(block);
-      kfree(block_locs);
-      kfree(blocks_to_rm);
-      return 1; //error
-    }
-
-    //loop until we hit the end of the current block or get an our dirent
-    while(*(u32int*)((u8int*)block + i) != node->inode && 
-          *(u8int*)((u8int*)block + i + sizeof(dirent.ino) + sizeof(dirent.rec_len) + sizeof(dirent.name_len)) != node->type)
-    {
-      //increase i with the rec_len that we get by moving fileheader sizeof(dirent.ino) (4 bytes) and reading its value
-      i += *(u16int*)((u8int*)block + i + sizeof(dirent.ino));
-
-      //if the offset (i) + the length of the contents in the struct dirent is greater than what a block can hold, exit and go to new block
-      if(i + dirent.rec_len >= EXT2_BLOCK_SZ)
-        break;
-
-      //if the offset (i) + the length of the contents in the struct dirent is greater than what a direcotory can hold, exit function before page fault happens
-      if(b * EXT2_BLOCK_SZ + i + dirent.rec_len >= parent_dir->size)
-      {
-        //expand parent_dir by one block
-        if(ext2_expand(parent_dir, EXT2_BLOCK_SZ))
-          return 1; //failed, out of directory left over space
-      }
-
-    }
-
-    //if i is a valid offset, do not go to a new block, just exit
-    if(*(u32int*)((u8int*)block + i) == node->inode && 
-       *(u8int*)((u8int*)block + i + sizeof(dirent.ino) + sizeof(dirent.rec_len) + sizeof(dirent.name_len)) == node->type)
-      break;
-
-  }
-
-  u32int rec_len = *(u16int*)((u8int*)block + i + sizeof(dirent.ino));
-
-  /*shifts the dirent data in the directory over the one we want to delete, thus deleting its trails
-   * the "-1 *" is used to show shift to the left */
-  shiftData((u8int*)block + i + rec_len, -1 * rec_len, EXT2_BLOCK_SZ - i - rec_len);
-
-  //write the changed block
-  floppy_write(block, EXT2_BLOCK_SZ, location);
-
-  kfree(block);
-  kfree(block_locs);
-  kfree(blocks_to_rm);
+  //remove the node's dirent
+  if(ext2_remove_dirent(parent_dir, node))
+    return 1; //error
 
   //sucess!
   return 0;
@@ -2008,92 +1906,6 @@ u32int *ext2_chunk_data(u32int *blocks, u32int nblocks, u32int chunk, u32int *ou
 
 }
 
-u32int *ext2_open(ext2_inode_t *node, u8int read, u8int write)
-{
-  u32int *block_locs, *data, *chunk_data, *chunk_size, offset = 0, i = 0, nblocks, permission = 0;
-
-  if(read && write)
-    permission = EXT2_OPEN_RW;
-  else if(read && !write)
-    permission = EXT2_OPEN_R;
-  else if(!read && write)
-    permission = EXT2_OPEN_W;
-  else //if we do not want to read nor write to it, what is the point?
-    return 0;
-
-  if(read)
-  {
-    chunk_size = (u32int*)kmalloc(sizeof(u32int));
-    data = (u32int*)kmalloc(node->size);
-
-    //calculates the number of blocks in the file and also their locations
-    nblocks = ((node->size - 1) / EXT2_BLOCK_SZ) + 1;
-    block_locs = ext2_block_locs(node);
-
-    do
-    {
-      //gets chunk number 'i'
-      chunk_data = ext2_chunk_data(block_locs, nblocks, i, chunk_size);
-      i++;
-
-      //if there is data copy it over and increment offset by its size
-      if(chunk_data)
-      {
-        memcpy(data + offset, chunk_data, *chunk_size);
-
-        offset += *chunk_size;
-        kfree(chunk_data);
-      }
-    }while(chunk_data);
-
-    kfree(chunk_size);
-    kfree(block_locs);
-  }else if(!read && write)
-    data = 0;
-
-  ext2_open_files_t *open_file, *prev;
-  open_file = (ext2_open_files_t*)kmalloc(sizeof(ext2_open_files_t));
-
-  open_file->inode = node->inode;
-  open_file->permissions = permission;
-  open_file->data = data;
-  open_file->next = 0;
-  
-  //place the typedef 'open_file' at the very end of the list
-  prev = (ext2_open_files_t*)ext2_open_queue;
-  while(prev->next)
-    prev = prev->next;
-
-  prev->next = open_file;
-
-  return data;
-}
-
-u32int ext2_close(ext2_inode_t *node)
-{
-  ext2_open_files_t *open_file, *prev;
-  
-  open_file = (ext2_open_files_t*)ext2_open_queue;
-
-  //finds the open node in the open files list
-  while(open_file->inode != node->inode && open_file)
-  {
-    prev = open_file;
-    open_file = open_file->next;
-  }
-  //the node must not be open, we did not find it
-  if(!open_file)
-    return 1; //error
-
-  //free the open file's data
-  kfree(open_file->data);
-
-  //remove the entry from the list
-  prev->next = open_file->next;
-
-  kfree(open_file);
-}
-
 void ext2_sblock_set_data(ext2_superblock_t *data, u32int reserved_blocks, u32int sblock_location,
                           u32int error_handling, u32int sblock_group_num, char *partition_name)
 {
@@ -2359,17 +2171,33 @@ static char *__get_name_of_file__(ext2_inode_t *directory, ext2_inode_t *file)
 
 }
 
-static char *__get_name_of_dir__(ext2_inode_t *directory, ext2_inode_t *inode_table) 
+char *ext2_get_name_of_dir(ext2_inode_t *directory) 
 {
+  ext2_superblock_t *sblock;  
+  ext2_group_descriptor_t *gdesc;
+
+  if(!ext2_g_sblock || !ext2_g_gdesc)
+  {
+    if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
+      return 0; //error
+  }else{
+    sblock = ext2_g_sblock;
+    gdesc = ext2_g_gdesc;
+
+  }
+
+  //get the inode table
+  ext2_inode_t *inode_table;
+
+  if(!ext2_g_inode_table)
+  {
+    inode_table = ext2_get_inode_table(gdesc);
+    ext2_g_inode_table = inode_table;
+  }else
+    inode_table = ext2_g_inode_table;
 
   if(directory->inode == ext2_root->inode)
-  {
-    char *name;
-    name = (char*)kmalloc(2);
-    *(name) = '/';
-    *(name + 1) = 0;
-    return name;
-  }
+    return ext2_root_name;
 
   struct ext2_dirent *dirent;
   //get the inode of the parent, always the second index (1) starting from 0
@@ -2387,6 +2215,7 @@ static char *__get_name_of_dir__(ext2_inode_t *directory, ext2_inode_t *inode_ta
     return 0;
   }
 
+  //now that we have the parent directory's data, scan through it for our directory
   do
   {
     dirent = ext2_dirent_from_dir_data(parent, i, block);
@@ -2416,140 +2245,154 @@ static char *__get_name_of_dir__(ext2_inode_t *directory, ext2_inode_t *inode_ta
   return name;
 }
 
-u32int ext2_set_current_dir(ext2_inode_t *directory)
+u32int ext2_free_data_blocks(ext2_inode_t *directory, ext2_inode_t *node)
 {
-  kfree(ext2_path); //frees the contents of the char array pointer, ext2_path
-  
-  ext2_current_dir_inode = directory->inode; //sets the value of the dir inode to the cuurentDir_inode
-
-  //the root's inode is always 1, after the mother root's inode of 0
-  if(directory->inode == 1)
-  {
-    //keep it simple, if root is the only directory, copy its name manually
-    ext2_path = (char*)kmalloc(2); //2 chars beign "/" for root and \000
-  
-    *(ext2_path) = '/';
-    *(ext2_path + 1) = 0; //added \000 to the end
-    
-    //sucess!
-    return 0;
-  }
-
   ext2_superblock_t *sblock;  
-  ext2_group_descriptor_t *gdesc;
+  ext2_group_descriptor_t *gdesc; 
 
   if(!ext2_g_sblock || !ext2_g_gdesc)
   {
     if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
-      return 0; //error
+      return 1; //error
   }else{
     sblock = ext2_g_sblock;
     gdesc = ext2_g_gdesc;
   }
 
-  ext2_inode_t *inode_table;
+  //remove the singly, doubly, and triply block locations from the block bitmap, allong with the block_locs
+  u32int *block_locs, nblocks, *blocks_to_rm, i;
+  nblocks = ((node->size - 1) / EXT2_BLOCK_SZ) + 1;
 
-  if(!ext2_g_inode_table)
-  {
-    inode_table = ext2_get_inode_table(gdesc);
-    ext2_g_inode_table = inode_table;
-  }else
-    inode_table = ext2_g_inode_table;
+  block_locs = ext2_block_locs(node);
+
+  /*(EXT2_N_BLOCKS - EXT2_NDIR_BLOCKS) are the singly, doubly, and triply block locations in the
+   * inode structure, nblocks are the data blocks that must be freed, we compress these two block
+   * block locations into one for efficientcy*/
+  blocks_to_rm = (u32int*)kmalloc(sizeof(u32int) * ((EXT2_N_BLOCKS - EXT2_NDIR_BLOCKS) + nblocks));
   
-  ext2_inode_t *node;
-  node = directory;
-  ext2_inode_t *copy;
-  
-  u32int count = 0, totalCharLen = 0, allocated_names = 15, *name_locs;
+  for(i = 0; i < EXT2_N_BLOCKS - EXT2_NDIR_BLOCKS; i++)
+    *(blocks_to_rm + i) = *(node->blocks + EXT2_NDIR_BLOCKS + i);
+ 
+  memcpy(blocks_to_rm + i, block_locs, sizeof(u32int) * nblocks);
 
-  name_locs = (u32int*)kmalloc(allocated_names * sizeof(u32int));
-
-  char *name;
-
-  /*starts from the current directory, goes backwards by getting the node
-   * of the parent (looking up the data in ".." dir), adding its namelen
-   * to the u32int totalCharLen and getting its parent, etc.
-   *
-   *once the parent is the same as the child, that only occurs with the
-   * root directory, so we should exit */
-  do
+  //when the for loop exits, i + nblocks will equal the number of blocks that have been saved in blocks_to_rm
+  if(ext2_free_blocks(blocks_to_rm, i + nblocks))
   {
-    copy = node;
+    kfree(block_locs);
+    kfree(blocks_to_rm);
 
-    name = __get_name_of_dir__(copy, inode_table);
-
-    if(copy)
-    {
-      //+1 being the preceding "/" to every dir that will be added later
-      totalCharLen = totalCharLen + strlen(name) + 1; 
-      *(name_locs + count) = *(u32int*)&name;
-      count++;
-    }
-
-    if(count == allocated_names)
-    {
-      allocated_names *= 2;
-
-      u32int *tmp;
-      tmp = (u32int*)kmalloc(allocated_names);
-      memcpy(tmp, name_locs, allocated_names / 2);
-      
-      kfree(name_locs);
-      name_locs = tmp;
-    }
-
-    node = ext2_file_from_dir(copy, "..");
+    return 1; //there was some sort of error
   }
-  while(node->inode != copy->inode);
-  
-  /*we have the root dir
-   * that does not need a preceding "/" because we will get "//"
-   * which is ugly and not right. Also the "/" before the very first
-   * directory should not be there because it will look ugly with
-   * the root "/". So the total totalCharLen should be
-   * -2 to count for both of those instances*/
-  totalCharLen -= 2;
-  
-  ext2_path = (char*)kmalloc(totalCharLen + 1); //+1 is for the \000 NULL terminating 0
-  //~ strcpy(ext2_path, "/");
-  
-  //reset the copy back to the top (current directory)
-  copy = directory;
-  
-  u32int i, charsWritten = 0, nameLen;
-  for(i = 0; i < count; i++)
-  {
-    nameLen = strlen(*(name_locs + i));
-  
-    /* i < count - 2 is a protection from drawing the preceding "/"
-     * on the first two dirs in the ext2_path (root and one more). The first two dirs will
-     * allways be drawn the last two times (we write the dir names to ext2_path from
-     * current dir (top) to root (bottom)), thus if i is less
-     * than the count - 2, that means we are not yet at the last
-     * two drawing and it is ok to have a precedding "/" */
-    if(copy->inode != ext2_root->inode && i < count - 2)
-    {
-      memcpy(ext2_path + (totalCharLen - charsWritten - nameLen - 1), "/", 1);
-      memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), *(name_locs + i), nameLen);
-      charsWritten = charsWritten + nameLen + 1; //increment charsWritten with the "/<name>" string we just wrote, +1 is that "/"
-    }else{
-      memcpy(ext2_path + (totalCharLen - charsWritten - nameLen), *(name_locs + i), nameLen);
-      charsWritten = charsWritten + nameLen; //increment charsWritten with the "/" string we just wrote
-    }
-  
-    //find the parent of copy
-    node = ext2_file_from_dir(copy, "..");
-    copy = node;
-  }
-  
-  *(ext2_path + totalCharLen) = 0; //added \000 to the end of ext2_path
-  
-  //~ k_printf("\n\nEXT2_PATH is: %s\n", ext2_path);
-  
-  kfree(name_locs);
+
+  //increment the number of free inodes and blocks freed, update the new gdesc
+  gdesc->free_inodes++;
+  gdesc->free_blocks += nblocks;
+
+  floppy_write((u32int*)gdesc, sizeof(ext2_group_descriptor_t), gdesc->gdesc_location);
+
+  kfree(block_locs);
+  kfree(blocks_to_rm);
 
   //sucess!
   return 0;
+}
+
+u32int ext2_remove_dirent(ext2_inode_t *directory, ext2_inode_t *node)
+{
+  if(directory->type == EXT2_DIR) //just to check if the input node is a directory
+  {
+
+    struct ext2_dirent *dirent2;
+    dirent2 = (struct ext2_dirent*)kmalloc(sizeof(struct ext2_dirent));
+      
+    u32int i = 0, loop = 0, b = 0;
+
+    //allocate a buffer to store a directory's data
+    u8int *buf, **split, *dir_block;
+    buf = (u8int*)kmalloc(directory->size);
+    split = (u8int**)kmalloc(directory->size / EXT2_BLOCK_SZ);
+
+    ext2_read(directory, 0, directory->size, buf);
+
+    //split the buffer into 1024 byte sections
+    for(i = 0; i < directory->size / EXT2_BLOCK_SZ; i++)
+    {
+      *(split + i) = (u8int*)kmalloc(EXT2_BLOCK_SZ);
+      memcpy(*(split + i), buf + i * EXT2_BLOCK_SZ, EXT2_BLOCK_SZ);
+    }
+
+    //we do not need buf anymore, free it
+    kfree(buf);
+
+    //set dir_block to the first block of data
+    dir_block = *split;
+
+    if(!dir_block)
+      return 1; //error
+
+    /*this section looks through the direcetory and finds the location
+     * of the dirent of the file that we want to remove */
+    do
+    {
+
+      //if we found the file in the directory's contents
+      if(*(u32int*)(*(u32int*)dir_block + i) == node->inode)
+      {
+
+        dirent2->ino = *(u32int*)(*(u32int*)dir_block + i);
+        dirent2->rec_len = *(u16int*)(*(u32int*)dir_block + i + sizeof(dirent2->ino));
+
+        break;
+
+      }else{
+
+        //if the next rec_length is 0, then we are currently at the last dirent, else increase the offset (i)
+        if(*(u16int*)(*(u32int*)dir_block + i + sizeof(dirent2->ino)))
+          /*increase i with the rec_len that we get by moving fileheader sizeof(dirent2->ino)
+           * (4 bytes) and reading its value*/
+          i += *(u16int*)(*(u32int*)dir_block + i + sizeof(dirent2->ino));
+        else{ //this is the last direct, add 1 to block and reset the offset (i)
+          i = 0;
+          b++;
+
+          if(b > (u32int)((directory->size - 1) / EXT2_BLOCK_SZ))
+            //error, block exceds the number of blocks dirNode has
+            return 1;
+
+          //recalculate the dir_block
+          dir_block = *(split + b);
+
+          if(!dir_block)
+            return 1; //error
+
+        }
+
+      }
+
+    }
+    while(1);
+
+
+    /*shifts the dirent data in the directory
+     * the "-1 *" is used to show shift to the left */
+    shiftData((u32int*)(*(u32int*)dir_block + i + dirent2->rec_len),
+              -1 * dirent2->rec_len, EXT2_BLOCK_SZ - i - dirent2->rec_len);
+
+    //write the changed block contents to the actual directory
+    ext2_write(directory, b * EXT2_BLOCK_SZ, EXT2_BLOCK_SZ, dir_block);
+
+    //free split, it is not needed anymore
+    for(i = 0; i < directory->size / EXT2_BLOCK_SZ; i++)
+      kfree(*(split + i));
+
+    kfree(split);
+
+    kfree(dirent2);
+
+    //sucess!
+    return 0;
+
+  }
 }
 
 static ext2_inode_t *__create_root__()
@@ -2629,7 +2472,7 @@ u32int ext2_initialize(u32int size)
   {
     k_printf("The floppy disk does not have preexisting data on it\n");
 
-    k_printf("\n\tCreating required ext2 structures, this may take some time\n");
+    k_printf("\n\tFormating required ext2 structures, this may take some time\n");
 
     k_printf("\tCreating the superblock and group descriptor table...");
     ext2_set_block_group(size);
@@ -2661,15 +2504,12 @@ u32int ext2_initialize(u32int size)
       return 1; //error
     k_printf("%cgdone%cw\n");
 
+    //set the name of the root to '/'
+    ext2_root_name = (char*)kmalloc(2);
+    *(ext2_root_name) = '/';
+    *(ext2_root_name + 1) = 0;
+
     ext2_set_current_dir(root); 
-
-    ext2_open_queue = (ext2_open_files_t*)kmalloc(sizeof(ext2_open_files_t));
-
-    //set up the initial queue for the open files list
-    ext2_open_queue->inode = 0;
-    ext2_open_queue->permissions = 0;
-    ext2_open_queue->data = 0;
-    ext2_open_queue->next = 0;
 
     //sucess!
     return 0;
@@ -2693,15 +2533,12 @@ u32int ext2_initialize(u32int size)
     if(!ext2_root)
       return 1; //error
 
+    //set the name of the root to '/'
+    ext2_root_name = (char*)kmalloc(2);
+    *(ext2_root_name) = '/';
+    *(ext2_root_name + 1) = 0;
+
     ext2_set_current_dir(ext2_root); 
-
-    ext2_open_queue = (ext2_open_files_t*)kmalloc(sizeof(ext2_open_files_t));
-
-    //set up the initial queue for the open files list
-    ext2_open_queue->inode = 0;
-    ext2_open_queue->permissions = 0;
-    ext2_open_queue->data = 0;
-    ext2_open_queue->next = 0;
 
     //sucess!
     return 0;

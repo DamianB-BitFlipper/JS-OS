@@ -51,36 +51,18 @@ typedef struct fs_node *(*finddir_type_t)(struct fs_node*, char *name);
 #define BLOCKS_DOUBLY     65536       //65536 (256 * 256) KB (64 MB)
 #define BLOCKS_TRIPLY     16777216    //16777216 (256 * 256 * 256) KB (16 GB)
 
-//~ typedef struct fs_singly
-//~ {
-  //~ u32int blocks[256];
-//~ } fs_singly_t;
-//~ 
-//~ typedef struct fs_doubly
-//~ {
-  //~ fs_singly_t singly[256];
-//~ } fs_doubly_t;
-//~ 
-//~ typedef struct fs_triply
-//~ {
-  //~ fs_doubly_t doubly[256];
-//~ } fs_triply_t;
-
 typedef struct fs_node
 {
   char name[128];
   u32int mask;              //the permissions mask.
   u32int uid;               //the owning user.
   u32int gid;               //the owning group.
-  u32int flags;             //includes the node type. See #defines above.
+  u32int flags;             //includes the node type (file, directory, etc.). See #defines above.
   u32int inode;             //this is device-specific - provides a way for a filesystem to identify files.
   u32int length;            //size of the file, in bytes.
   u32int impl;              //an implementation-defined number.
 
   u32int blocks[12];        //Data blocks (1 KB each)
-  //~ fs_singly_t *singly;      //pointer to a singly indirect data set
-  //~ fs_doubly_t *doubly;      //pointer to a doubly indirect data set
-  //~ fs_triply_t *triply;      //pointer to a triply indirect data set
   
   u32int *singly;
   u32int *doubly;
@@ -121,16 +103,13 @@ struct dirent *readdir_fs(fs_node_t *node, u32int index);
 fs_node_t *finddir_fs(fs_node_t *node, char *name);
 
 /*creates a directory in the ramdisk filesystem*/
-fs_node_t *createDirectory(fs_node_t *parentNode, char *name);
+fs_node_t *vfs_createDirectory(fs_node_t *parentNode, char *name);
 
 /*creates a file in the ramdisk filesystem*/
-fs_node_t *createFile(fs_node_t *parentNode, char *name, u32int size);
+fs_node_t *vfs_createFile(fs_node_t *parentNode, char *name, u32int size);
 
 /*moves a file to a directory*/
 int addFileToDir(fs_node_t *dirNode, fs_node_t *fileNode);
-
-/*sets the current directory to a input directory and gets sets the path char array*/
-int setCurrentDir(fs_node_t *directory);
 
 /*returns the value of an open inode value for a file, directory, etc. */
 int findOpenNode();
@@ -146,7 +125,10 @@ u32int blockSizeAtIndex(u32int fileSize, u32int blockNum, u32int offset);
 /*returns the pointer to the correct block in the block hierarchy of a file node*/
 u32int *block_of_set(fs_node_t *node, u32int block_number);
 
-/*looks up and returns a file descriptor if it exitsts*/
-file_desc_t *look_up_fdesc(fs_node_t *node);
+/*removes a dirent from a vfs directory*/
+u32int vfs_remove_dirent(fs_node_t *directory, fs_node_t *node);
+
+/*free the data blocks of a node*/
+u32int vfs_free_data_blocks(fs_node_t *directory, fs_node_t *node);
 
 #endif

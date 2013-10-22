@@ -100,11 +100,6 @@
 //number of blocks in the inode typedef
 #define EXT2_N_BLOCKS        (EXT2_TIND_BLOCK + 1)   //total number of block (15)
 
-//Ext2 open file permisions
-#define EXT2_OPEN_W          0b01
-#define EXT2_OPEN_R          0b10
-#define EXT2_OPEN_RW         0b11
-
 ///Inode mode values
 enum EXT2_IMODE
 {
@@ -239,14 +234,6 @@ struct ext2_dirent
   char *name;           //filename, remember to kmalloc this to give it an address, or else it will page fault
 };
 
-typedef struct ext2_open_files
-{
-  u32int inode;
-  u8int permissions;
-  u32int *data;
-  struct ext2_open_files *next;
-}ext2_open_files_t;
-
 //adding a hardlink to a directory is exactly the same as adding a file to a directory, so I just make an alias
 #define ext2_add_hardlink_to_dir(parent_dir, file, filename)    (ext2_add_file_to_dir(parent_dir, file, EXT2_HARDLINK, filename))
 
@@ -299,9 +286,6 @@ u32int ext2_initialize(u32int size);
 /*find a dirent by index from a directory*/
 struct ext2_dirent *ext2_dirent_from_dir(ext2_inode_t *dir, u32int index);
 
-/*set the current directory the system is in*/
-u32int ext2_set_current_dir(ext2_inode_t *directory);
-
 /*gets a file's inode from a directory*/
 ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name);
 
@@ -315,6 +299,9 @@ ext2_inode_t *ext2_get_inode_table(ext2_group_descriptor_t *gdesc);
 u32int ext2_write_block_of_set(ext2_inode_t *file, u32int block_number, u32int *block_data, u32int size);
 
 /*gets a dirent from a directory with input data*/
+struct ext2_dirent *ext2_dirent_from_dir_data(ext2_inode_t *dir, u32int index, u32int *data);
+
+/*finds an open inode*/
 u32int ext2_find_open_inode(ext2_superblock_t *sblock, ext2_group_descriptor_t *gdesc);
 
 /*returns a list of the blocks the file has*/
@@ -332,12 +319,6 @@ u32int *ext2_get_doubly(u32int location, u32int *nblocks);
 /*returns the blocks in a triply block*/
 u32int *ext2_get_triply(u32int location, u32int *nblocks);
 
-/*opens a file by returning its contents and placing it in the open files list*/
-u32int *ext2_open(ext2_inode_t *node, u8int read, u8int write);
-
-/*closes a file after it is done being used*/
-u32int ext2_close(ext2_inode_t *node);
-
 /*expand a nodes size*/
 u32int ext2_expand(ext2_inode_t *node, u32int increase_bytes);
 
@@ -349,5 +330,14 @@ u32int ext2_delete(ext2_inode_t *parent_dir, ext2_inode_t *node);
 
 /*removes an inode entry in the inode table and flips the bit in the inode bitmap*/
 u32int ext2_remove_inode_entry(ext2_inode_t *node);
+
+/*get the name of an ext2 directory node*/
+char *ext2_get_name_of_dir(ext2_inode_t *directory);
+
+/*removes a dirent from a directory*/
+u32int ext2_remove_dirent(ext2_inode_t *directory, ext2_inode_t *node);
+
+/*frees the data blocks of a node*/
+u32int ext2_free_data_blocks(ext2_inode_t *directory, ext2_inode_t *node);
 
 #endif

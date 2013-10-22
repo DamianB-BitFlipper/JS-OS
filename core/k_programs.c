@@ -305,7 +305,7 @@ enum sort_type
 static enum sort_type sort_type;
 
 /*returns TRUE (1) if file should be listed*/
-static int ls_file_interesting(struct dirent *entry)
+static int ls_file_interesting(struct generic_dirent *entry)
 {
 
   if(really_all_files == TRUE || entry->name[0] != '.' ||
@@ -534,7 +534,7 @@ void ls_print_format()
 }
 
 /*adds a file to the *ls_files block so that file can be printed*/
-void ls_gobble_file(struct dirent *entry)
+void ls_gobble_file(struct generic_dirent *entry)
 {
   if(ls_files_indexed == ls_nfiles) //we need more space in *ls_files!
   {
@@ -620,8 +620,8 @@ void program_ls(char *arguements)
   ls_files_indexed = 0; //currently there are 0 files to print, we have not parced anything yet
   ls_files = (struct ls_file_header*)kmalloc(ls_nfiles * sizeof(struct ls_file_header));
 
-  //get the current dir Inode before we cd into a different directory
-  u32int currentIno = currentDir_inode;
+  //set the current dir befor we can cd into a different directory
+  void *currentDir = ptr_currentDir;
 
   //gets the number of args in the char *arguements
   u32int nArgs = countArgs(arguements);
@@ -636,7 +636,7 @@ void program_ls(char *arguements)
   for(dirPathArg = 0; dirPathArg < nArgs; dirPathArg++)
     /*if the first char in the arg is not a slash (not a flag but the dirPath itself)
      * or, if the first arg is a slash and there is nothing after it, meaning it could be a directory name */
-    if(*(args[dirPathArg]) != '-' || *(args[dirPathArg] + 1) == ' ' || *(args[dirPathArg] + 1) == 0)
+    if(*(args[dirPathArg]) != '-' || *(args[dirPathArg] + 1) == ' ' || !*(args[dirPathArg] + 1))
       break;
 
   u32int work;
@@ -670,17 +670,13 @@ void program_ls(char *arguements)
       //free char **args that holds our individual arguments
       u32int c;
       for(c = 0; c < nArgs; c++)
-      {
         kfree(args[c]);
-      }
 
-      setCurrentDir(&root_nodes[currentIno]);
+      setCurrentDir(currentDir);
 
       //also free all of the name locations
       for(c = 0; c < ls_files_indexed; c++)
-      {
         kfree(ls_files[c].name);
-      }
   
       kfree(ls_files); //frees the block that contained the file names to print
 
@@ -707,16 +703,16 @@ void program_ls(char *arguements)
   //there was no error in the cd'ing process
   if(!work)
   {
-    fs_node_t *fsnode;
+    void *fsnode;
 
-    fsnode = &root_nodes[currentDir_inode];
-    struct dirent *entry = 0;
+    fsnode = currentDir;
+    struct generic_dirent *entry = 0;
     u32int i = 0;
 
     //used only if there is contents in filePath
     //~ u32int gobbled_something = FALSE;
 
-    while(entry = readdir_fs(fsnode, i))
+    while(entry = f_readdir(fsnode, i))
     {
       /*if there is a filePath in the args, then only the files with that
        * name will be printed, regardless of the flags, if the first
@@ -733,16 +729,12 @@ void program_ls(char *arguements)
            * add the file name to the list of files to print at the end */
           ls_gobble_file(entry);
 
-          //~ gobbled_something = TRUE;
         }
-      }else{
+      }else
         //see if the file name is of any interest, regarding which flags are passed
         if(ls_file_interesting(entry) == TRUE)
-        {
           //add the file name to the list of files to print at the end
           ls_gobble_file(entry);
-        }
-      }
 
       i++;
     }
@@ -762,17 +754,13 @@ void program_ls(char *arguements)
   //free char **args that holds our individual arguments
   u32int c;
   for(c = 0; c < nArgs; c++)
-  {
     kfree(args[c]);
-  }
 
-  setCurrentDir(&root_nodes[currentIno]);
+  setCurrentDir(currentDir);
 
   //also free all of the name locations
   for(c = 0; c < ls_files_indexed; c++)
-  {
     kfree(ls_files[c].name);
-  }
   
   kfree(ls_files); //frees the block that contained the file names to print
 
@@ -780,6 +768,9 @@ void program_ls(char *arguements)
    * path directory in the arg */
   kfree(dirPath);
   kfree(filePath);
+
+  //sucess!
+  return;
 }
 
 ///**************************LS function*****************************///
@@ -789,11 +780,12 @@ int program_cd(char *arguements)
   int argLen = strlen(arguements);
   int i = 0, originalI = 0;
 
-  int isInitDirRoot = FALSE, initDir = currentDir_inode;
+  int isInitDirRoot = FALSE;
+  void *initDir = ptr_currentDir;
 
   char *cd;
 
-  fs_node_t *dir, *initial_dir;
+  FILE *dir;
 
   do
   {
@@ -801,21 +793,16 @@ int program_cd(char *arguements)
 
     /*Parcing the arguments*/
     for(i; i < argLen; i++)
-    {
       if(*(arguements + i) == '/')
       {
-        if(i != 0) //if the first character is "/" it is ok to not break and continue
-        {
+        if(i) //if the first character is "/" it is ok to not break and continue
           break;
-        }else{
-          //~ initial_dir = fs_root;
-          //~ setCurrentDir(initial_dir);
+        else{
           isInitDirRoot = TRUE;
           i++;
           break;
         }
       }
-    }
 
     /*(i - originalI) is the length of the portion after the portion
      * we just processed. IE: arguments = "./poop", when we process
@@ -828,40 +815,35 @@ int program_cd(char *arguements)
     *(cd + (i - originalI)) = 0; //adds the \000 at the end
 
     if(i == 1 && isInitDirRoot == TRUE)
-    { //the directory is "/" so we are starting in the root instead of currentDir
-      dir = fs_root;
+    {
+      //the directory is "/" so we are starting in the root instead of currentDir
+      dir = __open__(fs_root, "/", 0, FALSE);
       isInitDirRoot = FALSE;
     }else{
-      dir = finddir_fs(&root_nodes[currentDir_inode], cd);
+      dir = f_finddir(ptr_currentDir, cd);
       i++;
     }
 
-    if(dir != 0 && dir->flags == FS_DIRECTORY) //if dir exists and is a directory
+    if(dir && dir->node_type == TYPE_DIRECTORY) //if dir exists and is a directory
     {
-      //if(dir == fs_root) //if the dir is root, increment originalI by strlen so next dir doesn't end up "/dir" istead of "dir"
-      //{
-      ////~ i++;
-      ////~ originalI = originalI + strlen(dir->name);
-      //}else{
-      //originalI = i;
-
-      //}
 
       setCurrentDir(dir);
       kfree(cd);
 
     }else{
-      if(*(cd) != 0) //if the string cd has contents, usually if the char *arguements is "//" for some reason, cd will have no content (begins with a \000)
-      {
+      /*if the string cd has contents, usually if the char *arguements is "//"
+       * for some reason, cd will have no content (begins with a \000)*/
+      if(*cd)
         k_printf("In \"%s\", \"%s\" is not a directory\n", arguements, cd);
-      }
+
       kfree(cd);
 
       /*if we have an initial (starting point) dir, set the current dir
        * to that dir as it was before the user typed an incorrect path name */
-      setCurrentDir(&root_nodes[initDir]);
+      setCurrentDir(initDir);
 
-      //~ break;
+      //close our file desc opened with f_finddir
+      f_finddir_close(dir);
 
       //failure!
       return 1;
@@ -869,15 +851,18 @@ int program_cd(char *arguements)
   }
   while(i < argLen);
 
+  //close our file desc opened with f_finddir
+  f_finddir_close(dir);
+
   //success!
   return 0;
 
 }
 
-//SOME SORT OF PAGE FAULT BUG. :(
 u32int program_cp(char *arguments)
 {
-  u32int currentIno = currentDir_inode, error = FALSE;
+  u32int error = FALSE;
+  void *initDir = ptr_currentDir;
 
   u32int nArgs = countArgs(arguments);
 
@@ -895,36 +880,30 @@ u32int program_cp(char *arguments)
 
   cdFormatArgs(args[0], dirPath, filePath);
 
-  fs_node_t *src;
+  FILE *src;
 
   //save the directory inode of the source file, may come in use later
-  u32int old_currentDir = currentDir_inode;
+  void *old_currentDir = ptr_currentDir;
 
-  src = finddir_fs(&root_nodes[currentDir_inode], filePath); //gets the structure of the first argument input
+  src = f_finddir(ptr_currentDir, filePath); //gets the structure of the first argument input
 
   if(src) //if there is a file with the name of the first argument
   {
-    setCurrentDir(&root_nodes[currentIno]); //sets the current dir back to the original
+    setCurrentDir(initDir); //sets the current dir back to the original
 
     s32int i = 0, length = strlen(args[1]), count = -1;
 
     for(i; i < length; i++)
-    {
       /* using the following, after it is done executing, the integer
        * count will be equeal to the number of character before and
        * including the last "/" in the destination string of input */
       if(*(args[1] + i) == '/') //for every "/" in the dest of input, increment count to i
-      {
         count = i;
-      }
-    }
 
-    //~ char destPath[count + 2]; //the extra +1 is for the \000 and the other 1 is because i, and thus count start from 0 on the first element
     char *destPath = (char*)kmalloc(count + 2); //the extra +1 is for the \000 and the other 1 is because i, and thus count start from 0 on the first element
     memcpy(destPath, args[1], count + 1);
     *(destPath + count + 1) = 0; //add \000 to the end
 
-    //~ char restPath[length - count];
     char *restPath = (char*)kmalloc(length - count);
     memcpy(restPath, args[1] + count + 1, length - count - 1);
     *(restPath + length - count - 1) = 0; //add the \000 to the end
@@ -938,108 +917,111 @@ u32int program_cp(char *arguments)
 
     u32int b;
 
-    fs_node_t *restSrc;
-    restSrc = finddir_fs(&root_nodes[currentDir_inode], restPath);
+    FILE *restSrc;
+    restSrc = f_finddir(ptr_currentDir, restPath);
 
     /*if the rest of the user text after the final "/" is a directory,
      * go to that directory and then create the file */
-    if(restSrc && restSrc->flags == FS_DIRECTORY)
+    if(restSrc && restSrc->node_type == TYPE_DIRECTORY)
     {
       //cd to the directory to place the new file
       program_cd(restPath);
 
-      //create the new file
-      fs_node_t *copiedFile;
-      copiedFile = createFile(&root_nodes[currentDir_inode], src->name, src->length);
+      //create the new file empty file or delete an existing one
+      FILE *copiedFile;
+      copiedFile = f_open(src->name, ptr_currentDir, "wd");
 
-      //open the files to copy to and the new one
-      FILE *orig = open_fs(src->name, &root_nodes[old_currentDir], "r");
-      FILE *new = open_fs(copiedFile->name, &root_nodes[currentDir_inode], "w");
+      //open the file to copy from
+      FILE *orig = f_open(src->name, old_currentDir, "r");
 
       //copy the contents into a buffer
       u8int *data;
-      data = (u8int*)kmalloc(src->length);
-      read_fs(src, 0, src->length, data);
+      data = (u8int*)kmalloc(orig->size);
+      f_read(orig, 0, orig->size, data);
 
       //write the data
-      write_fs(copiedFile, 0, src->length, data);
+      f_write(copiedFile, 0, orig->size, data);
 
       //close the files
+      close_fs(copiedFile);
       close_fs(orig);
-      close_fs(new);
       
       //free allocations
       kfree(data);
 
     }else if(*restPath) //if there are contents after the last "/", make the file with that name
     {
-      fs_node_t *copiedFile;
-      copiedFile = createFile(&root_nodes[currentDir_inode], restPath, src->length);
+      FILE *copiedFile;
+      copiedFile = f_open(restPath, ptr_currentDir, "wd");
 
       //open the files to copy to and the new one
-      FILE *orig = open_fs(src->name, &root_nodes[old_currentDir], "r");
-      FILE *new = open_fs(copiedFile->name, &root_nodes[currentDir_inode], "w");
+      FILE *orig = f_open(src->name, old_currentDir, "r");
 
       //copy the contents into a buffer
       u8int *data;
-      data = (u8int*)kmalloc(src->length);
-      read_fs(src, 0, src->length, data);
+      data = (u8int*)kmalloc(orig->size);
+      f_read(orig, 0, orig->size, data);
 
       //write the data
-      write_fs(copiedFile, 0, src->length, data);
+      f_write(copiedFile, 0, orig->size, data);
 
       //close the files
+      close_fs(copiedFile);
       close_fs(orig);
-      close_fs(new);
       
       //free allocations
       kfree(data);
 
     }else if(!work) //if the cd function above did not fail, i.e., we should still copy the file, but with its original name
     {
-      fs_node_t *copiedFile;
-      copiedFile = createFile(&root_nodes[currentDir_inode], src->name, src->length);
+      FILE *copiedFile;
+      copiedFile = f_open(src->name, ptr_currentDir, "wd");
 
       //open the files to copy to and the new one
-      FILE *orig = open_fs(src->name, &root_nodes[old_currentDir], "r");
-      FILE *new = open_fs(copiedFile->name, &root_nodes[currentDir_inode], "w");
+      FILE *orig = f_open(src->name, old_currentDir, "r");
 
       //copy the contents into a buffer
       u8int *data;
-      data = (u8int*)kmalloc(src->length);
-      read_fs(src, 0, src->length, data);
+      data = (u8int*)kmalloc(orig->size);
+      f_read(orig, 0, orig->size, data);
 
       //write the data
-      write_fs(copiedFile, 0, src->length, data);
+      f_write(copiedFile, 0, orig->size, data);
 
       //close the files
+      close_fs(copiedFile);
       close_fs(orig);
-      close_fs(new);
       
       //free allocations
       kfree(data);
 
     }
+   
+    //sets the current dir back to the original
+    setCurrentDir(initDir);
 
-    //return the allocations and directory to the original state
-    setCurrentDir(&root_nodes[currentIno]); //sets the current dir back to the original
-
+    //free the allocations
     kfree(destPath);
     kfree(restPath);
+
+    //close restSrc that was oppened by f_finddir
+    f_finddir_close(restSrc);
   }else{
-    setCurrentDir(&root_nodes[currentIno]); //sets the current dir back to the original    
+    //sets the current dir back to the original    
+    setCurrentDir(initDir);
     error = TRUE;
     k_printf("%s: No such file or directory\n", args[0]);
   }
 
   u32int i;
   for(i = 0; i < nArgs; i++)
-  {
     kfree(args[i]);
-  }
 
   kfree(dirPath);
   kfree(filePath);
+
+  //close src that was oppened by f_finddir
+  f_finddir_close(src);
 
   //return either true or false, depending on what u32int error is set to
   return error;
@@ -1056,20 +1038,23 @@ void program_mv(char *arguements)
     return; //if the cp function returned TRUE, something went wrong
 
   program_rm(args[0]);
+
+  //sucess!
+  return;
 }
 
-static u32int find_init_dir;
+static void *find_init_dir;
 
 void find_set_current_dir()
 {
-  find_init_dir = currentDir_inode;
+  find_init_dir = ptr_currentDir;
 }
 
-void find_print_format(char *dirPath, struct dirent *node)
+void find_print_format(char *dirPath, struct generic_dirent *node)
 {
   /*if the current dir is the initial dir set when find was first called,
    * then just print the node->name*/
-  if(find_init_dir == currentDir_inode)
+  if(find_init_dir == ptr_currentDir)
   {
     /*if there is no contents in dirPath, that means
      * the dirPath is the current directory, so print a "./" before
@@ -1086,24 +1071,43 @@ void find_print_format(char *dirPath, struct dirent *node)
     node_name = node->name;
     
     char *place;
-    u32int size = 0;
+    u32int size = 0, nfdescs = 15, i = 0;
 
-    fs_node_t *parent_dir;
+    //TODO store the file descs in an array so we do not need to look them up in the second loop
+
+    FILE *parent_dir, **fdesc_array;
+
+    fdesc_array = (FILE**)kmalloc(sizeof(FILE*) * nfdescs);
+
     //set parent_dir to the current directory
-    parent_dir = &root_nodes[currentDir_inode];
+    parent_dir = f_finddir(ptr_currentDir, 0);
 
     do
     {
+      //if we have no space left in out fdesc_array, reallocate more space
+      if(i == nfdescs)
+        krealloc((u32int*)fdesc_array, sizeof(FILE*) * nfdescs, sizeof(FILE*) * (nfdescs *= 2));
+
       /*increment the string size by the size of the name, +1 is for the '/'
        * following the directory name*/
       size += strlen(parent_dir->name) + 1;
+
+      //add this parent_dir to our array
+      *(fdesc_array + i) = parent_dir;
+
+      //increment i
+      i++;
+
     }
-    while((parent_dir = finddir_fs(parent_dir, ".."))->inode != find_init_dir);
+    while((parent_dir = f_finddir(parent_dir, ".."))->node != find_init_dir);
 
     place = (char*)kmalloc(size + 1); //kmalloc +1 for the \000
 
-    //reset parent_dir to the current directory
-    parent_dir = &root_nodes[currentDir_inode];
+    //reset parent_dir to the current directory, the first element in out array
+    parent_dir = *fdesc_array;
+
+    //reset i back to 0
+    i = 0;
 
     u32int offset = size;
     u32int name_len;
@@ -1114,7 +1118,7 @@ void find_print_format(char *dirPath, struct dirent *node)
       name_len = strlen(parent_dir->name);
       
       //decrease offset by the size of the name, +1 for the '/' followind any directory
-      offset = offset - (name_len + 1);
+      offset -= (name_len + 1);
 
       //copy the name over to place
       memcpy(place + offset, parent_dir->name, name_len);
@@ -1122,11 +1126,17 @@ void find_print_format(char *dirPath, struct dirent *node)
       //add the "/" to the end of the directory
       *(place + offset + name_len) = '/';
     }
-    while((parent_dir = finddir_fs(parent_dir, ".."))->inode != find_init_dir);
+    while((parent_dir = *(fdesc_array + (++i)))->node != find_init_dir);
 
     *(place + size) = 0; //add the \000 to place
 
     k_printf("./%s%s\n", place, node_name);
+
+    //free the files opened by the f_finddir
+    for(i = 0; *(fdesc_array + i); i++)
+      f_finddir_close(*(fdesc_array + i));
+
+    kfree(fdesc_array);
 
   }
     
@@ -1136,7 +1146,7 @@ void find_print_format(char *dirPath, struct dirent *node)
 void program_find(char *arguments)
 {
   //save the initial dir inode
-  u32int initDir = currentDir_inode;
+  void *initDir = ptr_currentDir;
 
   //get the name sizes of the dir and file portions of the char *arguments
   u32int dirCount, fileCount;
@@ -1163,7 +1173,6 @@ void program_find(char *arguments)
   s32int i;
   u32int argLen = strlen(arguments);
   for(i = argLen - 1; i >= strlen(arguments) - fileCount; i--)
-  {
     //there is an asterisc, so cd would have not found the file, but still let it pass
     if(*(arguments + i) == '*')
     {
@@ -1180,20 +1189,17 @@ void program_find(char *arguments)
       *(filePath + fileCount) = 0; //add the \000 at the end
       break;
     }
-  }
 
-  if(work == 0) //there was no error
+  if(!work) //there was no error
   {
-    fs_node_t *fsnode;
+    void *fsnode;
 
-    fsnode = &root_nodes[currentDir_inode];
-    struct dirent *node = 0;
+    fsnode = ptr_currentDir;
+    struct generic_dirent *node = 0;
     i = 0;
 
-    //~ k_printf("\nFILEPATH %s, %d\n", filePath, fileCount);
-
     //go through all of the files in the fsnode directory and compare them
-    while(node = readdir_fs(fsnode, i))
+    while(node = f_readdir(fsnode, i))
     {
       //if the files names are the same (includeing using "*" to represent and characters)
       if(!compareFileName(filePath, node->name))
@@ -1201,10 +1207,6 @@ void program_find(char *arguments)
         /*if there is no contents in dirPath, that means
          * the dirPath is the current directory, so print a "./" before
          * the actual node->name*/
-        //~ if(!*dirPath)
-        //~ k_printf("./%s\n", node->name);
-        //~ else //print the dirPath and then the node->name of the file
-        //~ k_printf("%s%s\n", dirPath, node->name);
         find_print_format(dirPath, node);
       }
 
@@ -1214,7 +1216,7 @@ void program_find(char *arguments)
 
       //TODO make recursive find store inodes so it does not repeat inode searches, avoids hard link problems
       //TODO remove this "brute force" meathod and apply the technique above
-      if(root_nodes[node->ino].flags == FS_DIRECTORY &&
+      if(node->file_type == TYPE_DIRECTORY &&
          strcmp(node->name, ".") &&
          strcmp(node->name, ".."))
       {
@@ -1251,7 +1253,7 @@ void program_find(char *arguments)
     k_printf("%s: not a proper file path\n", arguments);
   }
 
-  setCurrentDir(&root_nodes[initDir]);
+  setCurrentDir(initDir);
 
   kfree(dirPath);
   kfree(filePath);
@@ -1259,7 +1261,7 @@ void program_find(char *arguments)
 
 void program_cat(char *arguments)
 {
-  u32int initDir = currentDir_inode;
+  void *initDir = ptr_currentDir;
 
   s32int dirCount, fileCount;
 
@@ -1272,22 +1274,22 @@ void program_cat(char *arguments)
 
   cdFormatArgs(arguments, dirPath, filePath);
 
-  fs_node_t *file;
+  FILE *file;
 
-  file = finddir_fs(&root_nodes[currentDir_inode], filePath);
+  file = f_finddir(ptr_currentDir, filePath);
 
-  if(file && file->flags == FS_FILE) //if the file exists
+  if(file && file->node_type == TYPE_FILE) //if the file exists and is a file
   {
 
     //open the file
-    FILE *f_file = open_fs(file->name, &root_nodes[currentDir_inode], "r");
+    FILE *f_file = f_open(file->name, ptr_currentDir, "r");
 
     //error in opening of file, exit the if loop
     if(!f_file)
     {
       k_printf("cat: cannot open file: %s", file->name);
 
-      setCurrentDir(&root_nodes[initDir]);
+      setCurrentDir(initDir);
 
       kfree(dirPath);
       kfree(filePath);
@@ -1299,27 +1301,26 @@ void program_cat(char *arguments)
      * size of 1KB (to conserve space) to display any size file
      * We do this by dividing the file into blocks and printing the
      * file's data one block at a time instead of all at once */
-    u32int j, a, next_size, kmalloc_size = blockSizeAtIndex(file->length, 0, 0);
+    u32int j, a, next_size, kmalloc_size = blockSizeAtIndex(file->size, 0, 0);
+    u32int fs_blk_sz = block_size_of_node(file);
     char *buf = (char*)kmalloc(kmalloc_size);
 
-    /* ((u32int)(root_nodes[i].length / BLOCK_SIZE) + 1) calculates the
+    /* ((u32int)(root_nodes[i].length / fs_blk_sz) + 1) calculates the
      * number of blocks this file will take up at a given length */
-    for(a = 0; a < ((u32int)(file->length / BLOCK_SIZE) + 1); a++)
+    for(a = 0; a < ((u32int)(file->size / fs_blk_sz) + 1); a++)
     {
       //assign the content of file to char *buf
-      u32int sz = read_fs(file, a * BLOCK_SIZE, kmalloc_size, buf);
+      u32int sz = f_read(file, a * fs_blk_sz, kmalloc_size, buf);
 
       for (j = 0; j < sz; j++)
         k_putChar(buf[j]);
 
-      //~ k_printf("\n\n%d\n", a);
-
       //if there is a block after this one (we are not at the last block)
-      if(a != (u32int)(file->length / BLOCK_SIZE))
+      if(a != (u32int)(file->size / fs_blk_sz))
       {
 
         //calculate the size to kmalloc for the next block
-        next_size = blockSizeAtIndex(file->length, a + 1, 0);
+        next_size = blockSizeAtIndex(file->size, a + 1, 0);
 
         /*if our current kmalloc'd space is not the same as the next block's,
          * then we have to free the current buf and kmalloc it with the
@@ -1337,57 +1338,66 @@ void program_cat(char *arguments)
       }
     }
 
-  }else if(file->flags == FS_DIRECTORY)
+  }else if(file->node_type == TYPE_DIRECTORY)
     k_printf("%s: Is a directory\n", arguments);
   else
     k_printf("%s: No such file\n", arguments);
 
-  setCurrentDir(&root_nodes[initDir]);
+  setCurrentDir(initDir);
 
   kfree(dirPath);
   kfree(filePath);
+
+  //free the file opened by f_finddir
+  f_finddir_close(file);
 
   return;
 }
 
 void program_rm(char *arguments)
 {
-  u32int initialDir = currentDir_inode, length = strlen(arguments);
+  void *initialDir = ptr_currentDir;
+  u32int length = strlen(arguments);
   s32int a;
 
   //goes from the back, when it breaks, a == the position of the very last "/"
   for(a = length - 1; a >= 0; a--)
-  {
     if(*(arguments + a) == '/')
-    {
       break;
-    }
-  }
 
   if(a < 0) //if the char *arguments had no "/"
   {
-    fs_node_t *isDir;
+    FILE *isDir;
 
-    isDir = finddir_fs(&root_nodes[currentDir_inode], arguments);
+    isDir = f_finddir(ptr_currentDir, arguments);
 
-    if(isDir == 0) //if there is no such file
+    if(!isDir) //if there is no such file
     {
       k_printf("%s: No such file\n", arguments);
 
+      //free the isDir
+      f_finddir_close(isDir);
+
       return;
-    }else if(isDir != 0 && isDir->flags == FS_DIRECTORY) //if the input is just a directory, return error
+    }else if(isDir && isDir->node_type == TYPE_DIRECTORY) //if the input is just a directory, return error
     {
       k_printf("cannot remove '%s': Is a directory\n", arguments);
 
+      //free the isDir
+      f_finddir_close(isDir);
+
       return;
-    }else if(isDir != 0 && isDir->flags == FS_FILE) //if the input is just an existing filename (which is perfectly legal)
+    }else if(isDir && isDir->node_type == TYPE_FILE) 
     {
+      //if the input is just an existing filename (which is perfectly legal)
       a = -1; //set s32int a to be just right for those kmallocs below
+
+      //free the isDir
+      f_finddir_close(isDir);
     }
   }else if(a == length - 1) //if char *arguments ends in "/", therefore no file has been specified
   {
     k_printf("%s: No such file\n", arguments);
-
     return;
   }
 
@@ -1398,111 +1408,31 @@ void program_rm(char *arguments)
 
   cdFormatArgs(arguments, dirPath, filePath);
 
-  fs_node_t *file;
+  FILE *file;
 
-  file = finddir_fs(&root_nodes[currentDir_inode], filePath);
+  file = f_finddir(ptr_currentDir, filePath);
 
-  if(file != 0 && file->flags == FS_FILE) //if the file exists and is a file
-  {
-    struct dirent *dirent2;
-    dirent2 = (struct dirent*)kmalloc(sizeof(struct dirent));
-
-    u32int i = 0, b = 0, dir_block;
-    fs_node_t *dirNode;
-    dirNode = &root_nodes[currentDir_inode];
-
-    //calculate the first dir_block
-    dir_block = (u32int)block_of_set(dirNode, b);
-
-    /*this section looks through the direcetory and finds the location
-     * of the dirent of the file that we want to remove */
-    do
-    {
-
-      //if we found the file in the directory's contents
-      if(*(u32int*)(*(u32int*)dir_block + i) == file->inode)
-      {
-
-        dirent2->ino = *(u32int*)(*(u32int*)dir_block + i);
-        dirent2->rec_len = *(u16int*)(*(u32int*)dir_block + i + sizeof(dirent2->ino));
-
-        break;
-
-      }else{
-
-        //if the next rec_length is 0, then we are currently at the last dirent, else increase the offset (i)
-        if(*(u16int*)(*(u32int*)dir_block + i + sizeof(dirent2->ino)) != 0)
-        {
-          //increase i with the rec_len that we get by moving fileheader sizeof(dirent.ino) (4 bytes) and reading its value
-          i = i + *(u16int*)(*(u32int*)dir_block + i + sizeof(dirent2->ino));
-        }else{ //this is the last direct, add 1 to block and reset the offset (i)
-          i = 0;
-          b++;
-          //recalculate the dir_block
-          dir_block = (u32int)block_of_set(dirNode, b);
-        }
-
-      }
-
-      if(b > (u32int)((dirNode->length - 1) / BLOCK_SIZE))
-      {
-        //error, block exceds the number of blocks dirNode has
-        return;
-      }
-
-    }
-    while(1);
-
-    /*shifts the dirent data in the directory
-     * the "-1 *" is used to show shift to the left */
-    shiftData((u32int*)(*(u32int*)dir_block + i + dirent2->rec_len), -1 * dirent2->rec_len, BLOCK_SIZE - i - dirent2->rec_len);
-
-    //Delete the actual file content
-    u32int c, block;
-    for(c = 0; c < (u32int)((file->length - 1) / BLOCK_SIZE) + 1; c++)
-    {
-      block = (u32int)block_of_set(file, c);
-
-      memset(*(u32int*)block, 0, BLOCK_SIZE);
-      kfree((void*)(*(u32int*)block));
-      //~ memset(file->blocks[c], 0, BLOCK_SIZE);
-      //~ kfree(file->blocks[c]);
-    }
-
-    u32int nameLength = strlen(root_nodes[dirent2->ino].name);
-
-    // Delete the file node.
-    memset(root_nodes[dirent2->ino].name, 0, nameLength); //delete the name
-    root_nodes[dirent2->ino].mask = root_nodes[dirent2->ino].uid = root_nodes[dirent2->ino].gid = 0;
-    root_nodes[dirent2->ino].length = 0;
-    root_nodes[dirent2->ino].inode = 0;
-    root_nodes[dirent2->ino].flags = 0;
-    root_nodes[dirent2->ino].read = 0;
-    root_nodes[dirent2->ino].write = 0;
-    root_nodes[dirent2->ino].readdir = 0;
-    root_nodes[dirent2->ino].finddir = 0;
-    root_nodes[dirent2->ino].impl = 0;
-    root_nodes[dirent2->ino].ptr = 0;
-
-    kfree(dirent2);
-
-  }else if(file != 0 && file->flags == FS_DIRECTORY)
-  {
+  if(file && file->node_type == TYPE_FILE) //if the file exists and is a file
+    f_remove(ptr_currentDir, file);
+  else if(file && file->node_type == TYPE_DIRECTORY)
     k_printf("Cannot remove '%s': Is a directory\n", filePath);
-  }else{
+  else
     k_printf("%s: No such file\n", arguments);
-  }
+
+  //close the file that was opened by f_finddir
+  f_finddir_close(file);
 
   kfree(dirPath);
   kfree(filePath);
 
-  setCurrentDir(&root_nodes[initialDir]);
+  setCurrentDir(initialDir);
 
 }
 
 void program_mkdir(char *arguments)
 {
-  u32int initDir = currentDir_inode, length = strlen(arguments);
+  void *initDir = ptr_currentDir;
+  u32int length = strlen(arguments);
 
   u32int i;
 
@@ -1511,12 +1441,8 @@ void program_mkdir(char *arguments)
    * -1 then that means there were no '/' in the char *arguments */
   s32int count = -1;
   for(i = 0; i < length; i++)
-  {
     if(*(arguments + i) == '/')
-    {
       count = i;
-    }
-  }
 
   if(count != -1) //if count was changed, ie: in the char *arguments there was atleast one "/"
   {
@@ -1533,8 +1459,7 @@ void program_mkdir(char *arguments)
 
     u32int work = program_cd(dirString);
 
-
-    if(work == 0) //if the program_cd() did not return an error
+    if(!work) //if the program_cd() did not return an error
     {
       char *restString;
       restString = (char*)kmalloc(length - count);
@@ -1543,21 +1468,23 @@ void program_mkdir(char *arguments)
       memcpy(restString, arguments + count + 1, length - count - 1);
       *(restString + length - count - 1) = 0; //add the \000 at the end
 
-      fs_node_t *dir;
+      void *dir;
 
-      dir = createDirectory(&root_nodes[currentDir_inode], restString);
+      dir = f_make_dir(ptr_currentDir, restString);
 
-      setCurrentDir(&root_nodes[initDir]);
+      setCurrentDir(initDir);
 
       kfree(restString);
     }
 
     kfree(dirString);
   }else{
-    fs_node_t *dir;
+    void *dir;
 
-    dir = createDirectory(&root_nodes[currentDir_inode], arguments);
+    dir = f_make_dir(ptr_currentDir, arguments);
   }
+  
+  return;
 }
 
 void program_pwd(char *arguments)
@@ -1718,7 +1645,7 @@ static u32int jpg_decode_flags(u32int nArgs, char **args)
   return 0;
 }
 
-u32int jpg_encrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode)
+u32int jpg_encrypt(char *k_scanf_text, FILE *file, u32int current_dir_inode)
 {
   char *passphrase1, *passphrase2;
 
@@ -1764,7 +1691,7 @@ u32int jpg_encrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
 
   u8int *out = 0, *in;
   FILE *orig;
-  orig = open_fs(file->name, &root_nodes[currentDir_inode], "r");
+  orig = f_open(file->name, ptr_currentDir, "r");
 
   //error opening file
   if(!orig)
@@ -1779,28 +1706,28 @@ u32int jpg_encrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
     return 1;
   }
 
-  in = (u8int*)kmalloc(file->length);
-  read_fs(file, 0, file->length, in);
+  in = (u8int*)kmalloc(file->size);
+  f_read(file, 0, file->size, in);
 
-  u32int meta_data_size = 0, file_length = file->length;
+  u32int meta_data_size = 0, file_length = file->size;
   //do the encryption itself
   switch(jpg_algorithm)
   {
   case bitwise:
-    out = en_bitwise_xor(in, file->length, passphrase1);
+    out = en_bitwise_xor(in, file->size, passphrase1);
     break;
   case ceaser_shift:
-    out = en_ceaser_shift(in, file->length, *(u32int*)passphrase1);
+    out = en_ceaser_shift(in, file->size, *(u32int*)passphrase1);
     break;
   case DES_algorithm:
-    out = en_DES_cipher(in, file->length, passphrase1);
+    out = en_DES_cipher(in, file->size, passphrase1);
 
     //this for of DES encryption may change the file size and haze some metadata, account for them
     meta_data_size = sizeof(des_header_t);
-    file_length = file->length + (8 - file->length % 8) + meta_data_size;
+    file_length = file->size + (8 - file->size % 8) + meta_data_size;
     break;
   case vigenere:
-    out = en_vigenere_cipher(in, file->length, passphrase1);
+    out = en_vigenere_cipher(in, file->size, passphrase1);
     break;
   }
 
@@ -1818,11 +1745,8 @@ u32int jpg_encrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
     /*write the encrypted data to the file, adding meta_data_size
      * will account for the extra data added to the file, thus increasing its
      * size, by certain encryption algorithms*/
-    fs_node_t *encrypt_file;
-    encrypt_file = createFile(&root_nodes[currentDir_inode], new_name, file_length);
-
-    //open the file
-    FILE *f_encrypt_file = open_fs(new_name, &root_nodes[currentDir_inode], "w");
+    FILE *f_encrypt_file;
+    f_encrypt_file = f_open(new_name, ptr_currentDir, "wd");
 
     if(!f_encrypt_file)
     {
@@ -1841,7 +1765,7 @@ u32int jpg_encrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
       return 1;      
     }
 
-    write_fs(encrypt_file, 0, file_length, out);
+    f_write(f_encrypt_file, 0, file_length, out);
 
     //free the stuff
     kfree(new_name);
@@ -1879,7 +1803,7 @@ u32int jpg_decrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
 
   u8int *out = 0, *in;
   FILE *orig;
-  orig = open_fs(file->name, &root_nodes[currentDir_inode], "r");
+  orig = f_open(file->name, ptr_currentDir, "r");
 
   //there was an error opening the file
   if(!orig)
@@ -1927,8 +1851,9 @@ u32int jpg_decrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
     /*write the encrypted data to the file,  the subtaction of
      * meta_data_size is because some algorithms have a metadata, but the final
      * encrypted data should not account for it, because it is trimmed of during decryption*/
-    fs_node_t *decrypt_file;
-    decrypt_file = createFile(&root_nodes[currentDir_inode], new_name, file->length - meta_data_size);
+    FILE *f_decrypt_file;
+    f_decrypt_file = f_open(new_name, ptr_currentDir, "wd");
+createFile(&root_nodes[currentDir_inode], new_name, file->length - meta_data_size);
 
     //open and write to the file
     FILE *f_decrypt_file = open_fs(new_name, &root_nodes[currentDir_inode], "w");
