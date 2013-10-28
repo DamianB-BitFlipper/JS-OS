@@ -170,10 +170,10 @@ u32int load_elf(u32int inode, u32int size)
   k_printf("[load_elf] Called for inode %d - %d bytes of data allocated\n", inode, size);
 
   char *elf_name = root_nodes[inode].name;
-  fs_node_t *modulenode;
+  FILE *modulenode;
   
   //tests if this module exist in the root
-  if(!(modulenode = finddir_fs(fs_root, elf_name)))
+  if(!(modulenode = f_finddir(fs_root, elf_name)))
     return 1;
   else{ //the module exists
     k_printf("[load_elf] Directory entry read correctly\n");
@@ -189,16 +189,18 @@ u32int load_elf(u32int inode, u32int size)
     
     //open the file
     FILE *modulenode_file;
-    modulenode_file = open_fs(modulenode->name, fs_root, "r");
+    modulenode_file = f_open(modulenode->name, fs_root, "r");
 
     //if there was an opening error
     if(!modulenode_file)
     {
       kfree(modulebuffer);
+      f_finddir_close(modulenode);
+      
       return 1; //error
     }
 
-    u32int modulesize = read_fs(modulenode, 0, size, modulebuffer);
+    u32int modulesize = f_read(modulenode, 0, size, modulebuffer);
     
     k_printf("[load_elf] Allocating space\n");
 
@@ -212,11 +214,12 @@ u32int load_elf(u32int inode, u32int size)
       k_printf("[load_elf] openModule_elf returned with an error\n");
 
     //close the opened module file
-    close_fs(modulenode_file);
+    f_close(modulenode_file);
     
     //free stuff
     kfree(modulebuffer);
     kfree((u32int*)moduleptr);
+    f_finddir_close(modulenode);
   }
 
   //sucess!

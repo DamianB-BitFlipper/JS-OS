@@ -121,23 +121,20 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   k_printf("Initialized the VFS file system!\n");
 
   ///Create a few test files and directories
-  fs_node_t *testDir = createDirectory(fs_root, "direct");
-  fs_node_t *testFile = createFile(testDir, "test_file", 47);
+  void *testDir = f_make_dir(fs_root, "direct");
+  FILE *testFile = f_open("test_file", testDir, "wd");
 
-  fs_node_t *testDir2 = createDirectory(testDir, "awesome");
-
-  //open the file for writing
-  FILE *f_testFile = open_fs("test_file", testDir, "w");
+  void *testDir2 = f_make_dir(testDir, "awesome");
 
   //test if the created file has been opened properly
-  if(f_testFile)
+  if(testFile)
   {
-    write_fs(testFile, 0, 9, "\t\"test_file\" read successfully, VFS is working\n");
+    f_write(testFile, 0, 9, "\t\"test_file\" read successfully, VFS is working\n");
 
     //after writing, close the file
-    close_fs(f_testFile);
+    f_close(testFile);
 
-    program_cat("./direct/test_file");
+    program_cat("/direct/test_file");
   }else
     k_printf("Error: test_file cannot be opened properly\n");
 

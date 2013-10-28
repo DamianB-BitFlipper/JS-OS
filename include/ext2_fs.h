@@ -340,4 +340,10 @@ u32int ext2_remove_dirent(ext2_inode_t *directory, ext2_inode_t *node);
 /*frees the data blocks of a node*/
 u32int ext2_free_data_blocks(ext2_inode_t *directory, ext2_inode_t *node);
 
+/*read from a node's data*/
+u32int ext2_read(ext2_inode_t *node, u32int offset, u32int size, u8int *buffer);
+
+/*write to a node's data*/
+u32int ext2_write(ext2_inode_t *node, u32int offset, u32int size, u8int *buffer);
+
 #endif

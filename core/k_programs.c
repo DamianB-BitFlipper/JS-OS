@@ -943,8 +943,8 @@ u32int program_cp(char *arguments)
       f_write(copiedFile, 0, orig->size, data);
 
       //close the files
-      close_fs(copiedFile);
-      close_fs(orig);
+      f_close(copiedFile);
+      f_close(orig);
       
       //free allocations
       kfree(data);
@@ -966,8 +966,8 @@ u32int program_cp(char *arguments)
       f_write(copiedFile, 0, orig->size, data);
 
       //close the files
-      close_fs(copiedFile);
-      close_fs(orig);
+      f_close(copiedFile);
+      f_close(orig);
       
       //free allocations
       kfree(data);
@@ -989,8 +989,8 @@ u32int program_cp(char *arguments)
       f_write(copiedFile, 0, orig->size, data);
 
       //close the files
-      close_fs(copiedFile);
-      close_fs(orig);
+      f_close(copiedFile);
+      f_close(orig);
       
       //free allocations
       kfree(data);
@@ -1334,7 +1334,7 @@ void program_cat(char *arguments)
       }else{
         //free the buffer
         kfree(buf);
-        close_fs(f_file);
+        f_close(f_file);
       }
     }
 
@@ -1645,7 +1645,7 @@ static u32int jpg_decode_flags(u32int nArgs, char **args)
   return 0;
 }
 
-u32int jpg_encrypt(char *k_scanf_text, FILE *file, u32int current_dir_inode)
+u32int jpg_encrypt(char *k_scanf_text, FILE *file, void *dir)
 {
   char *passphrase1, *passphrase2;
 
@@ -1691,7 +1691,7 @@ u32int jpg_encrypt(char *k_scanf_text, FILE *file, u32int current_dir_inode)
 
   u8int *out = 0, *in;
   FILE *orig;
-  orig = f_open(file->name, ptr_currentDir, "r");
+  orig = f_open(file->name, dir, "r");
 
   //error opening file
   if(!orig)
@@ -1746,7 +1746,7 @@ u32int jpg_encrypt(char *k_scanf_text, FILE *file, u32int current_dir_inode)
      * will account for the extra data added to the file, thus increasing its
      * size, by certain encryption algorithms*/
     FILE *f_encrypt_file;
-    f_encrypt_file = f_open(new_name, ptr_currentDir, "wd");
+    f_encrypt_file = f_open(new_name, dir, "wd");
 
     if(!f_encrypt_file)
     {
@@ -1756,7 +1756,7 @@ u32int jpg_encrypt(char *k_scanf_text, FILE *file, u32int current_dir_inode)
       //free the stuff
       kfree(new_name);
       kfree(out);      
-      close_fs(orig);
+      f_close(orig);
       kfree(in);
       kfree(passphrase1);
       kfree(passphrase2);
@@ -1770,11 +1770,11 @@ u32int jpg_encrypt(char *k_scanf_text, FILE *file, u32int current_dir_inode)
     //free the stuff
     kfree(new_name);
     kfree(out);
-    close_fs(f_encrypt_file);
+    f_close(f_encrypt_file);
   }else
     k_printf("\njpg: error in encryption\n");
 
-  close_fs(orig);
+  f_close(orig);
   kfree(in);
   kfree(passphrase1);
   kfree(passphrase2);
@@ -1783,7 +1783,7 @@ u32int jpg_encrypt(char *k_scanf_text, FILE *file, u32int current_dir_inode)
   return 0;
 }
 
-u32int jpg_decrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode)
+u32int jpg_decrypt(char *k_scanf_text, FILE *file, void *dir)
 {
   char *passphrase1;
 
@@ -1803,7 +1803,7 @@ u32int jpg_decrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
 
   u8int *out = 0, *in;
   FILE *orig;
-  orig = f_open(file->name, ptr_currentDir, "r");
+  orig = f_open(file->name, dir, "r");
 
   //there was an error opening the file
   if(!orig)
@@ -1816,8 +1816,8 @@ u32int jpg_decrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
     return 1; //error
   }
 
-  in = (u8int*)kmalloc(file->length);
-  read_fs(file, 0, file->length, in);
+  in = (u8int*)kmalloc(file->size);
+  f_read(file, 0, file->size, in);
 
   u32int meta_data_size = 0;
   //do the encryption itself
@@ -1853,11 +1853,7 @@ u32int jpg_decrypt(char *k_scanf_text, fs_node_t *file, u32int current_dir_inode
      * encrypted data should not account for it, because it is trimmed of during decryption*/
     FILE *f_decrypt_file;
     f_decrypt_file = f_open(new_name, ptr_currentDir, "wd");
-createFile(&root_nodes[currentDir_inode], new_name, file->length - meta_data_size);
 
-    //open and write to the file
-    FILE *f_decrypt_file = open_fs(new_name, &root_nodes[currentDir_inode], "w");
-    
     if(!f_decrypt_file)
     {
       k_printf("Error opening created decrypted file: %s", new_name);
@@ -1865,7 +1861,7 @@ createFile(&root_nodes[currentDir_inode], new_name, file->length - meta_data_siz
       //free the stuff
       kfree(new_name);
       kfree(out);
-      close_fs(orig);
+      f_close(orig);
       kfree(in);
       kfree(passphrase1);
 
@@ -1873,16 +1869,16 @@ createFile(&root_nodes[currentDir_inode], new_name, file->length - meta_data_siz
       return 1;
     }
 
-    write_fs(decrypt_file, 0, file->length - meta_data_size, out);
+    f_write(f_decrypt_file, 0, file->size - meta_data_size, out);
  
     //free the stuff
     kfree(new_name);
     kfree(out);
-    close_fs(f_decrypt_file);
+    f_close(f_decrypt_file);
   }else
     k_printf("\njpg: error in encryption\n");
 
-  close_fs(orig);
+  f_close(orig);
   kfree(in);
   kfree(passphrase1);
 
@@ -1892,7 +1888,7 @@ createFile(&root_nodes[currentDir_inode], new_name, file->length - meta_data_siz
 void program_jpg(char *arguements)
 {
   //get the current dir Inode before we cd into a different directory
-  u32int currentIno = currentDir_inode;
+  void *currentDir = ptr_currentDir;
 
   //gets the number of args in the char *arguements
   u32int nArgs = countArgs(arguements);
@@ -1930,14 +1926,10 @@ void program_jpg(char *arguements)
    * encrypt. */
   u32int filePathArg;
   for(filePathArg = 0; filePathArg < nArgs; filePathArg++)
-  {
     /*if the first char in the arg is not a slash (not a flag but the dirPath itself)
      * or, if the first arg is a slash and there is nothing after it, meaning it could be a directory name */
     if(*(args[filePathArg]) != '-' || *(args[filePathArg] + 1) == ' ' || *(args[filePathArg] + 1) == 0)
-    {
       break;
-    }
-  }
   
   u32int work;
   char *dirPath = 0, *filePath = 0;
@@ -1989,8 +1981,8 @@ void program_jpg(char *arguements)
   //if everything worked
   if(!work)
   {
-    fs_node_t *file;
-    file = finddir_fs(&root_nodes[currentDir_inode], filePath);
+    FILE *file;
+    file = f_finddir(ptr_currentDir, filePath);
     
     //if there is some error in finding file, exit
     if(!file)
@@ -2006,10 +1998,12 @@ void program_jpg(char *arguements)
       for(c = 0; c < nArgs; c++)
         kfree(args[c]);
 
-      setCurrentDir(&root_nodes[currentIno]);
+      setCurrentDir(currentDir);
 
       kfree(dirPath);
       kfree(filePath);
+
+      f_finddir_close(file);
 
       //exit prematurly
       return;
@@ -2022,15 +2016,18 @@ void program_jpg(char *arguements)
     k_scanf_text = (char*)kmalloc(4);
 
     if(jpg_algorithm == ceaser_shift)
-      //4 chars because after the 'd' is a "hidden", \000
+      //4 chars, after the 'd' is a "hidden", \000
       memcpy(k_scanf_text, "h%d", 4);
     else
       memcpy(k_scanf_text, "h%s", 4);
 
     if(jpg_en_de == encrypt)
-      jpg_encrypt(k_scanf_text, file, currentDir_inode);
+      jpg_encrypt(k_scanf_text, file, ptr_currentDir);
     else
-      jpg_decrypt(k_scanf_text, file, currentDir_inode);
+      jpg_decrypt(k_scanf_text, file, ptr_currentDir);
+
+    //close the file opened with f_finddir
+    f_finddir_close(file);
 
   }else
     k_printf("In \"%s\", \"%s\" is not a directory\n", args[filePathArg], dirPath);
@@ -2043,7 +2040,7 @@ void program_jpg(char *arguements)
   kfree(dirPath);
   kfree(filePath);
 
-  setCurrentDir(&root_nodes[currentIno]);
+  setCurrentDir(currentDir);
   
   return;
 }

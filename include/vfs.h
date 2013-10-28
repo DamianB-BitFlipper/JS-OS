@@ -93,8 +93,8 @@ extern fs_node_t *fs_root; // The root of the filesystem.
 // , not file nodes.
 u32int read_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer);
 u32int write_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer);
-FILE *open_fs(char *filename, fs_node_t *dir, char *mask);
-u32int close_fs(FILE *file);
+FILE *dopen_fs(char *filename, fs_node_t *dir, char *mask);
+u32int dclose_fs(FILE *file);
 
 /*fs_node_t *node is the directory node to search in, returns dirent of file at the index input*/
 struct dirent *readdir_fs(fs_node_t *node, u32int index);

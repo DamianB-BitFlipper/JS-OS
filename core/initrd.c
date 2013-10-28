@@ -379,7 +379,7 @@ fs_node_t *initialise_initrd(u32int location)
 
   }
 
-  initrd_dev = createDirectory(initrd_root, "/");
+  initrd_dev = vfs_createDirectory(initrd_root, "/");
 
   addHardLinkToDir(initrd_dev, initrd_dev, "."); //adds hardlink for root
   addHardLinkToDir(initrd_dev, initrd_dev, ".."); //adds hardlink for root
@@ -387,12 +387,12 @@ fs_node_t *initialise_initrd(u32int location)
   setCurrentDir(initrd_dev);
 
   //create the /dev directory for the virtual files
-  fs_node_t *dev = createDirectory(initrd_dev, "dev");
+  fs_node_t *dev = vfs_createDirectory(initrd_dev, "dev");
 
   //create and open the stdin, stdout, and stderr files and file descriptors
-  fs_node_t *stdin = createFile(dev, "stdin", 1024);
-  fs_node_t *stdout = createFile(dev, "stdout", 1024);
-  fs_node_t *stderr = createFile(dev, "stderr", 1024);
+  fs_node_t *stdin = vfs_createFile(dev, "stdin", 1024);
+  fs_node_t *stdout = vfs_createFile(dev, "stdout", 1024);
+  fs_node_t *stderr = vfs_createFile(dev, "stderr", 1024);
 
   //set the initial file descriptor
   initial_fdesc = (file_desc_t*)kmalloc(sizeof(file_desc_t));
@@ -403,7 +403,7 @@ fs_node_t *initialise_initrd(u32int location)
   initial_fdesc->next = 0;
 
   //open the std files, stdin has alreadt been open when setting the initial file_desc
-  if(!open_fs("stdout", dev, "rw") || !open_fs("stderr", dev, "rw"))
+  if(!f_open("stdout", dev, "rw") || !f_open("stderr", dev, "rw"))
   {
     //some sort of error
     kfree((void*)tempLoc);

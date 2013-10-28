@@ -93,69 +93,69 @@ u32int write_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
   return 1;
 }
 
-FILE *open_fs(char *filename, fs_node_t *dir, char *mask)
-{
-  // Has the node got an open callback?
-  if((dir->flags & 0x7) == FS_DIRECTORY && dir->finddir)
-  {
-    fs_node_t *file;
-    file = finddir_fs(dir, filename);
-
-    if(file && file->read)
-    {
-      file_desc_t *tmp_desc, *new_desc;
-      tmp_desc = initial_fdesc;
-
-      //a simple error check if the tmp_desc exists
-      if(!tmp_desc)
-        return 0;
-
-      /*go to the end of out file descriptor list
-       * while iterating, check if this file_desc already exists,
-       * if true, return an error*/
-      for(; tmp_desc->next; tmp_desc = tmp_desc->next)
-        //if we already have this file node in the list
-        if(tmp_desc->node == file)
-          return tmp_desc; //no need to open, just return it
-
-      new_desc = (file_desc_t*)kmalloc(sizeof(file_desc_t));
-      
-      //make the new list entry and add it to the end of the list
-      new_desc->permisions = __open_fs_mask_to_u32int__(mask);
-      new_desc->node = file;
-      new_desc->next = 0;
-      tmp_desc->next = new_desc;
-
-      return new_desc;
-    }else
-      return 0;
-  }else
-    return 0;
-}
-
-u32int close_fs(FILE *file)
-{
-  if(file)
-  {
-    file_desc_t *tmp_desc;
-    tmp_desc = initial_fdesc;
-
-    //find our file descriptor
-    for(; tmp_desc->next != file && tmp_desc; tmp_desc = tmp_desc->next);
-
-    //a simple error check if the tmp_desc exists
-    if(!tmp_desc)
-      return 1;
-      
-    //remove the file descriptor entry
-    tmp_desc->next = tmp_desc->next->next;
-
-    kfree((void*)file);
-    return 0;
-  }
-  else
-    return 1;
-}
+/* FILE *dopen_fs(char *filename, fs_node_t *dir, char *mask)
+ * {
+ *   // Has the node got an open callback?
+ *   if((dir->flags & 0x7) == FS_DIRECTORY && dir->finddir)
+ *   {
+ *     fs_node_t *file;
+ *     file = finddir_fs(dir, filename);
+ * 
+ *     if(file && file->read)
+ *     {
+ *       file_desc_t *tmp_desc, *new_desc;
+ *       tmp_desc = initial_fdesc;
+ * 
+ *       //a simple error check if the tmp_desc exists
+ *       if(!tmp_desc)
+ *         return 0;
+ * 
+ *       /\*go to the end of out file descriptor list
+ *        * while iterating, check if this file_desc already exists,
+ *        * if true, return an error*\/
+ *       for(; tmp_desc->next; tmp_desc = tmp_desc->next)
+ *         //if we already have this file node in the list
+ *         if(tmp_desc->node == file)
+ *           return tmp_desc; //no need to open, just return it
+ * 
+ *       new_desc = (file_desc_t*)kmalloc(sizeof(file_desc_t));
+ *       
+ *       //make the new list entry and add it to the end of the list
+ *       new_desc->permisions = __open_fs_mask_to_u32int__(mask);
+ *       new_desc->node = file;
+ *       new_desc->next = 0;
+ *       tmp_desc->next = new_desc;
+ * 
+ *       return new_desc;
+ *     }else
+ *       return 0;
+ *   }else
+ *     return 0;
+ * }
+ * 
+ * u32int dclose_fs(FILE *file)
+ * {
+ *   if(file)
+ *   {
+ *     file_desc_t *tmp_desc;
+ *     tmp_desc = initial_fdesc;
+ * 
+ *     //find our file descriptor
+ *     for(; tmp_desc->next != file && tmp_desc; tmp_desc = tmp_desc->next);
+ * 
+ *     //a simple error check if the tmp_desc exists
+ *     if(!tmp_desc)
+ *       return 1;
+ *       
+ *     //remove the file descriptor entry
+ *     tmp_desc->next = tmp_desc->next->next;
+ * 
+ *     kfree((void*)file);
+ *     return 0;
+ *   }
+ *   else
+ *     return 1;
+ * } */
 
 struct dirent *readdir_fs(fs_node_t *node, u32int index)
 {
@@ -173,25 +173,6 @@ fs_node_t *finddir_fs(fs_node_t *node, char *name)
     return node->finddir(node, name);
   else
     return 0;
-}
-
-int shiftData(void *position, int shiftAmount, u32int lengthOfDataToShift)
-{
-  //TODO add right shift functionalbility
-  if(shiftAmount < 0) //user wants to shift to the left
-  {
-    u32int start = (u32int)position, end = (u32int)position + shiftAmount;
-
-    int i; //sifts the data to the left
-    for(i = 0; i < lengthOfDataToShift; i++)
-      *(char*)(end + i) = *(char*)(start + i);
-
-    memset((u32int*)(end + i), 0, -1 * shiftAmount);
-
-    //success!
-    return 0;
-  }
-
 }
 
 int findOpenNode()
@@ -453,41 +434,121 @@ int addHardLinkToDir(fs_node_t *hardlink, fs_node_t *directory, char *name)
     while(*(u16int*)(*(u32int*)block + i + sizeof(dirent.ino)) != 0)
     {
       //increase i with the rec_len that we get by moving fileheader sizeof(dirent.ino) (4 bytes) and reading its value
-      i = i + *(u16int*)(*(u32int*)block + i + sizeof(dirent.ino));
+      i += *(u16int*)(*(u32int*)block + i + sizeof(dirent.ino));
 
       //if the offset (i) + the length of the contents in the struct dirent is greater than what a block can hold, exit and go to new block
       if(i + dirent.rec_len >= BLOCK_SIZE)
-      {
         break;
-      }
 
       //if the offset (i) + the length of the contents in the struct dirent is greater than what a direcotory can hold, exit function before page fault happens
       if(b * BLOCK_SIZE + i + dirent.rec_len >= directory->length)
-      {
         //failed, out of directory left over space
         return 1;
-      }
 
     }
 
     //if i is a valid offset, dont go to a new block, just exit
     if(*(u16int*)(*(u32int*)block + i + sizeof(dirent.ino)) == 0)
-    {
       break;
-    }
 
   }
 
   //assigns the contents of the struct dirent to the directory contents location
   memcpy((u32int*)(*(u32int*)block + i), &dirent, dirent.rec_len - dirent.name_len);
 
-  strcpy((char*)(*(u32int*)block + i + sizeof(dirent.ino) + sizeof(dirent.rec_len) + sizeof(dirent.name_len) + sizeof(dirent.file_type)), dirent.name);
+  strcpy((char*)(*(u32int*)block + i + sizeof(dirent.ino) + sizeof(dirent.rec_len)
+                 + sizeof(dirent.name_len) + sizeof(dirent.file_type)), dirent.name);
 
   kfree(dirent.name);
 
   //success!
   return 0;
 
+}
+
+static u32int __increase_by_block__(fs_node_t *node)
+{
+  u32int orig_nblocks;
+  orig_nblocks = ((node->length - 1) / BLOCK_SIZE) + 1;
+
+  if(orig_nblocks < BLOCKS_DIRECT)
+  {
+    //assign an address for the next data block, orig_nblocks starts counting from 1, so that counts for the +1
+    node->blocks[orig_nblocks] = kmalloc(BLOCK_SIZE);
+    node->length += BLOCK_SIZE;
+    
+    //sucess!
+    return 0;
+  }else if(orig_nblocks >= BLOCKS_DIRECT && orig_nblocks < BLOCKS_DIRECT + BLOCKS_SINGLY)
+  {
+    //disregard the precedding blocks
+    u32int offset = orig_nblocks - BLOCKS_DIRECT;
+
+    //assign an address for the next data block, orig_nblocks starts counting from 1, so that counts for the +1
+    *(node->singly + offset) = kmalloc(BLOCK_SIZE);
+    node->length += BLOCK_SIZE;
+    
+    //sucess!
+    return 0;
+  }else if(orig_nblocks >= BLOCKS_DIRECT + BLOCKS_SINGLY &&
+           orig_nblocks < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY)
+  {
+    //disregard the precedding blocks
+    u32int offset = orig_nblocks - (BLOCKS_DIRECT + BLOCKS_SINGLY);
+
+    /*the doubly_offset is the offset of the doubly block's node pointing towards the singly block,
+     * the singly block offset is the offset of the singly block that is inside our doubly block that
+     * points to our physical block*/
+    u32int doubly_offset = (offset) / BLOCKS_SINGLY;
+    u32int singly_offset = (offset) % BLOCKS_SINGLY;
+
+    //assign an address for the next data block, orig_nblocks starts counting from 1, so that counts for the +1
+    *((u32int*)*(node->doubly + doubly_offset) + singly_offset) = kmalloc(BLOCK_SIZE);
+    node->length += BLOCK_SIZE;
+
+    //sucess!
+    return 0;
+  }else if(orig_nblocks >= BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY &&
+           orig_nblocks < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY + BLOCKS_TRIPLY)
+  {
+    //disregard the direct blocks
+    u32int offset = orig_nblocks - (BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY);
+
+    /*trpily_offset is the offset in the triply block of the node pointing to the doubly block, the doubly_offset
+     * is the offset inside the doubly block of the triply block that points to the singly block,
+     * the singly_offset is the offset of the singly block inside the doubly block of the triply block
+     * pointing to the block we want to return*/
+    u32int triply_offset = (offset) / BLOCKS_DOUBLY;
+    u32int doubly_offset = (offset % BLOCKS_DOUBLY) / BLOCKS_DOUBLY;
+    u32int singly_offset = (offset % BLOCKS_DOUBLY) % BLOCKS_SINGLY;
+
+    //assign an address for the next data block, orig_nblocks starts counting from 1, so that counts for the +1
+    *((u32int*)*((u32int*)*(node->triply + triply_offset) + doubly_offset) + singly_offset) = kmalloc(BLOCK_SIZE);
+    node->length += BLOCK_SIZE;
+
+    //sucess!
+    return 0;    
+  }else
+    //error
+    return 1;
+  
+}
+
+u32int expand_node(fs_node_t *node, u32int increase_bytes)
+{
+  //no point to expand, return sucess
+  if(!increase_bytes)
+    return 0; //sucess
+
+  u32int added_nblocks, i;
+  added_nblocks = ((increase_bytes - 1) / BLOCK_SIZE) + 1;
+
+  for(i = 0; i < added_nblocks; i++)
+    if(__increase_by_block__(node))
+      return 1; //error
+
+  //sucess
+  return 0;
 }
 
 fs_node_t *vfs_createDirectory(fs_node_t *parentNode, char *name)
@@ -607,15 +668,15 @@ int addFileToDir(fs_node_t *dirNode, fs_node_t *fileNode)
 
       //if the offset (i) + the length of the contents in the struct dirent is greater than what a direcotory can hold, exit function before page fault happens
       if(b * BLOCK_SIZE + i + dirent.rec_len >= dirNode->length)
-        //failed, out of directory left over space
-        return 1;
+        //out of directory space, increase directory size
+        if(expand_node(dirNode, BLOCK_SIZE))
+          return 1; //error, unable to expand
 
-    }
-v
     //if i is a valid offset, do not go to a new block, just exit
-    if(!*(u16int*)(*(u32int*)block + i + sizeof(dirent.ino)) == 0)
+    if(!*(u16int*)(*(u32int*)block + i + sizeof(dirent.ino)))
       break;
 
+    }
   }
 
   //assigns the contents of the struct dirent to the directory contents location
@@ -640,9 +701,7 @@ int shiftData(void *position, int shiftAmount, u32int lengthOfDataToShift)
 
     int i; //sifts the data to the left
     for(i = 0; i < lengthOfDataToShift; i++)
-    {
       *(char*)(end + i) = *(char*)(start + i);
-    }
 
     memset((u32int*)(end + i), 0, -1 * shiftAmount);
 
@@ -716,7 +775,7 @@ u32int vfs_free_data_blocks(fs_node_t *directory, fs_node_t *node)
     return 1; //error
 
   //free the actual node content
-  u32int c, block, block_size = block_size_of_node(node);
+  u32int c, block, block_size = BLOCK_SIZE;
   for(c = 0; c < (u32int)((node->length - 1) / block_size) + 1; c++)
   {
     block = (u32int)block_of_set(node, c);

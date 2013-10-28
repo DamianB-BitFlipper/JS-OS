@@ -2509,7 +2509,7 @@ u32int ext2_initialize(u32int size)
     *(ext2_root_name) = '/';
     *(ext2_root_name + 1) = 0;
 
-    ext2_set_current_dir(root); 
+    //~ ext2_set_current_dir(root); 
 
     //sucess!
     return 0;
@@ -2538,7 +2538,7 @@ u32int ext2_initialize(u32int size)
     *(ext2_root_name) = '/';
     *(ext2_root_name + 1) = 0;
 
-    ext2_set_current_dir(ext2_root); 
+    //~ ext2_set_current_dir(ext2_root); 
 
     //sucess!
     return 0;

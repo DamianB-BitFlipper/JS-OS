@@ -80,6 +80,7 @@ u32int f_read(FILE *node, u32int offset, u32int size, u8int *buffer)
     case M_EXT2:
       return ext2_read(fdesc->node, offset, size, buffer);
     default:
+      return 1; //error
     }
 
   }else
@@ -118,6 +119,7 @@ u32int f_write(FILE *node, u32int offset, u32int size, u8int *buffer)
     case M_EXT2:
       return ext2_write(fdesc->node, offset, size, buffer);
     default:
+      return 1; //error
     }
 
   }else
@@ -206,11 +208,11 @@ FILE *__open__(void *node, char *name, char *mask, u8int open)
       {
         new_desc->_read = 0;
         new_desc->_write = 0;
-        new_desc->_finddir = finddir_fs;
-        new_desc->_readdir = readdir_fs;
+        new_desc->_finddir = (void*)finddir_fs;
+        new_desc->_readdir = (void*)readdir_fs;
       }else{
-        new_desc->_read = read_fs;
-        new_desc->_write = write_fs;
+        new_desc->_read = (void*)read_fs;
+        new_desc->_write = (void*)write_fs;
         new_desc->_finddir = 0;
         new_desc->_readdir = 0;
       }
@@ -218,18 +220,18 @@ FILE *__open__(void *node, char *name, char *mask, u8int open)
       break;
     case M_EXT2:
       new_desc->inode = ((ext2_inode_t*)node)->inode;
-      new_desc->size = ((fs_node_t*)node)->size;
+      new_desc->size = ((ext2_inode_t*)node)->size;
 
       //if it is a directory
       if(new_desc->node_type == TYPE_DIRECTORY)
       {
         new_desc->_read = 0;
         new_desc->_write = 0;
-        new_desc->_finddir = ext2_file_from_dir;
-        new_desc->_readdir = ext2_dirent_from_dir;
+        new_desc->_finddir = (void*)ext2_file_from_dir;
+        new_desc->_readdir = (void*)ext2_dirent_from_dir;
       }else{
-        new_desc->_read = ext2_read;
-        new_desc->_write = ext2_write;
+        new_desc->_read = (void*)ext2_read;
+        new_desc->_write = (void*)ext2_write;
         new_desc->_finddir = 0;
         new_desc->_readdir = 0;
       }
@@ -253,10 +255,13 @@ FILE *__open__(void *node, char *name, char *mask, u8int open)
     return 0;
 }
 
-FILE *f_open(char *filename, char *mask)
+FILE *f_open(char *filename, void *dir, char *mask)
 {
+  if(!dir)
+    return 0; //error
+
   FILE *file;
-  file = f_finddir(ptr_currentDir, filename);
+  file = f_finddir(dir, filename);
 
   //a file already exists to be opened
   if(file)
@@ -337,7 +342,7 @@ struct generic_dirent *f_readdir(void *node, u32int index)
       if(((fs_node_t*)node)->readdir)
       {
         struct generic_dirent *gen_dirent;
-        gen_dirent = ((fs_node_t*)node)->readdir(node, index);  
+        gen_dirent = (struct generic_dirent*)((fs_node_t*)node)->readdir(node, index);  
 
         //set the file type to the standard TYPE_
         switch(gen_dirent->file_type)
@@ -375,7 +380,7 @@ struct generic_dirent *f_readdir(void *node, u32int index)
     case M_EXT2:
     { 
       struct generic_dirent *gen_dirent;     
-      gen_dirent = ext2_dirent_from_dir(node, index);
+      gen_dirent = (struct generic_dirent*)ext2_dirent_from_dir(node, index);
 
       //set the file type to the standard TYPE_
       switch(gen_dirent->file_type)
@@ -518,7 +523,7 @@ u32int setCurrentDir(void *directory)
 
     //we have run out of space in our names space, realloc more space!
     if(count == allocated_names)
-      krealloc(name_locs, sizeof(char*) * allocated_names, sizeof(char*) * (allocated_names *= 2))
+      krealloc((u32int*)name_locs, sizeof(char*) * allocated_names, sizeof(char*) * (allocated_names *= 2));
 
     node = f_finddir(copy, "..");
   }
@@ -705,7 +710,7 @@ u32int __free_data__(void *dir, FILE *node)
     if(node->fs_type != M_VFS)
       return 1; //error, the node is not the same filesystem type as the directory
 
-    return fs_free_data_blocks(dir, node->node);
+    return vfs_free_data_blocks(dir, node->node);
   case M_EXT2:
     if(node->fs_type != M_EXT2)
       return 1; //error, the node is not the same filesystem type as the directory
@@ -726,7 +731,7 @@ u32int __remove_dirent__(void *dir, FILE *dirent_node)
     if(dirent_node->fs_type != M_VFS)
       return 1; //error, the node is not the same filesystem type as the directory
 
-    return fs_remove_dirent(dir, dirent_node->node);
+    return vfs_remove_dirent(dir, dirent_node->node);
   case M_EXT2:
     if(dirent_node->fs_type != M_EXT2)
       return 1; //error, the node is not the same filesystem type as the directory
@@ -742,18 +747,18 @@ u32int __remove_dirent__(void *dir, FILE *dirent_node)
 void *f_make_dir(void *dir, char *name)
 {
   if(!name)
-    return 1;
+    return 0;
 
   switch(((generic_fs_t*)dir)->magic)
   {
   case M_UNKNOWN:
-    return 1; //error
+    return 0; //error
   case M_VFS:
     return vfs_createDirectory(dir, name);
   case M_EXT2:
     return ext2_create_dir(dir, name);
   default:
-    return 1; //error
+    return 0; //error
     
   }  
 }

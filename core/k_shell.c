@@ -160,7 +160,7 @@ void dirFilePathCount(char *args, u32int *dirCount, u32int *fileCount)
     FILE *testDir;
     
     //test if the rest of the args is a dir or file
-    testDir = finddir_fs(ptr_currentDir, args + count + 1); 
+    testDir = f_finddir(ptr_currentDir, args + count + 1); 
 
     if(testDir && testDir->node_type == TYPE_DIRECTORY) //if testDir is a directory
     {
@@ -186,7 +186,7 @@ void dirFilePathCount(char *args, u32int *dirCount, u32int *fileCount)
     }
 
     //return the current directory to the initialDir
-    setCurrentDir(initialDir);
+    setCurrentDir(intitialDir);
 
     //free the finddir file desc
     f_finddir_close(testDir);
@@ -195,7 +195,7 @@ void dirFilePathCount(char *args, u32int *dirCount, u32int *fileCount)
   }else{
     FILE *testDir;
 
-    testDir = finddir_fs(ptr_currentDir, args);
+    testDir = f_finddir(ptr_currentDir, args);
 
     if(testDir && testDir->node_type == TYPE_DIRECTORY) //if testDir is a directory
     {
