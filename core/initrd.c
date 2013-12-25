@@ -140,7 +140,8 @@ u32int initrd_write(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
      */
 
     if(offset && i == startingBlock)
-        memcpy((u8int*)(*(u32int*)block), buffer + (i - startingBlock) * BLOCK_SIZE + offset % BLOCK_SIZE, block_size_at_index);
+        memcpy((u8int*)(*(u32int*)block), buffer + (i - startingBlock) * BLOCK_SIZE 
+               + offset % BLOCK_SIZE, block_size_at_index);
     else
         memcpy((u8int*)(*(u32int*)block), buffer + (i - startingBlock) * BLOCK_SIZE, block_size_at_index);
      
@@ -261,7 +262,8 @@ fs_node_t *initialise_initrd(u32int location)
 
   u32int tempLoc = kmalloc(initrd_end - initrd_location); //random size, make it defined
 
-  //size = the size of the initrd module (address of end - address of start), end and start are defined by the bootloader
+  /*size = the size of the initrd module (address of end - address of start),
+   * end and start are defined by the bootloader*/
   memcpy(tempLoc, location, initrd_end - initrd_location);
 
   // Initialise the main and file header pointers and populate the root directory.
@@ -273,6 +275,8 @@ fs_node_t *initialise_initrd(u32int location)
   // Initialise the root directory.
   initrd_root = (fs_node_t*)kmalloc(sizeof(fs_node_t));
   strcpy(initrd_root->name, "/");
+
+  initrd_root->magic = M_VFS;
   initrd_root->mask = initrd_root->uid = initrd_root->gid = initrd_root->inode = initrd_root->length = 0;
   initrd_root->flags = FS_DIRECTORY;
   initrd_root->read = 0;
@@ -297,9 +301,12 @@ fs_node_t *initialise_initrd(u32int location)
     file_headers[i].offset += tempLoc;
     // Create a new file node.
     strcpy(root_nodes[i].name, &file_headers[i].name);
+
+    root_nodes[i].magic = M_VFS;
     root_nodes[i].mask = 0b110110100; //user rw, group rw, other r
     root_nodes[i].uid = root_nodes[i].gid = 0;
-    root_nodes[i].length = file_headers[i].length;
+    root_nodes[i].length = 0;
+    //~ root_nodes[i].length = file_headers[i].length;
     root_nodes[i].inode = i;
     root_nodes[i].flags = FS_FILE;
     root_nodes[i].read = &initrd_read;
@@ -309,53 +316,87 @@ fs_node_t *initialise_initrd(u32int location)
     root_nodes[i].impl = 0;
 
     //calculates the number of blocks this file has
-    nBlocks = ((u32int)((root_nodes[i].length - 1) / BLOCK_SIZE) + 1);
+    nBlocks = ((u32int)((file_headers[i].length - 1) / BLOCK_SIZE) + 1);
 
-    /*This section allocates memory for any initial sets apart from
-     * the direct blocks, as by default, the set pointers in fs_node_t
-     * typedef point to nowhere */
-    //if this file only has a singly set
-    if(nBlocks >= BLOCKS_DIRECT && nBlocks < BLOCKS_DIRECT + BLOCKS_SINGLY)
-    {
-      //allocate the singly typedef
-      //~ root_nodes[i].singly = (fs_singly_t*)kmalloc_a(sizeof(fs_singly_t));
-      root_nodes[i].singly = (u32int*)kmalloc(BLOCK_SIZE);
-
-    //if this file has a singly set and a doubly set
-    }else if(nBlocks >= BLOCKS_DIRECT + BLOCKS_SINGLY &&
-            nBlocks < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY)
-    {
-      //allocate the singly typedef
-      //~ root_nodes[i].singly = (fs_singly_t*)kmalloc_a(sizeof(fs_singly_t));
-      root_nodes[i].singly = (u32int*)kmalloc(BLOCK_SIZE);
-
-      //allocate the doubly typedef
-      //~ root_nodes[i].doubly = (fs_doubly_t*)kmalloc_a(sizeof(fs_doubly_t));
-      root_nodes[i].doubly = (u32int*)kmalloc(BLOCK_SIZE);
-
-    //if this file has a singly set, a doubly set, and a triply set
-    }else if(nBlocks >= BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY&&
-            nBlocks < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY + BLOCKS_TRIPLY)
-    {
-      //allocate the singly typedef
-      root_nodes[i].singly = (u32int*)kmalloc(BLOCK_SIZE);
-
-      //allocate the doubly typedef
-      root_nodes[i].doubly = (u32int*)kmalloc(BLOCK_SIZE);
-
-      //allocate the triply typedef
-      root_nodes[i].triply = (u32int*)kmalloc(BLOCK_SIZE);
-    }
-
-    /* This section copies the file's data into the blocks of the node
-     *
-     * ((u32int)(root_nodes[i].length / BLOCK_SIZE) + 1) calculates the
-     * number of blocks this file will take up at a given length
-     * the rootnode[i].length -1 is to offset that the first bit is at position 0*/
     for(a = 0; a < nBlocks; a++)
     {
+      /* /\* This section copies the file's data into the blocks of the node
+       *  *
+       *  * ((u32int)(root_nodes[i].length / BLOCK_SIZE) + 1) calculates the
+       *  * number of blocks this file will take up at a given length
+       *  * the rootnode[i].length -1 is to offset that the first bit is at position 0*\/
+       * for(a = 0; a < nBlocks; a++)
+       * {
+       *   /\*This section allocates memory for any initial sets apart from
+       *    * the direct blocks, as by default, the set pointers in fs_node_t
+       *    * typedef point to nowhere *\/
+       *   //if this file only has a singly set
+       *   if(a >= BLOCKS_DIRECT && a < BLOCKS_DIRECT + BLOCKS_SINGLY)
+       *   {
+       *     //allocate the singly typedef
+       *     if(!root_nodes[i].singly)
+       *     {
+       *       root_nodes[i].singly = (u32int*)kmalloc(BLOCK_SIZE);
+       * 
+       *       //clear the singly block of any junk
+       *       memset(root_nodes[i].singly, 0x0, BLOCK_SIZE);
+       *     }
+       * 
+       *     //if this file has a singly set and a doubly set
+       *   }else if(a >= BLOCKS_DIRECT + BLOCKS_SINGLY &&
+       *            a < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY)
+       *   {
+       *     //allocate the doubly typedef
+       *     if(!root_nodes[i].doubly)
+       *     {
+       *       root_nodes[i].doubly = (u32int*)kmalloc(BLOCK_SIZE);
+       * 
+       *       //clear the doubly block of any junk
+       *       memset(root_nodes[i].doubly, 0x0, BLOCK_SIZE);
+       *     }
+       *     //the doubly_offset is the offset of the doubly block's node pointing towards the singly block          
+       *     u32int doubly_offset;
+       *     doubly_offset = (a - (BLOCKS_DIRECT + BLOCKS_SINGLY)) / BLOCKS_SINGLY;
+       * 
+       *     //allocate the singly typedef
+       *     if(!*(root_nodes[i].doubly + doubly_offset))
+       *       *(root_nodes[i].doubly + doubly_offset) = kmalloc(BLOCK_SIZE);
+       * 
+       *     //if this file has a singly set, a doubly set, and a triply set
+       *   }else if(a >= BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY&&
+       *            a < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY + BLOCKS_TRIPLY)
+       *   {
+       * 
+       *     //allocate the triply typedef
+       *     if(!root_nodes[i].triply)
+       *       root_nodes[i].triply = (u32int*)kmalloc(BLOCK_SIZE);
+       * 
+       *     //disregard the other blocks
+       *     u32int offset = a - (BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY);
+       * 
+       *     /\*trpily_offset is the offset in the triply block of the node pointing to the doubly block, 
+       *      * the doubly_offset is the offset inside the doubly block of the triply block that points to the
+       *      * singly block*\/
+       * 
+       *     u32int triply_offset = (offset) / BLOCKS_DOUBLY;
+       *     u32int doubly_offset = (offset % BLOCKS_DOUBLY) / BLOCKS_DOUBLY;
+       * 
+       *     //allocate the doubly typedef
+       *     if(!*(root_nodes[i].triply + triply_offset))
+       *       *(root_nodes[i].triply + triply_offset) = kmalloc(BLOCK_SIZE);          
+       * 
+       *     //allocate the singly typedef
+       *     if(!*((u32int*)*(root_nodes[i].triply + triply_offset) + doubly_offset))
+       *       *((u32int*)*(root_nodes[i].triply + triply_offset) + doubly_offset) = kmalloc(BLOCK_SIZE);
+       * 
+       *   } */
+
+      //~ k_printf("a is : %d, size %d\n", a, file_headers[i].length);
+ 
       //get the size of data to copy
-      allocSize = blockSizeAtIndex(root_nodes[i].length, a, 0);
+      allocSize = blockSizeAtIndex(file_headers[i].length, a, 0);
+
+      expand_node(&root_nodes[i], allocSize);
 
       //get the address of the block to write to
       block = (u32int)block_of_set(&root_nodes[i], a);
@@ -375,8 +416,8 @@ fs_node_t *initialise_initrd(u32int location)
 
       //copy the data to that block
       memcpy(*(u32int*)block, file_headers[i].offset + a * BLOCK_SIZE, allocSize);
+    
     }
-
   }
 
   initrd_dev = vfs_createDirectory(initrd_root, "/");
@@ -393,6 +434,9 @@ fs_node_t *initialise_initrd(u32int location)
   fs_node_t *stdin = vfs_createFile(dev, "stdin", 1024);
   fs_node_t *stdout = vfs_createFile(dev, "stdout", 1024);
   fs_node_t *stderr = vfs_createFile(dev, "stderr", 1024);
+
+  //create the /etc directory
+  fs_node_t *etc = vfs_createDirectory(initrd_dev, "etc");
 
   //set the initial file descriptor
   initial_fdesc = (file_desc_t*)kmalloc(sizeof(file_desc_t));

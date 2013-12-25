@@ -202,6 +202,7 @@ typedef struct ext2_group_descriptor
 
 typedef struct ext2_inode
 {
+  u8int magic;
   u32int inode;
   u16int mode;
   u32int type;
@@ -222,7 +223,7 @@ typedef struct ext2_inode
   u16int dir_acl;
   u16int fragment_addr;
   u16int osd2[3];
-  u8int reserved[14];
+  u8int reserved[13];
 }ext2_inode_t;
 
 struct ext2_dirent
@@ -281,7 +282,7 @@ u32int ext2_block_of_set(ext2_inode_t *file, u32int block_number, u32int *block_
 u32int ext2_inode_from_inode_table(u32int inode_number, ext2_inode_t *output, ext2_group_descriptor_t *gdesc);
 
 /*initialize the ext2 filesystem*/
-u32int ext2_initialize(u32int size);
+u32int ext2_initialize(u32int size, const char *device);
 
 /*find a dirent by index from a directory*/
 struct ext2_dirent *ext2_dirent_from_dir(ext2_inode_t *dir, u32int index);
@@ -290,7 +291,7 @@ struct ext2_dirent *ext2_dirent_from_dir(ext2_inode_t *dir, u32int index);
 ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name);
 
 /*returns an inode with the inode table as input*/
-ext2_inode_t *ext2_inode_from_offset(u32int inode_number, ext2_inode_t *inode_table);
+ext2_inode_t *ext2_inode_from_offset(u32int inode_number);
 
 /*returns the whole inode table data*/
 ext2_inode_t *ext2_get_inode_table(ext2_group_descriptor_t *gdesc);
@@ -345,5 +346,8 @@ u32int ext2_read(ext2_inode_t *node, u32int offset, u32int size, u8int *buffer);
 
 /*write to a node's data*/
 u32int ext2_write(ext2_inode_t *node, u32int offset, u32int size, u8int *buffer);
+
+/*update a specific node in the inode table*/
+u32int ext2_update_node_in_inode_table(ext2_inode_t *node);
 
 #endif

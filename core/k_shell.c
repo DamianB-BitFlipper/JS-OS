@@ -169,7 +169,8 @@ void dirFilePathCount(char *args, u32int *dirCount, u32int *fileCount)
 
       //if everything is a directory, then there are no file names, set length to 0
       *fileCount = 0;
-    }else if(testDir && testDir->node_type == TYPE_FILE) //if testDir is a file
+    }else if(testDir && (testDir->node_type == TYPE_FILE ||
+                         testDir->node_type == TYPE_BLOCK_DEV)) //if testDir is a file
     {
       //the dirCount is everything before the final '/'
       *dirCount = count + 1;
@@ -201,7 +202,8 @@ void dirFilePathCount(char *args, u32int *dirCount, u32int *fileCount)
     {
       *dirCount = length;
       *fileCount = 0;
-    }else if(testDir && testDir->node_type == TYPE_FILE) //if testDir is a file
+    }else if(testDir && (testDir->node_type == TYPE_FILE || 
+                         testDir->node_type == TYPE_BLOCK_DEV)) //if testDir is a file or a block device
     {
       *dirCount = 0;
       *fileCount = length;
@@ -348,7 +350,8 @@ int cdFormatArgs(char *args, char *dirPath, char *filePath)
     {
       //error!
       return 1;
-    }else if(isDir && isDir->node_type == TYPE_FILE) //the input is a file, cannot be cd'ed to
+    }else if(isDir && (isDir->node_type == TYPE_FILE || 
+                       isDir->node_type == TYPE_BLOCK_DEV)) //the input is a file, cannot be cd'ed to
     {
       *(dirPath) = 0; //set dirPath to null
       strcpy(filePath, isDir->name);
@@ -424,7 +427,7 @@ typedef struct
   u8int own_multiask;
 }programs_list_t;
 
-#define PROGRAM_LIST_NUMBER    20
+#define PROGRAM_LIST_NUMBER    21
 
 programs_list_t programsList[PROGRAM_LIST_NUMBER]=
 {
@@ -448,7 +451,8 @@ programs_list_t programsList[PROGRAM_LIST_NUMBER]=
   "mv", PRIO_LOW, PROC_VERY_SHORT, FALSE,
   "find", PRIO_LOW, PROC_VERY_SHORT, FALSE,
   "about", PRIO_LOW, PROC_VERY_SHORT, FALSE,
-  "jpg", PRIO_LOW, PROC_SHORT, FALSE
+  "jpg", PRIO_LOW, PROC_SHORT, FALSE,
+  "mount", PRIO_LOW, PROC_SHORT, FALSE
 };
 
 void executeInput(char *input, char *arguements)

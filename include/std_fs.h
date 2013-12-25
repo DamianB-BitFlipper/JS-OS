@@ -24,7 +24,7 @@
 #ifndef STD_FS_H
 #define STD_FS_H
 
-//~ #include <system.h>
+#include <system.h>
 
 //for the file descriptor
 #define FDESC_CLEAR   0b1000
@@ -143,5 +143,11 @@ u32int f_remove(void *dir, FILE *node);
 
 /*creates a directory*/
 void *f_make_dir(void *dir, char *name);
+
+/*expands a file in size by a number of bytes*/
+u32int f_expand(FILE *node, u32int expand_sz);
+
+/*changes a drive to a blk device input*/
+vfs_blkdev_t *switch_to_blkdev(char *device);
 
 #endif //STD_FS_H

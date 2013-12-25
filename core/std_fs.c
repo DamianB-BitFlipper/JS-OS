@@ -90,6 +90,33 @@ u32int f_read(FILE *node, u32int offset, u32int size, u8int *buffer)
   return 1;
 }
 
+u32int f_expand(FILE *node, u32int expand_sz)
+{
+  if(!node)
+    return 1; //error
+
+  switch(node->fs_type)
+  {
+  case M_UNKNOWN:
+    return 1; //error
+  case M_VFS:
+    if(expand_node(node->node, expand_sz))
+      return 1; //error
+    else
+      return 0; //sucess!
+  case M_EXT2:
+    if(ext2_expand(node->node, expand_sz))
+      return 1; //error
+    else
+      return 0; //sucess!
+  default:
+    return 1; //error
+  }
+ 
+  //if we are outside, return an error
+  return 1; //error
+}
+
 u32int f_write(FILE *node, u32int offset, u32int size, u8int *buffer)
 {
   //check if this FILE node is in the file descriptor list
@@ -102,6 +129,10 @@ u32int f_write(FILE *node, u32int offset, u32int size, u8int *buffer)
     k_printf("Error: file not in file descriptor list\n");
     return 1; //error
   }
+
+  //if the size writing to the node is larger than its size + offset, expand it
+  if(offset + size > node->size)
+    f_expand(node, (offset + size) - node->size);
 
   //if the user can read from it
   if(fdesc->permisions & FDESC_WRITE)
@@ -267,7 +298,7 @@ FILE *f_open(char *filename, void *dir, char *mask)
   if(file)
   {
     //if the user wants to write to a blank file
-    if(__open_fs_mask_to_u32int__(mask) & (FDESC_CLEAR | FDESC_WRITE) == FDESC_CLEAR | FDESC_WRITE)
+    if((__open_fs_mask_to_u32int__(mask) & (FDESC_CLEAR | FDESC_WRITE)) == (FDESC_CLEAR | FDESC_WRITE))
     {
       FILE *open = __open__(file->node, filename, mask, TRUE);
       
@@ -287,16 +318,12 @@ FILE *f_open(char *filename, void *dir, char *mask)
       switch(((generic_fs_t*)ptr_currentDir)->magic)
       {
       case M_UNKNOWN:
-        f_finddir_close(file);
         return 0; //error
       case M_VFS:
-        f_finddir_close(file);
-        return __open__(vfs_createFile(ptr_currentDir, filename, BLOCK_SIZE), filename, mask, TRUE);
+        return __open__(vfs_createFile(dir, filename, 0), filename, mask, TRUE);
       case M_EXT2:
-        f_finddir_close(file);
-        return __open__(ext2_create_file(ptr_currentDir, filename, BLOCK_SIZE), filename, mask, TRUE);
+        return __open__(ext2_create_file(dir, filename, 0), filename, mask, TRUE);
       default:
-        f_finddir_close(file);
         return 0; //error
       }
 
@@ -431,7 +458,8 @@ struct generic_dirent *f_readdir(void *node, u32int index)
 
 void f_finddir_close(FILE *node)
 {
-  if(look_up_fdesc(node->node))
+
+  if(!look_up_fdesc(node->node))
     return; //error, we do not want to close an opened file descriptor
 
   //simply free the node and its name
@@ -482,12 +510,16 @@ FILE *f_finddir(void *node, char *name)
 
 u32int setCurrentDir(void *directory)
 {
+  //if the current directory is the one wanted to be switched to, exit gracefully
+  if(ptr_currentDir == directory)
+    return 0;
+
   kfree(path); //frees the contents of the char array pointer, path
 
   ptr_currentDir = directory; //sets the value of the dir inode to the cuurentDir_inode
 
-  void *node = directory;
-  void *copy;
+  FILE *node = __open__(directory, name_of_dir(directory), 0, FALSE);
+  FILE *copy = 0;
 
   u32int count = 0, totalCharLen = 0, allocated_names = 15, tmp_name_len;
 
@@ -503,11 +535,15 @@ u32int setCurrentDir(void *directory)
    * root directory, so we should exit */
   do
   {
+    if(copy)
+      //free the old node (copy)
+      f_finddir_close(copy);
+
     copy = node;
 
     if(copy)
     {
-      tmp_name = name_of_dir(copy);
+      tmp_name = name_of_dir(copy->node);
       tmp_name_len = strlen(tmp_name);
 
       /*save the name now so we do not need to do this all over again
@@ -517,17 +553,26 @@ u32int setCurrentDir(void *directory)
       *(*(name_locs + count) + tmp_name_len) = 0; //add the \000 to the end
 
       //+1 being the preceding "/" to every dir that will be added later
-      totalCharLen = totalCharLen + tmp_name_len + 1; 
+      totalCharLen += tmp_name_len + 1; 
       count++;
+
+      node = f_finddir(copy->node, "..");
+
     }
 
     //we have run out of space in our names space, realloc more space!
     if(count == allocated_names)
       krealloc((u32int*)name_locs, sizeof(char*) * allocated_names, sizeof(char*) * (allocated_names *= 2));
 
-    node = f_finddir(copy, "..");
+    //if node is 0 for some reason, break
+    if(!node)
+      break;
+      
   }
-  while(node != copy);
+  while(node->node != fs_root || copy->node != fs_root);
+
+  //free the node
+  f_finddir_close(node);
 
   if(count > 1) //if we are in a directory other than root
   {
@@ -562,11 +607,12 @@ u32int setCurrentDir(void *directory)
       {
         memcpy(path + (totalCharLen - charsWritten - nameLen - 1), "/", 1);
         memcpy(path + (totalCharLen - charsWritten - nameLen), __name_of_copy__, nameLen);
-        charsWritten = charsWritten + nameLen + 1; //increment charsWritten with the "/<name>" string we just wrote, +1 is that "/"
+        //increment charsWritten with the "/<name>" string we just wrote, +1 is that "/"
+        charsWritten += + nameLen + 1;
 
       }else{
         memcpy(path + (totalCharLen - charsWritten - nameLen), __name_of_copy__, nameLen);
-        charsWritten = charsWritten + nameLen; //increment charsWritten with the "/" string we just wrote
+        charsWritten += nameLen; //increment charsWritten with the "/" string we just wrote
       }
 
     }
@@ -585,6 +631,7 @@ u32int setCurrentDir(void *directory)
   return 0;
 }
 
+//TODO does not work, causes page fault in initialize vfs
 u32int node_type(void *node)
 {
   switch(((generic_fs_t*)node)->magic)
@@ -761,4 +808,45 @@ void *f_make_dir(void *dir, char *name)
     return 0; //error
     
   }  
+}
+
+vfs_blkdev_t *switch_to_blkdev(char *device)
+{
+  void *initDir = ptr_currentDir;
+
+  s32int dirCount, fileCount;
+
+  dirFilePathCount(device, &dirCount, &fileCount);
+
+  char *dirPath, *filePath;
+
+  dirPath = (char*)kmalloc(dirCount + 1);
+  filePath = (char*)kmalloc(fileCount + 1);
+
+  cdFormatArgs(device, dirPath, filePath);
+
+  //find the blk device data
+  FILE *blk_dev;
+  blk_dev = f_finddir(ptr_currentDir, filePath);
+  
+  if(!blk_dev)
+  {
+    setCurrentDir(initDir);
+    return 0; //error
+  }
+
+  //retrieve the blkdevice data
+  vfs_blkdev_t *data;
+  data = vfs_read_blkdev(blk_dev->inode);
+  
+  //change the drive to the block device
+  data->change_drive(data->drive);
+
+  kfree(dirPath);
+  kfree(filePath);
+  f_finddir_close(blk_dev);
+  setCurrentDir(initDir);
+  
+  //sucess!
+  return data;
 }

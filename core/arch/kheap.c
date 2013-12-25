@@ -131,12 +131,11 @@ u32int krealloc_p(u32int *ptr, u32int old_sz, u32int new_sz, u32int *phys)
 
 void expand(u32int new_size, heap_t *heap)
 {
-  
   // Sanity check.
   ASSERT(new_size > heap->end_address - heap->start_address);
 
   // Get the nearest following page boundary.
-  if(new_size & 0xFFFFF000 != 0)
+  if((new_size & 0xFFFFF000))
   {
     new_size &= 0xFFFFF000;
     new_size += 0x1000;
@@ -155,6 +154,7 @@ void expand(u32int new_size, heap_t *heap)
                 (heap->supervisor) ? 1 : 0, (heap->readonly) ? 0 : 1);
     i += 0x1000 /* page size */;
   }
+
   heap->end_address = heap->start_address + new_size;
 }
 

@@ -143,8 +143,12 @@ void runShellFunction(u32int runFunction, char *arguements, u32int priority, u32
     break;
   case 19:
     program_jpg(arguements);
+    break;    
+  case 20:
+    program_mount(arguements);
     break;
-    
+  default:
+    return;
   }
 
 }
@@ -258,10 +262,9 @@ void program_song(char *arguements)
   asm volatile("sti");
   init_timer(globalFreq); // Initialise timer to globalFreq-Hz
 
-  if(k_strcmp(arguements, "-pacman") == 0)
-  {
+  if(!k_strcmp(arguements, "-pacman"))
     song_pacman();
-  }
+
 }
 
 ///**************************LS function*****************************///
@@ -270,6 +273,7 @@ struct ls_file_header
 {
   char *name;
   u32int inode;
+  u32int file_type;
 };
 
 struct ls_file_header *ls_files;
@@ -310,9 +314,7 @@ static int ls_file_interesting(struct generic_dirent *entry)
 
   if(really_all_files == TRUE || entry->name[0] != '.' ||
      (all_files == TRUE && entry->name[1] != 0 && (entry->name[1] != '.' || entry->name[2] != 0)))
-  {
     return TRUE;
-  }
 
   return FALSE;
 }
@@ -321,9 +323,9 @@ void ls_extra_print(u32int inode)
 {
   //test if user wants to print the inode
   if(ls_print_inode == TRUE)
-  {
     k_printf("%d ", inode);
-  }
+
+  return;
 }
 
 void ls_print_permissions(u32int inode)
@@ -373,6 +375,7 @@ void ls_sort_name()
   //TODO make a sort function for the file names to print
 
 
+
   //int i = 0, a;
   //u32int address;
   //u8int one, two;
@@ -415,23 +418,30 @@ void ls_print_one_per_line()
 {
   u32int i;
   for(i = 0; i < ls_files_indexed; i++)
-  {
-    //if the entry is a directory, the directory flags are set
-    if((root_nodes[ls_files[i].inode].flags & 0b111) == FS_DIRECTORY)
+    switch(ls_files[i].file_type)
     {
+    case TYPE_DIRECTORY:
       ls_extra_print(ls_files[i].inode);
       k_printf(LS_DIR_COLOR); //set the k_printf color to the LS_DIR_COLOR
       k_printf(ls_files[i].name);
       k_printf(" (dir)\n");
       k_printf(LS_DEFAULT_COLOR); //revert the k_printf color back to default
-
-    }else{
+      break;
+    case TYPE_FILE:
       ls_extra_print(ls_files[i].inode);
       k_printf(ls_files[i].name);
       k_printf("\n");
-    }
+      break;
+    case TYPE_BLOCK_DEV:
+      ls_extra_print(ls_files[i].inode);
+      k_printf(LS_BLKDEV_COLOR);
+      k_printf(ls_files[i].name);
+      k_printf("\n");
+      k_printf(LS_DEFAULT_COLOR);
+      break;
+    };
 
-  }
+    return;
 }
 
 void ls_print_with_commas()
@@ -440,27 +450,32 @@ void ls_print_with_commas()
 
   //print all files, but the last
   for(i = 0; i < ls_files_indexed - 1; i++)
-  {
-
-    if ((root_nodes[ls_files[i].inode].flags & 0b111) == FS_DIRECTORY)
+    switch(ls_files[i].file_type)
     {
+    case TYPE_DIRECTORY:
       ls_extra_print(ls_files[i].inode);
       k_printf(LS_DIR_COLOR); //set the k_printf color to the LS_DIR_COLOR
       k_printf(ls_files[i].name);
       k_printf(" (dir), ");
       k_printf(LS_DEFAULT_COLOR); //revert the k_printf color back to default
-
-    }else{
+      break;
+    case TYPE_FILE:
       ls_extra_print(ls_files[i].inode);
       k_printf(ls_files[i].name);
       k_printf(", ");
-    }
+      break;
+    case TYPE_BLOCK_DEV:
+      ls_extra_print(ls_files[i].inode);
+      k_printf(LS_BLKDEV_COLOR);
+      k_printf(ls_files[i].name);
+      k_printf(", ");
+      k_printf(LS_DEFAULT_COLOR);
+      break;
+    };
 
-  }
-
-  //still, if the last file is a directory, print (dir) at the end
-  if ((root_nodes[ls_files[i].inode].flags & 0b111) == FS_DIRECTORY)
+  switch(ls_files[i].file_type)
   {
+  case TYPE_DIRECTORY:
     ls_extra_print(ls_files[i].inode);
 
     k_printf(LS_DIR_COLOR); //set the k_printf color to the LS_DIR_COLOR
@@ -468,13 +483,25 @@ void ls_print_with_commas()
     k_printf(ls_files[i].name);
     k_printf(" (dir)");
     k_printf(LS_DEFAULT_COLOR); //revert the k_printf color back to default
-
-  }else{
+    break;
+  case TYPE_FILE:
     ls_extra_print(ls_files[i].inode);
 
     //print the last without a comma and space
     k_printf(ls_files[i].name);
-  }
+    break;
+  case TYPE_BLOCK_DEV:
+    ls_extra_print(ls_files[i].inode);
+
+    k_printf(LS_BLKDEV_COLOR);
+    //print the last without a comma and space
+    k_printf(ls_files[i].name);
+    k_printf(LS_DEFAULT_COLOR);
+    break;
+
+  };
+
+  return;
 }
 
 void ls_long_format()
@@ -483,10 +510,10 @@ void ls_long_format()
 
   //print all files, but the last
   for(i = 0; i < ls_files_indexed; i++)
-  {
-
-    if ((root_nodes[ls_files[i].inode].flags & 0b111) == FS_DIRECTORY)
+    switch(ls_files[i].file_type)
     {
+    case TYPE_DIRECTORY:
+
       ls_extra_print(ls_files[i].inode);
 
       k_printf("d"); //print "d" to indicate in permisions that it is a directory
@@ -497,8 +524,8 @@ void ls_long_format()
       k_printf(ls_files[i].name);
       k_printf(" (dir)\n");
       k_printf(LS_DEFAULT_COLOR); //revert the k_printf color back to default
-
-    }else{
+      break;
+    case TYPE_FILE:
       ls_extra_print(ls_files[i].inode);
 
       k_printf("-"); //print "-" to indicate in permisions that it is not a directory
@@ -507,9 +534,22 @@ void ls_long_format()
 
       k_printf(ls_files[i].name);
       k_printf("\n");
-    }
+      break;
+    case TYPE_BLOCK_DEV:
+      ls_extra_print(ls_files[i].inode);
 
-  }
+      k_printf("b"); //print "-" to indicate in permisions that it is not a directory
+
+      ls_print_permissions(ls_files[i].inode);
+
+      k_printf(LS_BLKDEV_COLOR);
+      k_printf(ls_files[i].name);
+      k_printf("\n");
+      k_printf(LS_DEFAULT_COLOR);
+      break;
+    };
+  
+  return;
 }
 
 void ls_print_format()
@@ -557,8 +597,11 @@ void ls_gobble_file(struct generic_dirent *entry)
 
   //add the inode of the file to the entry
   ls_files[ls_files_indexed].inode = entry->ino;
+  ls_files[ls_files_indexed].file_type = entry->file_type;
 
   ls_files_indexed++;
+
+  return;
 }
 
 static int ls_decode_flags(int nArgs, char **args)
@@ -827,7 +870,7 @@ int program_cd(char *arguements)
     if(dir && dir->node_type == TYPE_DIRECTORY) //if dir exists and is a directory
     {
 
-      setCurrentDir(dir);
+      setCurrentDir(dir->node);
       kfree(cd);
 
     }else{
@@ -865,6 +908,16 @@ u32int program_cp(char *arguments)
   void *initDir = ptr_currentDir;
 
   u32int nArgs = countArgs(arguments);
+
+  switch(nArgs)
+  {
+  case 0: //if the user did not input any args
+    k_printf("cp: missing file operand\n");
+    return 1; //error
+  case 1: //we must have an input and an output file
+    k_printf("cp: missing destination file operand after `%s'\n", arguments);
+    return 1; //error
+  }
 
   char *args[nArgs];
   getArgs(arguments, args);
@@ -1427,6 +1480,8 @@ void program_rm(char *arguments)
 
   setCurrentDir(initialDir);
 
+  //sucess!
+  return;
 }
 
 void program_mkdir(char *arguments)
@@ -1553,7 +1608,6 @@ objects arrayOfImages[2]; //make array of the 5 attributes of the 2 objects
 //TODO make js_viewer work
 void program_JS_viewer(char *arguements)
 {
-  //~ k_printf("\n\nPOOP\n");
   asm volatile("sti");
   init_timer(globalFreq); // Initialise timer to globalFreq-Hz
 
@@ -2043,6 +2097,86 @@ void program_jpg(char *arguements)
   setCurrentDir(currentDir);
   
   return;
+}
+
+//TODO make program_mount take multiple args, parse through each separatly
+
+u32int program_mount(char *arguments)
+{
+  void *initDir = ptr_currentDir;
+
+  s32int dirCount, fileCount;
+
+  dirFilePathCount(arguments, &dirCount, &fileCount);
+
+  char *dirPath, *filePath;
+
+  dirPath = (char*)kmalloc(dirCount + 1);
+  filePath = (char*)kmalloc(fileCount + 1);
+
+  cdFormatArgs(arguments, dirPath, filePath);
+
+  FILE *blk_dev;
+  blk_dev = f_finddir(ptr_currentDir, filePath);
+
+  if(!blk_dev)
+  {
+    setCurrentDir(initDir);
+    kfree(dirPath);
+    kfree(filePath);
+    f_finddir_close(blk_dev);
+    return 1; //error
+  }
+
+  //read the block device data
+  vfs_blkdev_t *data;
+  data = vfs_read_blkdev(blk_dev->inode);
+
+  //lock the device
+  data->lock = TRUE;
+
+  //switch the driver to that device
+  if(data->change_drive(data->drive))
+  {
+    k_printf("Mount: error switching to device\n");
+    f_finddir_close(blk_dev);
+    kfree(data);
+    kfree(dirPath);
+    kfree(filePath);
+    setCurrentDir(initDir);
+    
+    return 1; //error
+  }
+
+  //switch through the filesystem types
+  switch(data->fs_type)
+  {
+  case M_EXT2:
+  {
+    ext2_inode_t *inode_data;
+    inode_data = ext2_inode_from_offset(0);
+
+    
+  }
+  default:
+    k_printf("Mount: Unkown filesystem type\n");
+    f_finddir_close(blk_dev);
+    kfree(data);
+    kfree(dirPath);
+    kfree(filePath);
+    setCurrentDir(initDir);
+    
+    return 1; //error
+    
+  };
+
+  f_finddir_close(blk_dev);
+  kfree(data);
+  kfree(dirPath);
+  kfree(filePath);
+  setCurrentDir(initDir);
+
+  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////

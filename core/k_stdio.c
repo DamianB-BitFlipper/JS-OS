@@ -246,17 +246,12 @@ void k_printf(char *c, ...)
 
   va_list arguments;
 
-  int i = 0, numberOfArgs = 0, stringLength = k_strlen(c);
+  int i, numberOfArgs = 0, stringLength = k_strlen(c);
   int integerArg;
 
-  while(c[i]) //checks number of arguments that should be in file
-  {
+  for(i = 0; c[i]; i++) //checks number of arguments that should be in file
     if(c[i] == '%')
-    {
       numberOfArgs++;
-    }
-    i++;
-  }
 
   i = 0; //set i to zero for next while loop
 
@@ -864,7 +859,7 @@ int k_strlen(char *string)
 {
   int x = 0;
 
-  while(*string != 0)
+  while(*string)
   {
     string++;
     x++;
@@ -875,10 +870,13 @@ int k_strlen(char *string)
 
 int k_strcmp(char *stringOne, char *stringTwo) //return 0 if the same and 1 if not
 {
-  if(k_strlen(stringOne) != k_strlen(stringTwo))
-  {
+  //both strings cannot be null pointer
+  if(!stringOne || !stringTwo)
     return 1;
-  }else{
+
+  if(k_strlen(stringOne) != k_strlen(stringTwo))
+    return 1;
+  else{
     int x, equal = 1, length = k_strlen(stringOne);
 
     for(x = 0; x < length; x++)

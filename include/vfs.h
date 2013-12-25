@@ -53,6 +53,7 @@ typedef struct fs_node *(*finddir_type_t)(struct fs_node*, char *name);
 
 typedef struct fs_node
 {
+  u8int magic;
   char name[128];
   u32int mask;              //the permissions mask.
   u32int uid;               //the owning user.
@@ -70,8 +71,6 @@ typedef struct fs_node
 
   read_type_t read;         //function to file read event
   write_type_t write;       //function to file write event
-  //~ open_type_t open;         //function to file open event
-  //~ close_type_t close;       //function to file close event
   readdir_type_t readdir;   //function to file readdir event
   finddir_type_t finddir;   //function to file finddir event
   struct fs_node *ptr;      //used by mountpoints and symlinks.
@@ -86,6 +85,21 @@ struct dirent
   char *name;               //filename, remember to kmalloc this to give it an address, or else it will page fault
 };
 
+typedef u8int* (*blk_dev_write)(u32int *data, u32int size, u32int sectorLBA);
+typedef u8int* (*blk_dev_read)(u32int sectorLBA, u32int size, u32int *output);
+typedef u32int (*blk_dev_change_drive)(u8int drive);
+
+typedef struct vfs_blkdev
+{
+  u32int lock;
+  u32int drive;
+  u32int fs_type;
+  s32int inode; //inode number of the block device file
+  blk_dev_write write;
+  blk_dev_read read;
+  blk_dev_change_drive change_drive;
+} vfs_blkdev_t;
+
 extern fs_node_t *fs_root; // The root of the filesystem.
 
 // Standard read/write/open/close functions. Note that these are all suffixed with
@@ -93,8 +107,6 @@ extern fs_node_t *fs_root; // The root of the filesystem.
 // , not file nodes.
 u32int read_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer);
 u32int write_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer);
-FILE *dopen_fs(char *filename, fs_node_t *dir, char *mask);
-u32int dclose_fs(FILE *file);
 
 /*fs_node_t *node is the directory node to search in, returns dirent of file at the index input*/
 struct dirent *readdir_fs(fs_node_t *node, u32int index);
@@ -130,5 +142,14 @@ u32int vfs_remove_dirent(fs_node_t *directory, fs_node_t *node);
 
 /*free the data blocks of a node*/
 u32int vfs_free_data_blocks(fs_node_t *directory, fs_node_t *node);
+
+/*reads the data from a block device file*/
+vfs_blkdev_t *vfs_read_blkdev(u32int inode);
+
+/*register a block device*/
+fs_node_t *vfs_register_blkdev(char *name, vfs_blkdev_t *data);
+
+/*update the input blk device data block, the inode of the file to update is in the typedef of vfs_blkdev_t*/
+u32int vfs_change_blkdev(vfs_blkdev_t *data);
 
 #endif

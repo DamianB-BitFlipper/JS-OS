@@ -98,9 +98,6 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   //test the multitasking
   test("tasking");
 
-  // Initialise the floppy disk controller
-  init_floppy();
-
   // Initialise the initial ramdisk, and set it as the filesystem root.
   fs_root = initialise_initrd(initrd_location);
 
@@ -129,7 +126,9 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   //test if the created file has been opened properly
   if(testFile)
   {
-    f_write(testFile, 0, 9, "\t\"test_file\" read successfully, VFS is working\n");
+
+    f_write(testFile, 0, strlen("\t\"test_file\" read successfully, VFS is working\n"),
+            "\t\"test_file\" read successfully, VFS is working\n");
 
     //after writing, close the file
     f_close(testFile);
@@ -138,8 +137,12 @@ u32int main(struct multiboot *mboot_ptr, u32int initial_stack)
   }else
     k_printf("Error: test_file cannot be opened properly\n");
 
+
+  // Initialise the floppy disk controller
+  init_floppy();
+
   //initialize the ext2 driver on the floppy disk
-  if(ext2_initialize(FLOPPY_SIZE - EXT2_SBLOCK_OFF))
+  if(ext2_initialize(FLOPPY_SIZE - EXT2_SBLOCK_OFF, "/dev/fdb"))
     k_printf("%crFailed to Initialize the EXT2 file system%cw\n");
   else
     k_printf("Initialized the EXT2 file system!\n");

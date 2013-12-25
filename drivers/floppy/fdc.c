@@ -482,6 +482,29 @@ u32int init_floppy()
   }else
     k_printf("Floppy Drive Controler initialized successfully\n");
 
+  //add the vfs_blocks in the /dev for the floppy disks
+  vfs_blkdev_t *data;
+  data = (vfs_blkdev_t*)kmalloc(sizeof(vfs_blkdev_t));
+
+  data->lock = OFF;
+  data->fs_type = M_UNKNOWN; //the file system is unknow as of now
+  data->write = floppy_write;
+  data->read = floppy_read;
+  data->change_drive = floppy_change_drive;
+
+  u32int i;
+  for(i = 0; i < nDrives; i++)
+  {
+    data->drive = i;
+
+    if(!i)
+      vfs_register_blkdev("fda", data);
+    else if(i == 1)
+      vfs_register_blkdev("fdb", data);
+  }
+
+  kfree(data);
+
   ///Set up secondary floppy disk persistent storage, if applicable
   //if there is only one floppy, cannot set up persistent storage on single disk
   if(nDrives < 2)

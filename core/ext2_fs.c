@@ -22,6 +22,7 @@
  */
 
 #include <system.h>
+#include <vfs.h>
 
 #define TO_U32INT(bytes)                   ((bytes) / sizeof(u32int)) 
 
@@ -141,11 +142,14 @@ u32int *ext2_format_block_bitmap(ext2_group_descriptor_t *gdesc, u32int blocks_u
     block_bitmap = (u8int*)kmalloc(EXT2_BLOCK_SZ);
     ext2_g_bb = block_bitmap;
     floppy_read(location, EXT2_BLOCK_SZ, (u32int*)block_bitmap);
-  }else{
+  }else
     block_bitmap = ext2_g_bb;
-  }
 
-  u32int *output;//, *test;
+  //if we do not want to allocate any blocks, return 0
+  if(!blocks_used)
+    return 0;
+
+  u32int *output;
   output = (u32int*)kmalloc(blocks_used * sizeof(u32int));
 
   memset(output, 0x0, blocks_used * sizeof(u32int));
@@ -163,11 +167,9 @@ u32int *ext2_format_block_bitmap(ext2_group_descriptor_t *gdesc, u32int blocks_u
     {
       //if the bit isolated by bit_mask is 0
       if(!(*(block_bitmap + off) & bit_mask))
-      {
         consec_free++;
-      }else{ //if the bit isolated by bit_mask is 1
+      else //if the bit isolated by bit_mask is 1
         consec_free = 0;
-      }
 
       //we have found adequate space
       if(consec_free == blocks_used)
@@ -201,7 +203,8 @@ u32int *ext2_format_block_bitmap(ext2_group_descriptor_t *gdesc, u32int blocks_u
 
         floppy_write((u32int*)block_bitmap, EXT2_BLOCK_SZ, location);
 
-        //purposly not freeing since block_bitmap, regardless of update, is the global variable which should not be cleared
+        /*purposly not freeing since block_bitmap, regardless of update, is the
+         * global variable which should not be cleared*/
 
         //TODO in the case of non-consecutive blocks, make this optimized and work
         u32int i, *clear;
@@ -220,8 +223,9 @@ u32int *ext2_format_block_bitmap(ext2_group_descriptor_t *gdesc, u32int blocks_u
 
   }
 
-  //purposly not freeing since block_bitmap, regardless of update, is the global variable which should not be cleared
-  //~ kfree(block_bitmap);
+  /*purposly not freeing since block_bitmap, regardless of update, 
+   * is the global variable which should not be cleared*/
+
   kfree(output);
 
   //if we did not exit yet, there must be no space
@@ -293,15 +297,18 @@ u32int ext2_inode_entry_blocks(ext2_inode_t *node, ext2_group_descriptor_t *gdes
   for(blk = 0; blk < EXT2_N_BLOCKS; blk++)
     node->blocks[blk] = 0;
 
+  //if no blocks are used, simply exit
+  if(!blocks_used)
+    return 0;
+
   //write the locations of the direct blocks
   for(blk = 0; blk < (blocks_used < EXT2_NDIR_BLOCKS ? blocks_used : EXT2_NDIR_BLOCKS); blk++)
     node->blocks[blk] = *(block_locations + blk);
 
   if(blocks_used < EXT2_NDIR_BLOCKS)
-  {
     //we already wrote all of the data needed to be written above, return with sucess
     return 0;
-  }else{
+  else{
     u32int *location, *block_data;
     block_data = (u32int*)kmalloc(EXT2_BLOCK_SZ);
     
@@ -383,7 +390,6 @@ u32int ext2_inode_entry_blocks(ext2_inode_t *node, ext2_group_descriptor_t *gdes
 u32int ext2_data_to_inode_table(ext2_inode_t *data, ext2_group_descriptor_t *gdesc, ext2_superblock_t *sblock)
 {
   ext2_inode_t *buffer;
-  //~ u32int update;
 
   if(!ext2_g_inode_table)
   {
@@ -392,18 +398,13 @@ u32int ext2_data_to_inode_table(ext2_inode_t *data, ext2_group_descriptor_t *gde
 
     floppy_read(gdesc->inode_table_id, gdesc->inode_table_size * EXT2_BLOCK_SZ, (u32int*)buffer);
 
-    //~ update = TRUE;
-  }else{
+  }else
     buffer = ext2_g_inode_table;
-    //~ update = FALSE;
-  }
 
   //loop until a free space has opened up
   u32int off = 0;
   while(buffer[off].nlinks && off < sblock->inodes_per_group)
-  {
     off++;
-  }
 
   //if we did not find enough space, return an error
   if(off == sblock->inodes_per_group)
@@ -411,14 +412,10 @@ u32int ext2_data_to_inode_table(ext2_inode_t *data, ext2_group_descriptor_t *gde
 
   memcpy((u8int*)buffer + sizeof(ext2_inode_t) * off, data, sizeof(ext2_inode_t));
 
-  //~ if(update == TRUE)
-    //~ memcpy((u8int*)ext2_g_inode_table + sizeof(ext2_inode_t) * off, data, sizeof(ext2_inode_t));
-  
   //write the new inode table buffer
   floppy_write((u32int*)buffer, gdesc->inode_table_size * EXT2_BLOCK_SZ, gdesc->inode_table_id);
   
   //purposly not freeing since buffer, either way with update, is the global variable which should not be cleared
-  //~ kfree(buffer);
 
   //sucess!, return where we put it
   return off;
@@ -482,7 +479,7 @@ ext2_inode_t *ext2_file_from_dir(ext2_inode_t *dir, char *name)
         if(!strcmp(name, dirent2->name))
         {
           
-          inode = ext2_inode_from_offset(dirent2->ino, inode_table);
+          inode = ext2_inode_from_offset(dirent2->ino);
 
           kfree(dirent2->name);
           //~ kfree(inode);
@@ -1065,7 +1062,7 @@ u32int ext2_add_file_to_dir(ext2_inode_t *parent_dir, ext2_inode_t *file, u32int
     while(*(u16int*)((u8int*)block + i + sizeof(dirent.ino)))
     {
       //increase i with the rec_len that we get by moving fileheader sizeof(dirent.ino) (4 bytes) and reading its value
-      i = i + *(u16int*)((u8int*)block + i + sizeof(dirent.ino));
+      i += *(u16int*)((u8int*)block + i + sizeof(dirent.ino));
 
       //if the offset (i) + the length of the contents in the struct dirent is greater than what a block can hold, exit and go to new block
       if(i + dirent.rec_len >= EXT2_BLOCK_SZ)
@@ -1162,23 +1159,89 @@ u32int ext2_free_blocks(u32int *block_locs, u32int nblocks)
   return error;
 }
 
+u32int ext2_update_node_in_inode_table(ext2_inode_t *node)
+{
+  ext2_inode_t *itable;
+
+  ext2_superblock_t *sblock;  
+  ext2_group_descriptor_t *gdesc; 
+
+  u32int inode_table_size, i;
+  if(!ext2_g_sblock || !ext2_g_gdesc)
+    if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
+      return 0; //error
+  else{
+    sblock = ext2_g_sblock;
+    gdesc = ext2_g_gdesc;
+  }
+
+  //set the number of bytes the inode table is
+  inode_table_size = gdesc->inode_table_size * EXT2_BLOCK_SZ;
+
+  if(!ext2_g_inode_table)
+  {
+    itable = (ext2_inode_t*)kmalloc(inode_table_size);
+    ext2_g_inode_table = itable;
+
+    floppy_read(gdesc->inode_table_id, inode_table_size, (u32int*)itable);
+
+  }else
+    itable = ext2_g_inode_table;
+
+  for(i = 0; i < inode_table_size; i += sizeof(ext2_inode_t))
+    //if we have found our node in the inode table
+    if(((ext2_inode_t*)itable + i)->inode == node->inode)
+    {
+      //copy the new table over
+      memcpy(itable + i, node, sizeof(ext2_inode_t));
+
+      //write the new inode_table on the floppy disk
+      floppy_write((u32int*)itable, inode_table_size, gdesc->inode_table_id);
+
+      return 0; //sucess!
+    }
+
+    //if we exited the for loop, that means the inode was not found, thus cannot be updated
+    return 1; //error
+}
+
 u32int ext2_expand(ext2_inode_t *node, u32int increase_bytes)
 {
+  //if we are not resizing anything, consider it a sucess! :)
+  if(!increase_bytes)
+    return 0;
+  
   ext2_superblock_t *sblock;  
   ext2_group_descriptor_t *gdesc; 
 
   if(!ext2_g_sblock || !ext2_g_gdesc)
   {
     if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
-      return 0; //error
+      return 1; //error
   }else{
     sblock = ext2_g_sblock;
     gdesc = ext2_g_gdesc;
   }
 
-  u32int *initial_locs, *all_locs, *added_locs, orig_nblocks, added_nblocks, all_nblocks;
+  u32int *initial_locs, *all_locs, *added_locs, orig_nblocks, added_nblocks, all_nblocks, test_nblocks;
   
-  orig_nblocks = ((node->size - 1) / EXT2_BLOCK_SZ) + 1;
+  //if the node->size is 0, set it manually to avoit signing issues
+  orig_nblocks = node->size ? ((node->size - 1) / EXT2_BLOCK_SZ) + 1 : 0;
+  test_nblocks = ((node->size + increase_bytes - 1) / EXT2_BLOCK_SZ) + 1;
+
+  //if the increased size fits in the data already allocated, no need to alocate more, exit
+  if(orig_nblocks == test_nblocks)
+  {
+    //increase the nodes size in the inode table
+    node->size += increase_bytes;
+
+    //simple error checking
+    if(ext2_update_node_in_inode_table(node))
+      return 1; //error
+    else
+      return 0; //sucess!
+  }
+
   added_nblocks = ((increase_bytes - 1) / EXT2_BLOCK_SZ) + 1;
   all_nblocks = orig_nblocks + added_nblocks;
 
@@ -1194,7 +1257,7 @@ u32int ext2_expand(ext2_inode_t *node, u32int increase_bytes)
   memcpy(all_locs, initial_locs, sizeof(u32int) * orig_nblocks);
   memcpy(all_locs + orig_nblocks, added_locs, sizeof(u32int) * added_nblocks);
 
-  //remove the singly, doubly, and triply blocks from the block bitmap
+  //remove the old, soon to be replaced, singly, doubly, and triply blocks from the block bitmap
   u32int *blocks_to_rm, i;
   blocks_to_rm = (u32int*)kmalloc(sizeof(u32int) * (EXT2_N_BLOCKS - EXT2_NDIR_BLOCKS));
   
@@ -1215,6 +1278,13 @@ u32int ext2_expand(ext2_inode_t *node, u32int increase_bytes)
 
   //index the new blocks into the node's data
   ext2_inode_entry_blocks(node, gdesc, all_locs, all_nblocks);
+
+  //increase the nodes size in the inode table
+  node->size += increase_bytes;
+
+  //simple error checking
+  if(ext2_update_node_in_inode_table(node))
+    return 1; //error
 
   kfree(initial_locs);
   kfree(added_locs);
@@ -1368,6 +1438,7 @@ static ext2_inode_t *__create_dir__(ext2_superblock_t *sblock, ext2_group_descri
   ext2_inode_t *data;
   data = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
 
+  data->magic = M_EXT2;
   data->inode = ext2_find_open_inode(sblock, gdesc);
   data->mode = EXT2_I_RUSR | EXT2_I_WUSR | EXT2_I_XUSR | EXT2_I_RGRP | EXT2_I_XGRP | EXT2_I_ROTH | EXT2_I_XOTH;
   data->type = EXT2_DIR;
@@ -1469,13 +1540,12 @@ static ext2_inode_t *__create_file__(u32int size)
   ext2_group_descriptor_t *gdesc;
    
   //the the number of blocks the initial size will take up
-  u32int blocks_used = (u32int)((size - 1) / EXT2_BLOCK_SZ) + 1;
+  u32int blocks_used = size ? (u32int)((size - 1) / EXT2_BLOCK_SZ) + 1 : 0;
 
   if(!ext2_g_sblock || !ext2_g_gdesc)
-  {
     if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
       return 0; //error
-  }else{
+  else{
     sblock = ext2_g_sblock;
     gdesc = ext2_g_gdesc;
   }
@@ -1486,6 +1556,7 @@ static ext2_inode_t *__create_file__(u32int size)
   ext2_inode_t *data;
   data = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
   
+  data->magic = M_EXT2;
   data->inode = ext2_find_open_inode(sblock, gdesc);
   data->mode = EXT2_I_RUSR | EXT2_I_WUSR | EXT2_I_RGRP | EXT2_I_WGRP | EXT2_I_ROTH | EXT2_I_WOTH;
   data->type = EXT2_FILE;
@@ -1517,9 +1588,11 @@ static ext2_inode_t *__create_file__(u32int size)
   
   floppy_write((u32int*)gdesc, sizeof(ext2_group_descriptor_t), gdesc->gdesc_location);
 
-  //purposly not freeing since sblock and gdesc, regardless of update, is the global variable which should not be cleared    
-
-  kfree(block_locations);
+  /*purposly not freeing since sblock and gdesc, regardless of update,
+   * is the global variable which should not be cleared*/
+  
+  if(block_locations)
+    kfree(block_locations);
 
   return data;
 }
@@ -2062,8 +2135,10 @@ u32int ext2_set_block_group(u32int size)
      *
      * the multiplication in front of the first EXT2_BLOCK_SZ is an additional offset
      * for example, the inode bitmap is 1 block after the block bitmap, so another EXT2_BLOCK_SZ offset is necessary*/
-    block_BB = group_offset + (u32int)((EXT2_SBLOCK_OFF + EXT2_BLOCK_SZ + EXT2_BLOCK_SZ * nblock_groups) / SECTOR_SIZE);
-    block_IB = group_offset + (u32int)((EXT2_SBLOCK_OFF + 2 * EXT2_BLOCK_SZ + EXT2_BLOCK_SZ * nblock_groups) / SECTOR_SIZE);
+    block_BB = group_offset + (u32int)((EXT2_SBLOCK_OFF + EXT2_BLOCK_SZ +
+                                        EXT2_BLOCK_SZ * nblock_groups) / SECTOR_SIZE);
+    block_IB = group_offset + (u32int)((EXT2_SBLOCK_OFF + 2 * EXT2_BLOCK_SZ +
+                                        EXT2_BLOCK_SZ * nblock_groups) / SECTOR_SIZE);
 
     //~ k_printf("BB %d IB %d\n", block_BB, block_IB);
     memcpy(ext2_g_bb + EXT2_BLOCK_SZ * nbgroup, mem, EXT2_BLOCK_SZ);
@@ -2072,11 +2147,12 @@ u32int ext2_set_block_group(u32int size)
     floppy_write((u32int*)mem, 2 * EXT2_BLOCK_SZ, block_BB); //write to sector 3 and 5
   
     //!write zeros over the inode tables (IT)
-    block_IT = group_offset + (u32int)((EXT2_SBLOCK_OFF + 3 * EXT2_BLOCK_SZ + EXT2_BLOCK_SZ * nblock_groups) / SECTOR_SIZE);
+    block_IT = group_offset + (u32int)((EXT2_SBLOCK_OFF + 3 * EXT2_BLOCK_SZ + 
+                                        EXT2_BLOCK_SZ * nblock_groups) / SECTOR_SIZE);
     
-    memcpy(ext2_g_inode_table + sizeof(ext2_inode_t) * inodes_per_group * nbgroup, i_tables, sizeof(ext2_inode_t) * inodes_per_group);
+    memcpy(ext2_g_inode_table + sizeof(ext2_inode_t) * inodes_per_group *
+           nbgroup, i_tables, sizeof(ext2_inode_t) * inodes_per_group);
     floppy_write((u32int*)i_tables, sizeof(ext2_inode_t) * inodes_per_group, block_IT); //write to sector 5
-    //~ k_printf("IT size: %d, %h, loc: %d\n", inode_table_size, sizeof(ext2_inode_t) * inodes_per_group, block_IT);
   
     u32int gdesc;
     for(gdesc = 0; gdesc < nblock_groups; gdesc++)
@@ -2124,8 +2200,31 @@ u32int ext2_set_block_group(u32int size)
   return 0;
 }
 
-ext2_inode_t *ext2_inode_from_offset(u32int inode_number, ext2_inode_t *inode_table)
+ext2_inode_t *ext2_inode_from_offset(u32int inode_number)
 {
+  //get the inode table
+  ext2_inode_t *inode_table;
+
+  if(!ext2_g_inode_table)
+  {
+    ext2_superblock_t *sblock;  
+    ext2_group_descriptor_t *gdesc;
+
+    if(!ext2_g_sblock || !ext2_g_gdesc)
+    {
+      if(ext2_read_meta_data((ext2_superblock_t**)&sblock, (ext2_group_descriptor_t**)&gdesc))
+        return 0; //error
+    }else{
+      sblock = ext2_g_sblock;
+      gdesc = ext2_g_gdesc;
+
+    }
+
+    inode_table = ext2_get_inode_table(gdesc);
+    ext2_g_inode_table = inode_table;
+  }else
+    inode_table = ext2_g_inode_table;
+
   ext2_inode_t *buffer;
   buffer = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
 
@@ -2204,7 +2303,7 @@ char *ext2_get_name_of_dir(ext2_inode_t *directory)
   dirent = ext2_dirent_from_dir(directory, 1);
 
   ext2_inode_t *parent;
-  parent = ext2_inode_from_offset(dirent->ino, inode_table);
+  parent = ext2_inode_from_offset(dirent->ino);
 
   u32int i = 0, b = 0, *block;
   block = (u32int*)kmalloc(EXT2_BLOCK_SZ);
@@ -2414,6 +2513,7 @@ static ext2_inode_t *__create_root__()
   data = (ext2_inode_t*)kmalloc(sizeof(ext2_inode_t));
 
   //the root is always with an inode of 0, the root inode
+  data->magic = M_EXT2;
   data->inode = 0;
 
   data->mode = EXT2_I_RUSR | EXT2_I_WUSR | EXT2_I_XUSR | EXT2_I_RGRP | EXT2_I_XGRP | EXT2_I_ROTH | EXT2_I_XOTH;
@@ -2453,15 +2553,24 @@ static ext2_inode_t *__create_root__()
   return data;
 }
 
-u32int ext2_initialize(u32int size)
+u32int ext2_initialize(u32int size, const char *device)
 {
-
+  //the size cannot be greater than the floppy disk
   if(size > FLOPPY_SIZE)
     return 1;
 
   //if there is no persistent storage available
   if(_FloppyStorage == FALSE)
     return 2;
+
+  //change to the block device
+  vfs_blkdev_t *data;
+  data = switch_to_blkdev(device);
+  data->fs_type = M_EXT2;
+  
+  //update the block device with the above change
+  vfs_change_blkdev(data);
+  kfree(data);
 
   ext2_superblock_t *sblock;  
   ext2_group_descriptor_t *gdesc;
@@ -2527,7 +2636,7 @@ u32int ext2_initialize(u32int size)
 
     k_printf("\tAcquiring preexisting root directory...");
     //get the root, it is always second after the 'mother root'
-    ext2_root = ext2_inode_from_offset(1, inode_table);
+    ext2_root = ext2_inode_from_offset(1);
     k_printf("%cgdone%cw\n");
 
     if(!ext2_root)

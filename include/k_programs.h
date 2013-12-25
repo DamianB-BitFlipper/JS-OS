@@ -81,5 +81,7 @@ u32int count_down(u32int seconds);
 
 void program_jpg(char *arguements); //19 index --John's Privacy Guard for encryption
 
+u32int program_mount(char *arguments); //20 index --mounts a block device
+
 #endif //PROGRAMS_H
 

@@ -93,70 +93,6 @@ u32int write_fs(fs_node_t *node, u32int offset, u32int size, u8int *buffer)
   return 1;
 }
 
-/* FILE *dopen_fs(char *filename, fs_node_t *dir, char *mask)
- * {
- *   // Has the node got an open callback?
- *   if((dir->flags & 0x7) == FS_DIRECTORY && dir->finddir)
- *   {
- *     fs_node_t *file;
- *     file = finddir_fs(dir, filename);
- * 
- *     if(file && file->read)
- *     {
- *       file_desc_t *tmp_desc, *new_desc;
- *       tmp_desc = initial_fdesc;
- * 
- *       //a simple error check if the tmp_desc exists
- *       if(!tmp_desc)
- *         return 0;
- * 
- *       /\*go to the end of out file descriptor list
- *        * while iterating, check if this file_desc already exists,
- *        * if true, return an error*\/
- *       for(; tmp_desc->next; tmp_desc = tmp_desc->next)
- *         //if we already have this file node in the list
- *         if(tmp_desc->node == file)
- *           return tmp_desc; //no need to open, just return it
- * 
- *       new_desc = (file_desc_t*)kmalloc(sizeof(file_desc_t));
- *       
- *       //make the new list entry and add it to the end of the list
- *       new_desc->permisions = __open_fs_mask_to_u32int__(mask);
- *       new_desc->node = file;
- *       new_desc->next = 0;
- *       tmp_desc->next = new_desc;
- * 
- *       return new_desc;
- *     }else
- *       return 0;
- *   }else
- *     return 0;
- * }
- * 
- * u32int dclose_fs(FILE *file)
- * {
- *   if(file)
- *   {
- *     file_desc_t *tmp_desc;
- *     tmp_desc = initial_fdesc;
- * 
- *     //find our file descriptor
- *     for(; tmp_desc->next != file && tmp_desc; tmp_desc = tmp_desc->next);
- * 
- *     //a simple error check if the tmp_desc exists
- *     if(!tmp_desc)
- *       return 1;
- *       
- *     //remove the file descriptor entry
- *     tmp_desc->next = tmp_desc->next->next;
- * 
- *     kfree((void*)file);
- *     return 0;
- *   }
- *   else
- *     return 1;
- * } */
-
 struct dirent *readdir_fs(fs_node_t *node, u32int index)
 {
   // Is the node a directory, and does it have a callback?
@@ -285,7 +221,7 @@ u32int *block_of_set(fs_node_t *node, u32int block_number)
   }else if(block_number >= BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY &&
           block_number < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY + BLOCKS_TRIPLY)
   {
-    //disregard the direct blocks
+    //disregard the other blocks
     u32int offset = block_number - (BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY);
 
     /*trpily_offset is the offset in the triply block of the node pointing to the doubly block, the doubly_offset
@@ -319,6 +255,7 @@ fs_node_t *vfs_createFile(fs_node_t *parentNode, char *name, u32int size)
 
   // Create a new file node.
   strcpy(root_nodes[n].name, name);
+  root_nodes[n].magic = M_VFS;
   root_nodes[n].mask = 0b110110100; //user rw, group rw, other r
   root_nodes[n].uid = root_nodes[n].gid = 0;
   root_nodes[n].inode = n;
@@ -337,62 +274,55 @@ fs_node_t *vfs_createFile(fs_node_t *parentNode, char *name, u32int size)
   root_nodes[n].finddir = 0;
   root_nodes[n].impl = 0;
 
-
-  u32int i, allocSize, block;
-  for(i = 0; i < (u32int)((size - 1) / BLOCK_SIZE) + 1; i++) //size - 1 because if size == BLOCK size, there should be only one block created, but w/o that -1, 2 will be created
+  if(size)
   {
-
-    //if we need to alloc for the single, doubly, and triply
-    if(i >= BLOCKS_DIRECT && i < BLOCKS_DIRECT + BLOCKS_SINGLY && !root_nodes[n].singly) 
+    u32int i, allocSize, block;
+    for(i = 0; i < (u32int)((size - 1) / BLOCK_SIZE) + 1; i++) //size - 1 because if size == BLOCK size, there should be only one block created, but w/o that -1, 2 will be created
     {
-      //allocate for the singly block
-      root_nodes[n].singly = (u32int*)kmalloc(BLOCK_SIZE);
 
-      //clear any junk
-      memset(root_nodes[n].singly, 0x0, BLOCK_SIZE);
-    }else if(i >= BLOCKS_DIRECT + BLOCKS_SINGLY && 
-            i < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY && !root_nodes[n].doubly)
-    {
-      //allocate for the doubly block
-      root_nodes[n].doubly = (u32int*)kmalloc(BLOCK_SIZE);
+      //if we need to alloc for the single, doubly, and triply
+      if(i >= BLOCKS_DIRECT && i < BLOCKS_DIRECT + BLOCKS_SINGLY && !root_nodes[n].singly) 
+      {
+        //allocate for the singly block
+        root_nodes[n].singly = (u32int*)kmalloc(BLOCK_SIZE);
 
-      //clear any junk
-      memset(root_nodes[n].doubly, 0x0, BLOCK_SIZE);
-    }else if(i >= BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY &&
-            i < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY + BLOCKS_TRIPLY && 
-            !root_nodes[n].triply)
-    {
-      //allocate for the triply block
-      root_nodes[n].triply = (u32int*)kmalloc(BLOCK_SIZE);
+        //clear any junk
+        memset(root_nodes[n].singly, 0x0, BLOCK_SIZE);
+      }else if(i >= BLOCKS_DIRECT + BLOCKS_SINGLY && 
+               i < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY && !root_nodes[n].doubly)
+      {
+        //allocate for the doubly block
+        root_nodes[n].doubly = (u32int*)kmalloc(BLOCK_SIZE);
 
-      //clear any junk
-      memset(root_nodes[n].triply, 0x0, BLOCK_SIZE);
+        //clear any junk
+        memset(root_nodes[n].doubly, 0x0, BLOCK_SIZE);
+      }else if(i >= BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY &&
+               i < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY + BLOCKS_TRIPLY && 
+               !root_nodes[n].triply)
+      {
+        //allocate for the triply block
+        root_nodes[n].triply = (u32int*)kmalloc(BLOCK_SIZE);
+
+        //clear any junk
+        memset(root_nodes[n].triply, 0x0, BLOCK_SIZE);
+      }
+
+      //get the address of the block to write to
+      block = (u32int)block_of_set(&root_nodes[n], i);
+    
+      /*The following examples assume that we are in the direct blocks of the node
+       * the concept is the same for the indirect blocks
+       *
+       * (u32int*)block points to the address of the rootnodes[i].blocks[a]
+       * e.g. &rootnodes[i].blocks[a]
+       * 
+       * then the *(u32int*)block is the value of that address, i.e. it impersonates
+       * that it (u32int block) is rootnodes[i].blocks[a], although
+       * they are found at different memory locations, same concept with hard links */
+    
+      *(u32int*)block = kmalloc(BLOCK_SIZE);
     }
-
-    //get the address of the block to write to
-    block = (u32int)block_of_set(&root_nodes[n], i);
-    
-    /*The following examples assume that we are in the direct blocks of the node
-     * the concept is the same for the indirect blocks
-     *
-     * (u32int*)block points to the address of the rootnodes[i].blocks[a]
-     * e.g. &rootnodes[i].blocks[a]
-     * 
-     * then the *(u32int*)block is the value of that address, i.e. it impersonates
-     * that it (u32int block) is rootnodes[i].blocks[a], although
-     * they are found at different memory locations, same concept with hard links */
-    
-    /*allocate space for a block, if it is a direct block, 
-     * assign it to the node's structure, else assign it to
-     * an indirect block's entry*/
-    //~ if(i < BLOCKS_DIRECT)
-      //~ *(u32int*)block = kmalloc(BLOCK_SIZE);
-    //~ else
-      //~ block = kmalloc(BLOCK_SIZE);
-
-    *(u32int*)block = kmalloc(BLOCK_SIZE);
   }
-
 
   addFileToDir(parentNode, &root_nodes[n]);
 
@@ -466,16 +396,19 @@ int addHardLinkToDir(fs_node_t *hardlink, fs_node_t *directory, char *name)
 
 }
 
+//TODO, cannot copy test_flong, when in initrd_write, the block_of_set returns a 0 after the singly blocks
+//possibly because of not allocating properly here in the increase by block stuff, also check the rm funtion
+//to be sure that it frees the singly blocks in the doubly and the doubly and singly in the tripply
+
 static u32int __increase_by_block__(fs_node_t *node)
 {
   u32int orig_nblocks;
-  orig_nblocks = ((node->length - 1) / BLOCK_SIZE) + 1;
+  orig_nblocks = node->length ? ((node->length - 1) / BLOCK_SIZE) + 1 : 0;
 
   if(orig_nblocks < BLOCKS_DIRECT)
   {
     //assign an address for the next data block, orig_nblocks starts counting from 1, so that counts for the +1
     node->blocks[orig_nblocks] = kmalloc(BLOCK_SIZE);
-    node->length += BLOCK_SIZE;
     
     //sucess!
     return 0;
@@ -484,9 +417,12 @@ static u32int __increase_by_block__(fs_node_t *node)
     //disregard the precedding blocks
     u32int offset = orig_nblocks - BLOCKS_DIRECT;
 
+    //if the singly block in the node does not exist, allocate it
+    if(!node->singly)
+      node->singly = (u32int*)kmalloc(BLOCK_SIZE);
+
     //assign an address for the next data block, orig_nblocks starts counting from 1, so that counts for the +1
     *(node->singly + offset) = kmalloc(BLOCK_SIZE);
-    node->length += BLOCK_SIZE;
     
     //sucess!
     return 0;
@@ -502,9 +438,21 @@ static u32int __increase_by_block__(fs_node_t *node)
     u32int doubly_offset = (offset) / BLOCKS_SINGLY;
     u32int singly_offset = (offset) % BLOCKS_SINGLY;
 
+    //if the doubly block in the node does not exist, allocate it
+    if(!node->doubly)
+    {
+      node->doubly = (u32int*)kmalloc(BLOCK_SIZE);
+
+      //clear the doubly block of any junk
+      memset(node->doubly, 0x0, BLOCK_SIZE);
+    }
+
+    //if the singly block in the doubly block does not exits, create it
+    if(!*(node->doubly + doubly_offset))
+      *(node->doubly + doubly_offset) = kmalloc(BLOCK_SIZE);
+
     //assign an address for the next data block, orig_nblocks starts counting from 1, so that counts for the +1
     *((u32int*)*(node->doubly + doubly_offset) + singly_offset) = kmalloc(BLOCK_SIZE);
-    node->length += BLOCK_SIZE;
 
     //sucess!
     return 0;
@@ -522,9 +470,30 @@ static u32int __increase_by_block__(fs_node_t *node)
     u32int doubly_offset = (offset % BLOCKS_DOUBLY) / BLOCKS_DOUBLY;
     u32int singly_offset = (offset % BLOCKS_DOUBLY) % BLOCKS_SINGLY;
 
+    //if the triply block in the node does not exist, allocate it
+    if(!node->triply)
+    {
+      node->triply = (u32int*)kmalloc(BLOCK_SIZE);
+
+      //clear the triply block of any junk
+      memset(node->triply, 0x0, BLOCK_SIZE);
+    }
+
+    //if the doubly block in the triply block does not exist, allocate it
+    if(!*(node->triply + triply_offset))
+    {
+      *(node->triply + triply_offset) = kmalloc(BLOCK_SIZE);
+
+      //clear the doubly block of any junk
+      memset((u32int*)*(node->triply + triply_offset), 0x0, BLOCK_SIZE);
+    }
+
+    //if the singly block in the doubly block of the triply block does not exits, create it
+    if(!*(u32int*)(*(node->triply + triply_offset) + doubly_offset))
+      *(u32int*)(*(node->triply + triply_offset) + doubly_offset) = kmalloc(BLOCK_SIZE);
+
     //assign an address for the next data block, orig_nblocks starts counting from 1, so that counts for the +1
     *((u32int*)*((u32int*)*(node->triply + triply_offset) + doubly_offset) + singly_offset) = kmalloc(BLOCK_SIZE);
-    node->length += BLOCK_SIZE;
 
     //sucess!
     return 0;    
@@ -538,14 +507,40 @@ u32int expand_node(fs_node_t *node, u32int increase_bytes)
 {
   //no point to expand, return sucess
   if(!increase_bytes)
-    return 0; //sucess
+    return 0; //sucess!
 
-  u32int added_nblocks, i;
+  u32int cur_nblocks, test_nblocks, added_nblocks, i, node_sz;
+
+  //if node->length is 0, set a 0 manually so we avoid signing issues
+  cur_nblocks = node->length ? ((node->length - 1) / BLOCK_SIZE) + 1 : 0;
+  test_nblocks = ((node->length + increase_bytes - 1) / BLOCK_SIZE) + 1;
+
+  //if the increased size fits in the data already allocated, no need to alocate more, exit
+  if(cur_nblocks == test_nblocks)
+  {
+    //still increase the file size by the number of bytes
+    node->length += increase_bytes;
+    return 0;
+  }
+
   added_nblocks = ((increase_bytes - 1) / BLOCK_SIZE) + 1;
 
   for(i = 0; i < added_nblocks; i++)
+  {
     if(__increase_by_block__(node))
       return 1; //error
+
+    /*increases the node->length by BLOCK_SIZE until the very last block
+     * where it is increase by what is left of increase bytes - all the previous increases
+     *
+     *how it works is by checking if the current iterator i, when added by 1 (since it starts at 0 for
+     * the first block) and then multiplied by the BLOCK_SIZE, is >= than the increase_bytes.
+     * If this is true, then that means to increase by BLOCK_SIZE since this block is fully filled.
+     * If it is false, then calculate what is left over by a simple module function and increase by that*/
+    node->length += increase_bytes >= (i + 1) * BLOCK_SIZE ? BLOCK_SIZE : 
+      increase_bytes % ((i == 0 ? 1 : i) * BLOCK_SIZE);
+    
+  }
 
   //sucess
   return 0;
@@ -577,6 +572,7 @@ fs_node_t *vfs_createDirectory(fs_node_t *parentNode, char *name)
   //puts root node information for this directory
   strcpy(root_nodes[n].name, name);
 
+  root_nodes[n].magic = M_VFS;
   root_nodes[n].mask = 0b111111101; //user rwx, group rwx, other rx
   root_nodes[n].uid = root_nodes[n].gid = 0;
   root_nodes[n].length = DIRECTORY_SIZE;
@@ -771,18 +767,184 @@ u32int vfs_remove_dirent(fs_node_t *directory, fs_node_t *node)
 
 u32int vfs_free_data_blocks(fs_node_t *directory, fs_node_t *node)
 {
-  if(!directory || !node)
+  if(!directory || !node || !node->length)
     return 1; //error
 
   //free the actual node content
   u32int c, block, block_size = BLOCK_SIZE;
   for(c = 0; c < (u32int)((node->length - 1) / block_size) + 1; c++)
   {
+    //free the actual block's data
     block = (u32int)block_of_set(node, c);
     kfree((void*)(*(u32int*)block));
+
+    if(c >= BLOCKS_DIRECT && c < BLOCKS_DIRECT + BLOCKS_SINGLY)
+    {
+      //disregard the precedding blocks
+      u32int offset = c - BLOCKS_DIRECT;
+    
+      //if all of the direct blocks in the singly have been kfree'd or we are at the end of the file
+      if(c == BLOCKS_DIRECT + BLOCKS_SINGLY - 1 || c == (u32int)((node->length - 1) / block_size))
+      {
+        kfree(node->singly);
+        node->singly = 0;
+      }
+    
+    }else if(c >= BLOCKS_DIRECT + BLOCKS_SINGLY &&
+             c < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY)
+    {
+
+      //disregard the precedding blocks
+      u32int offset = c - (BLOCKS_DIRECT + BLOCKS_SINGLY);
+    
+      /*the doubly_offset is the offset of the doubly block's node pointing towards the singly block,
+       * the singly block offset is the offset of the singly block that is inside our doubly block that
+       * points to our physical block*/
+      u32int doubly_offset = (offset) / BLOCKS_SINGLY;
+      u32int singly_offset = (offset) % BLOCKS_SINGLY;
+   
+      /*if all of the direct blocks in the singly in the doubly
+       * have been kfree'd or we are at the end of the file*/
+      if(c == BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY - 1 ||  
+         c == (u32int)((node->length - 1) / block_size)) 
+      {
+        u32int n_singly_in_doubly = BLOCK_SIZE / sizeof(u32int*), d_offset;
+        
+        for(d_offset = 0; d_offset < n_singly_in_doubly; d_offset++)
+        {
+          //if the singly block exits, free it
+          if(*(node->doubly + d_offset))
+            kfree((void*)*(node->doubly + d_offset));
+    
+        }
+        //free the doubly block itself
+        kfree(node->doubly);
+        node->doubly = 0;
+                
+      }
+    }else if(c >= BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY &&
+             c < BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY + BLOCKS_TRIPLY)
+    {
+
+      //disregard the direct blocks
+      u32int offset = c - (BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY);
+    
+      /*trpily_offset is the offset in the triply block of the node pointing to the doubly block, the doubly_offset
+       * is the offset inside the doubly block of the triply block that points to the singly block,
+       * the singly_offset is the offset of the singly block inside the doubly block of the triply block
+       * pointing to the block we want to return*/
+      u32int triply_offset = (offset) / BLOCKS_DOUBLY;
+      u32int doubly_offset = (offset % BLOCKS_DOUBLY) / BLOCKS_DOUBLY;
+      u32int singly_offset = (offset % BLOCKS_DOUBLY) % BLOCKS_SINGLY;
+
+      /*if all of the direct blocks in the singly in the doubly
+       * have been kfree'd or we are at the end of the file*/
+      if(c == BLOCKS_DIRECT + BLOCKS_SINGLY + BLOCKS_DOUBLY + BLOCKS_TRIPLY - 1 ||  
+         c == (u32int)((node->length - 1) / block_size))
+      { 
+        u32int n_child_in_parent = BLOCK_SIZE / sizeof(u32int*), t_offset, d_offset;
+    
+        for(t_offset = 0; t_offset < n_child_in_parent; t_offset++)
+        {
+          for(d_offset = 0; d_offset < n_child_in_parent; d_offset++)
+            //if the singly block exits, free it
+            if(*((u32int*)*(node->triply + t_offset) + d_offset))
+              kfree((u32int*)*((u32int*)*(node->triply + t_offset) + d_offset));
+    
+          /*after all of the singly blocks in a doubly block in the triply block
+            were kfree'd, free the doubly block they were contained it*/
+          if(*(node->triply + t_offset))
+            kfree((u32int*)*(node->triply + t_offset));
+        }
+    
+        //free the triply block itself
+        kfree(node->triply);
+        node->triply = 0;
+       
+      }
+    }
+
   }
     
   //sucess!
   return 0;
 
+}
+
+fs_node_t *vfs_register_blkdev(char *name, vfs_blkdev_t *data)
+{
+  if(program_cd("/dev"))
+  {
+    //error!
+    k_printf("Cannot register block device, /dev does not exist!\n");
+    return 0;
+  }
+
+  u32int n = findOpenNode();
+
+  //puts root node information for this directory
+  strcpy(root_nodes[n].name, name);
+
+  root_nodes[n].magic = M_VFS;
+  root_nodes[n].mask = 0b111111101; //user rwx, group rwx, other rx
+  root_nodes[n].uid = root_nodes[n].gid = 0;
+  root_nodes[n].length = sizeof(vfs_blkdev_t);
+  root_nodes[n].inode = n;
+  root_nodes[n].flags = FS_BLOCKDEVICE;
+
+  root_nodes[n].read = (read_type_t)vfs_read_blkdev;
+  root_nodes[n].write = 0;
+  root_nodes[n].readdir = 0;
+  root_nodes[n].finddir = 0;
+  root_nodes[n].ptr = 0;
+  root_nodes[n].impl = 0;
+
+  //add the inode to the vfs_blkdev_t
+  data->inode = n;
+
+  //allocate only 1 block, that is all that is needed
+  u32int block;
+
+  block = (u32int)block_of_set(&root_nodes[n], 0);
+  *(u32int*)block = kmalloc(BLOCK_SIZE);
+
+  //set all contents of this directory to 0
+  memset(*(u32int*)block, 0, BLOCK_SIZE);
+
+  //copy the input data over
+  memcpy(*(u32int*)block, data, sizeof(vfs_blkdev_t));
+
+  addFileToDir(ptr_currentDir, &root_nodes[n]);
+
+  program_cd("/");
+
+  return &root_nodes[n];
+
+}
+
+vfs_blkdev_t *vfs_read_blkdev(u32int inode)
+{
+  u32int block;
+  block = (u32int)block_of_set(&root_nodes[inode], 0);
+
+  if(!block)
+    return 0; //error
+  
+  vfs_blkdev_t *data;
+  data = (vfs_blkdev_t*)kmalloc(sizeof(vfs_blkdev_t));
+
+  memcpy(data, *(u32int*)block, sizeof(vfs_blkdev_t));
+  return data;
+}
+
+u32int vfs_change_blkdev(vfs_blkdev_t *data)
+{
+  u32int block;
+  block = (u32int)block_of_set(&root_nodes[data->inode], 0);
+
+  if(!block)
+    return 1; //error
+
+  memcpy(*(u32int*)block, data, sizeof(vfs_blkdev_t));
+  return 0;
 }

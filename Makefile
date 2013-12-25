@@ -56,7 +56,7 @@ CC = @gcc
 CC_MESAGE = gcc
 C_FLAGS =  -g -m32 -elf
 #C_FINAL_FLAGS = -nostdlib -nostdinc -fno-builtin -fno-stack-protector
-C_FINAL_FLAGS = -nostdlib -fno-builtin -fno-stack-protector
+C_FINAL_FLAGS = -nostdlib -fno-builtin -fno-stack-protector -Wall
 C_INCLUDES =  -I/usr/include -I/usr/lib/gcc/x86_64-linux-gnu/4.6/include -I./include
 
 #nasm flags

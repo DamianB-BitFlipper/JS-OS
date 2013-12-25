@@ -27,6 +27,7 @@
 #include <system.h>
 
 #define LS_DIR_COLOR          "%Cbk%clbl"   //black background with light blue text
+#define LS_BLKDEV_COLOR       "%Cbk%cg"   //black background with light blue text
 #define LS_DEFAULT_COLOR      "%Cbk%cw"    //black background with white text
 
 /*adds a " ->" indent*/
